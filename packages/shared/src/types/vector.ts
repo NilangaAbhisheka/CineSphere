@@ -15,3 +15,12 @@ export interface VectorExtensionStatus {
   version: string | null;
   comment: string | null;
 }
+
+/**
+ * Options and validation results for vector serialization.
+ */
+export interface VectorValidationResult {
+  valid: boolean;
+  error?: string;
+  serialized?: string;
+}
