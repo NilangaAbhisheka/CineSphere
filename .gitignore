@@ -1,0 +1,162 @@
+# ==============================================================================
+# CineSphere — .gitignore
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Environment Variables & Secrets (CRITICAL)
+# ------------------------------------------------------------------------------
+.env
+.env.*
+*.env
+*.env.*
+# Explicitly track the environment template
+!.env.example
+
+# ------------------------------------------------------------------------------
+# Node.js & Next.js
+# ------------------------------------------------------------------------------
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js build output & cache
+.next/
+out/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+
+# Logs & package manager debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-store/
+.npm/
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# ------------------------------------------------------------------------------
+# Python
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+develop-eggs/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python test, typing & linter caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# ------------------------------------------------------------------------------
+# Machine Learning Models, Caches & Datasets
+# ------------------------------------------------------------------------------
+# Downloaded model weights & heavy checkpoints
+ml/models/
+*.onnx
+*.pt
+*.bin
+*.safetensors
+*.h5
+
+# Local embedding & vector caches
+ml/embeddings/cache/
+*.npy
+*.npz
+*.parquet
+
+# Temporary raw datasets and batch exports
+data/raw/
+data/temp/
+data/processed/
+*.tar.gz
+
+# ------------------------------------------------------------------------------
+# Docker & Database Volumes
+# ------------------------------------------------------------------------------
+postgres-data/
+pgdata/
+docker-volumes/
+*.dump
+*.sql.gz
+*.backup
+
+# ------------------------------------------------------------------------------
+# IDEs & Editors
+# ------------------------------------------------------------------------------
+# Visual Studio Code: ignore local state, preserve shared workspace configs
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains / WebStorm / PyCharm
+.idea/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ------------------------------------------------------------------------------
+# Operating System & Temporary Files
+# ------------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+
+# Generic temporary files
+*.tmp
+*.temp
+*~

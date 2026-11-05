@@ -1,0 +1,184 @@
+---
+description: CineSphere project-wide coding rules and architectural standards. Applied automatically to all files in this repository.
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# CineSphere — Project Rules
+
+## What This Project Is
+
+CineSphere is a **single-user personal movie and TV tracking, discovery, recommendation, and analytics platform**. It is a serious portfolio engineering project — not a prototype, not a SaaS product, not a quick demo.
+
+## Read First
+
+Before making any significant change, read these files in order:
+
+1. `README.md` — project overview, stack, and operating modes.
+2. `tasks.md` — current project phase, completed tasks, open decisions.
+3. `docs/ARCHITECTURE.md` — component boundaries, data flow, architectural decisions.
+4. `docs/DATABASE_DESIGN.md` — if the task involves the database or schema.
+5. `docs/AI_DEVELOPMENT_GUIDE.md` — full AI agent workflow and standards.
+6. `docs/PROJECT_PLAN.md` — if scope or requirements are unclear.
+
+**Do not proceed on significant changes without reading the relevant docs first.**
+
+---
+
+## Approved Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 14+ (App Router), TypeScript, Tailwind CSS, PixiJS |
+| Backend | NestJS, TypeScript, REST |
+| Database | PostgreSQL 16+ with pgvector |
+| ORM | Prisma (raw SQL only where Prisma cannot express the operation) |
+| ML | Python 3.11+, Sentence Transformers, scikit-learn, HDBSCAN, UMAP-learn |
+| Local LLM | Ollama (optional, never mandatory for core features) |
+| Testing | Jest, Playwright (TS), Pytest (Python) |
+| Infrastructure | Docker Compose (local dev) |
+
+**Do not introduce Redis, Kafka, Kubernetes, Spark, Celery, or other unapproved infrastructure without documented justification.**
+
+---
+
+## Component Boundaries — Strictly Enforced
+
+- **Frontend** (`apps/web/`): UI only. Consumes the NestJS API. No direct database access. No ML.
+- **Backend** (`apps/api/`): Business logic, REST API, TMDB integration, Prisma. No ML computation.
+- **Python ML** (`ml/`): Embedding generation, clustering, UMAP, scoring. Runs as offline/on-demand scripts. Not a persistent service.
+- **Database**: Single PostgreSQL instance with pgvector. No second data store.
+
+Data flows from ML → PostgreSQL → NestJS API → Next.js frontend. It never flows the other way.
+
+---
+
+## Critical Architecture Rules
+
+### 1. Recommendation engine never calls the LLM
+The scoring model `Score = 0.35·S + 0.25·P + 0.20·M + 0.10·Q + 0.10·N` must function without Ollama. LLM is permitted only in isolated, gracefully-degradable features.
+
+### 2. UMAP coordinates are visualization-only
+`ClusterAssignment.umapX` and `umapY` are **never** used for similarity search, nearest-neighbour lookup, clustering, or scoring. The high-dimensional embedding in `MediaEmbedding.embedding` is always the semantic source of truth.
+
+### 3. Positive and negative preference signals are kept separate
+Do not collapse user preferences into a single averaged embedding. Maintain both positive and negative signals independently.
+
+### 4. Ollama is always optional
+Every LLM-dependent feature must check Ollama availability, return a typed fallback if unavailable, and display an appropriate UI state. No feature is blocked by Ollama being absent.
+
+### 5. Historical recommendation records are immutable
+`RecommendationRecord` rows are never modified after creation (except updating outcome fields: `watched`, `watchedAt`, `personalRating`). Algorithm changes do not alter historical records.
+
+### 6. Imports are always atomic
+An import that partially fails must roll back completely. Never silently skip invalid records — report all errors.
+
+---
+
+## Two Operating Modes
+
+**Local mode:** Full features including optional Ollama. Docker Compose. No paid services required.
+
+**Hosted portfolio mode** (`HOSTED_MODE=true`): Ollama disabled. Write operations restricted. Precomputed ML data deployed as fixtures. No personal data exposed. Near-zero hosting cost.
+
+All new features must behave correctly in both modes.
+
+---
+
+## Code Quality — Non-Negotiable
+
+### TypeScript
+- `strict: true` always. No exceptions.
+- Explicit return types on all exported functions and class methods.
+- No `any` without a typed narrowing path. Fix the types.
+- Use meaningful names. Never `data`, `item`, `result` as sole identifiers.
+- No dead code. No commented-out blocks. No magic numbers.
+
+### Python
+- Type hints throughout.
+- Black formatting, Ruff/Flake8 linting.
+- Pydantic or dataclasses for structured data — no raw dicts between functions.
+
+### NestJS Conventions
+- `ValidationPipe` globally with `whitelist: true`, `forbidNonWhitelisted: true`.
+- DTOs with class-validator for all request bodies.
+- Business logic in services, not controllers.
+- Global exception filter for consistent error shapes.
+
+### Next.js Conventions
+- App Router. Never Pages Router.
+- Server Components by default; `'use client'` only where necessary.
+- Never fetch directly from the database in Next.js — always through the API.
+
+---
+
+## Security — All Items Mandatory
+
+- No secrets, API keys, or credentials in source code, comments, or committed fixtures.
+- Validate and sanitize all external inputs at the API boundary.
+- Parameterized queries always. Never construct SQL from user input.
+- Import file contents validated against schema before any database writes.
+- No internal stack traces in API responses.
+- No personal data in logs.
+
+---
+
+## Testing Expectations
+
+Write meaningful tests. A passing build is not proof of correctness.
+
+- Recommendation scoring logic → unit tests (all 5 components, edge cases).
+- Import validation → unit tests (valid, invalid, duplicates, partial failure).
+- Library CRUD → integration tests.
+- Statistics aggregation → unit tests.
+- Key user flows → Playwright E2E tests.
+- ML scripts → Pytest (shape, type, non-null output, correct dimensions).
+
+---
+
+## tasks.md Maintenance
+
+- Update `tasks.md` after every verified task completion.
+- Mark a task `[x]` only when implementation is confirmed working.
+- Never mark tasks complete speculatively.
+- Add entries for newly discovered tasks or blocked items.
+- Record new open decisions in the Pending Technical Decisions table.
+
+---
+
+## AI Agent Implementation Workflow
+
+For every task:
+
+1. **Read** relevant docs before starting.
+2. **Inspect** existing files before changing them.
+3. **State the plan** before writing code — which files, what changes, what decisions.
+4. **Flag** any architectural changes or uncertainties before proceeding.
+5. **Implement** in logical increments.
+6. **Run** type-check, lint, and tests.
+7. **Review** every changed file.
+8. **Update** `tasks.md` and relevant docs.
+9. **Summarize** what changed, what was deferred, and any remaining issues.
+
+---
+
+## What Must Not Happen
+
+- Never overwrite existing user code without explicit permission.
+- Never invent requirements not in the documentation.
+- Never mark tasks complete without verified implementation.
+- Never introduce infrastructure not in the approved stack without justification.
+- Never use UMAP coordinates for semantic similarity.
+- Never put an LLM call in the recommendation scoring path.
+- Never make Ollama mandatory for any core feature.
+- Never silently skip invalid import records.
+- Never commit secrets.
+- Never duplicate existing functionality — search before creating.
+- Never prematurely optimize code that has no measured performance problem.
+
+---
+
+## Simplicity Principle
+
+Production quality means correct, maintainable, and reliable — not maximally complex. When a simpler solution works, use it. When a more complex solution is proposed, document the problem it solves and explain why the simpler alternative is insufficient.

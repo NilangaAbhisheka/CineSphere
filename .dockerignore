@@ -1,0 +1,68 @@
+# ==============================================================================
+# CineSphere — .dockerignore
+# ==============================================================================
+
+# Version Control
+.git/
+.gitignore
+.gitattributes
+
+# Documentation & Agent Instructions
+docs/
+tasks.md
+AGENTS.md
+.cursor/
+
+# Environment Variables & Local Secrets
+.env
+.env.*
+*.env
+
+# Node.js / Next.js
+**/node_modules/
+**/.next/
+**/out/
+**/dist/
+**/build/
+**/.turbo/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*.so
+**/.venv/
+**/venv/
+**/env/
+
+# Test & Coverage Artifacts
+**/coverage/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/playwright-report/
+**/test-results/
+
+# ML Artifacts, Models & Datasets
+ml/models/
+ml/embeddings/cache/
+data/
+*.parquet
+*.npy
+*.npz
+
+# Docker & Database Volumes
+postgres-data/
+pgdata/
+docker-volumes/
+*.dump
+*.sql.gz
+
+# IDE & OS Artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
