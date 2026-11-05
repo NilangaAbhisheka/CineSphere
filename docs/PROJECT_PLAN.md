@@ -68,6 +68,7 @@ The following are explicitly outside the scope of this project and should not be
 ## 4. Functional Requirements
 
 ### FR-01: Dashboard
+
 - Display a personal activity overview on application load.
 - Show a "Continue Watching" section for in-progress TV shows.
 - Show recently watched titles.
@@ -75,6 +76,7 @@ The following are explicitly outside the scope of this project and should not be
 - Show summary statistics (total watched, current streak, etc.).
 
 ### FR-02: My Library
+
 - Track movies and TV shows with a status: Watching, Completed, Plan to Watch, Dropped.
 - For movies: watch status, personal rating, watched date, rewatch records, optional notes.
 - For TV shows: overall status, current season, current episode, per-season completion flags, optional per-season ratings, optional notes.
@@ -82,6 +84,7 @@ The following are explicitly outside the scope of this project and should not be
 - Allow inline status and rating updates.
 
 ### FR-03: Discover
+
 - Search movies and TV shows via TMDB.
 - Browse trending and popular content.
 - Mood-based discovery with predefined moods and optional LLM-enhanced interpretation.
@@ -90,6 +93,7 @@ The following are explicitly outside the scope of this project and should not be
 - Hidden gems: lesser-known titles with high content quality signals.
 
 ### FR-04: Recommendation System ("For You")
+
 - Generate personalized recommendations independent of LLM availability.
 - Use a hybrid scoring model: `Score = 0.35·S + 0.25·P + 0.20·M + 0.10·Q + 0.10·N`
   - S: semantic similarity to user preference profile
@@ -105,23 +109,27 @@ The following are explicitly outside the scope of this project and should not be
 - Provide explainable recommendation reasons derived from scoring signals.
 
 ### FR-05: Taste Profile
+
 - Generate a structured profile of user preferences: genres, themes, storytelling style, tone, character types, narrative preferences, positive and negative signals, confidence levels.
 - Update the profile as library data changes.
 - Optionally enhance the profile narrative with Ollama when available.
 
 ### FR-06: Taste Evolution
+
 - Take periodic snapshots of the taste profile.
 - Store snapshots with timestamps.
 - Display preference changes over time.
 - Distinguish genuine preference changes from early-data noise.
 
 ### FR-07: Recommendation History
+
 - Store every recommendation shown with: title, score breakdown, reason, timestamp, source.
 - Track whether the recommendation was clicked, added to library, eventually watched, and rated.
 - Display full recommendation history to the user.
 - Never overwrite historical records when the recommendation algorithm changes.
 
 ### FR-08: Movie Universe
+
 - Render an interactive 2D semantic map of movies and TV shows using PixiJS.
 - Use genuine high-dimensional embeddings for similarity and clustering.
 - Use UMAP exclusively for 2D visualization coordinates.
@@ -132,6 +140,7 @@ The following are explicitly outside the scope of this project and should not be
 - Handle at minimum 10,000 catalogue items without unacceptable frame drops.
 
 ### FR-09: Statistics
+
 - Total movies watched, completed TV shows, seasons watched, episodes watched.
 - Genre distribution by count.
 - Average personal rating overall and by genre.
@@ -142,6 +151,7 @@ The following are explicitly outside the scope of this project and should not be
 - All statistics derived from library data — no external platform.
 
 ### FR-10: Data Import and Export
+
 - JSON import/export: full nested format including TV progress, ratings, and watch history.
 - CSV import/export: flat spreadsheet-friendly format.
 - Import validation with detailed error reporting.
@@ -151,6 +161,7 @@ The following are explicitly outside the scope of this project and should not be
 - Export all personal data on demand.
 
 ### FR-11: Settings
+
 - Personal preferences.
 - Recommendation diversity mode setting.
 - Data import and export controls.
@@ -162,24 +173,28 @@ The following are explicitly outside the scope of this project and should not be
 ## 5. Non-Functional Requirements
 
 ### NFR-01: Correctness
+
 - Recommendation scores must be derived from documented, verifiable calculations.
 - Statistics must accurately reflect library data.
 - Import transactions must be atomic — a failed import must not corrupt existing data.
 - Historical recommendation records must never be overwritten by algorithm changes.
 
 ### NFR-02: Performance
+
 - Library page with 500+ entries: load within 2 seconds.
 - Recommendation generation: complete within 10 seconds for a typical library.
 - Movie Universe PixiJS map: render 10,000+ items without sustained frame drops below 30 fps.
 - TMDB API calls: handled with appropriate rate limiting and caching.
 
 ### NFR-03: Reliability
+
 - Application must handle TMDB API failures gracefully (cached data, error messages).
 - Ollama unavailability must not affect non-LLM features.
 - Failed imports must roll back cleanly.
 - Embedding generation failures must be reported without corrupting existing data.
 
 ### NFR-04: Security
+
 - No secrets, API keys, or credentials in source code or git history.
 - All external inputs validated and sanitized.
 - Parameterized database queries via Prisma (no raw string interpolation in queries).
@@ -187,6 +202,7 @@ The following are explicitly outside the scope of this project and should not be
 - Sensitive data not exposed in logs.
 
 ### NFR-05: Maintainability
+
 - TypeScript strict mode in all TypeScript code.
 - Python type hints used throughout ML code.
 - Clear separation of concerns between frontend, backend, and ML.
@@ -194,11 +210,13 @@ The following are explicitly outside the scope of this project and should not be
 - Documentation updated when behaviour changes.
 
 ### NFR-06: Portability and Data Sovereignty
+
 - All data stored locally by default.
 - Full import and export of personal data.
 - No dependency on cloud-only services for core functionality.
 
 ### NFR-07: Hosting Cost
+
 - Hosted portfolio mode must operate at near-zero cost.
 - No persistent paid services that charge per hour (prefer serverless or free tiers).
 
@@ -207,6 +225,7 @@ The following are explicitly outside the scope of this project and should not be
 ## 6. User Workflows
 
 ### Workflow 1: Adding a Title to the Library
+
 1. User searches for a movie or TV show in Discover.
 2. User views the detail page.
 3. User clicks "Add to Library" and selects a status.
@@ -214,11 +233,13 @@ The following are explicitly outside the scope of this project and should not be
 5. The entry appears in My Library.
 
 ### Workflow 2: Updating Progress
+
 1. User opens My Library and finds an in-progress TV show.
 2. User updates the current episode or marks a season complete.
 3. The dashboard "Continue Watching" section reflects the update.
 
 ### Workflow 3: Getting Recommendations
+
 1. User opens the For You page.
 2. User optionally selects a diversity mode (Safe / Balanced / Experimental).
 3. Recommendations are displayed with explanations.
@@ -227,6 +248,7 @@ The following are explicitly outside the scope of this project and should not be
 6. Feedback is recorded and influences future recommendations.
 
 ### Workflow 4: Exploring the Movie Universe
+
 1. User opens the Movie Universe page.
 2. The PixiJS map renders catalogue items as coloured points grouped by semantic cluster.
 3. User pans and zooms to explore.
@@ -235,6 +257,7 @@ The following are explicitly outside the scope of this project and should not be
 6. User can toggle their library overlay to see which items they have watched.
 
 ### Workflow 5: Importing Watch History
+
 1. User prepares a JSON or CSV file of watch history.
 2. User navigates to Settings → Import.
 3. User uploads the file.
@@ -246,18 +269,18 @@ The following are explicitly outside the scope of this project and should not be
 
 ## 7. Implementation Phases
 
-| Phase | Title | Key Deliverables |
-|---|---|---|
-| 1 | Project Foundation | Monorepo, tooling, Docker, database baseline, documentation |
-| 2 | Catalogue and TMDB Integration | TMDB client, catalogue schema, search and discover API and UI |
-| 3 | Personal Library and Tracking | Library schema, CRUD API, dashboard, library UI |
-| 4 | Statistics and Import/Export | Statistics API and UI, JSON/CSV import/export |
-| 5 | Recommendation Engine Foundation | Embeddings, similarity, preference signals, baseline scoring, recommendation storage |
-| 6 | Recommendation Intelligence | Diversity modes, feedback, evaluation, Taste Profile, Taste Evolution |
-| 7 | Local LLM Integration | Ollama client, conversational discovery, LLM-enhanced taste profile |
-| 8 | Movie Universe | HDBSCAN clustering, UMAP coordinates, PixiJS visualization |
-| 9 | Testing, Security and QA | Full test coverage, security audit, performance validation |
-| 10 | Deployment and Portfolio Prep | Anonymization, hosted deployment, portfolio documentation |
+| Phase | Title                            | Key Deliverables                                                                     |
+| ----- | -------------------------------- | ------------------------------------------------------------------------------------ |
+| 1     | Project Foundation               | Monorepo, tooling, Docker, database baseline, documentation                          |
+| 2     | Catalogue and TMDB Integration   | TMDB client, catalogue schema, search and discover API and UI                        |
+| 3     | Personal Library and Tracking    | Library schema, CRUD API, dashboard, library UI                                      |
+| 4     | Statistics and Import/Export     | Statistics API and UI, JSON/CSV import/export                                        |
+| 5     | Recommendation Engine Foundation | Embeddings, similarity, preference signals, baseline scoring, recommendation storage |
+| 6     | Recommendation Intelligence      | Diversity modes, feedback, evaluation, Taste Profile, Taste Evolution                |
+| 7     | Local LLM Integration            | Ollama client, conversational discovery, LLM-enhanced taste profile                  |
+| 8     | Movie Universe                   | HDBSCAN clustering, UMAP coordinates, PixiJS visualization                           |
+| 9     | Testing, Security and QA         | Full test coverage, security audit, performance validation                           |
+| 10    | Deployment and Portfolio Prep    | Anonymization, hosted deployment, portfolio documentation                            |
 
 > See [`tasks.md`](../tasks.md) for detailed per-phase task lists with completion status.
 
@@ -282,44 +305,44 @@ Phase 10 (Deployment) ← depends on Phase 9
 
 ## 9. Milestones and Deliverables
 
-| Milestone | Description | Phase |
-|---|---|---|
-| M1 | Documentation initialization complete | 1 |
-| M2 | Local development environment running end-to-end | 1 |
-| M3 | TMDB search and catalogue browsing working | 2 |
-| M4 | Library tracking working for movies and TV | 3 |
-| M5 | First recommendation results generated | 5 |
-| M6 | Movie Universe renders with real embedding data | 8 |
-| M7 | Full test suite passing | 9 |
-| M8 | Hosted portfolio deployment live | 10 |
+| Milestone | Description                                      | Phase |
+| --------- | ------------------------------------------------ | ----- |
+| M1        | Documentation initialization complete            | 1     |
+| M2        | Local development environment running end-to-end | 1     |
+| M3        | TMDB search and catalogue browsing working       | 2     |
+| M4        | Library tracking working for movies and TV       | 3     |
+| M5        | First recommendation results generated           | 5     |
+| M6        | Movie Universe renders with real embedding data  | 8     |
+| M7        | Full test suite passing                          | 9     |
+| M8        | Hosted portfolio deployment live                 | 10    |
 
 ---
 
 ## 10. Acceptance Criteria
 
-| Feature | Criteria |
-|---|---|
-| Library tracking | Movie and TV entries persist correctly with all fields. TV episode progress is tracked accurately. |
-| Recommendations | Recommendations differ meaningfully by diversity mode. Scores are explainable from documented components. Feedback is stored and influences future results. |
-| Movie Universe | Clusters are semantically coherent. UMAP layout is visually meaningful. Library overlay is correct. Performance target met. |
-| Statistics | All statistics match raw library data. No external service required. |
-| Import/Export | Re-imported exports match the original data. Invalid records are reported, not silently dropped. |
-| LLM degradation | All non-LLM features work correctly when Ollama is unavailable or disabled. |
-| Hosted mode | No personal data exposed. LLM features disabled. Core functionality available from precomputed data. |
+| Feature          | Criteria                                                                                                                                                    |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Library tracking | Movie and TV entries persist correctly with all fields. TV episode progress is tracked accurately.                                                          |
+| Recommendations  | Recommendations differ meaningfully by diversity mode. Scores are explainable from documented components. Feedback is stored and influences future results. |
+| Movie Universe   | Clusters are semantically coherent. UMAP layout is visually meaningful. Library overlay is correct. Performance target met.                                 |
+| Statistics       | All statistics match raw library data. No external service required.                                                                                        |
+| Import/Export    | Re-imported exports match the original data. Invalid records are reported, not silently dropped.                                                            |
+| LLM degradation  | All non-LLM features work correctly when Ollama is unavailable or disabled.                                                                                 |
+| Hosted mode      | No personal data exposed. LLM features disabled. Core functionality available from precomputed data.                                                        |
 
 ---
 
 ## 11. Risk Assessment
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| Embedding quality insufficient for meaningful clusters | Medium | High | Evaluate on real data early. Try multiple Sentence Transformers models. See TD-08. |
-| UMAP layout not visually meaningful with small dataset | Medium | Medium | Tune UMAP parameters. Minimum viable dataset of ~1,000 items before Movie Universe is useful. |
-| Prisma + pgvector friction | Medium | Medium | Document and implement the raw SQL pattern early. Encapsulate in a reusable utility. See TD-04. |
-| TMDB rate limiting causing poor UX | Low | Medium | Implement retry logic, cache aggressively, fetch on-demand rather than upfront. |
-| Recommendation quality poor initially | High | Medium | Expected. Treat as a baseline and iterate. Document evaluation metrics. See Phase 6. |
-| Hosting costs exceed near-zero target | Low | Medium | Evaluate providers before deployment. Prefer serverless PostgreSQL (Neon, Supabase free tier). |
-| Monorepo tooling overhead | Low | Low | Start simple. Turborepo adds minimal overhead. See TD-02. |
+| Risk                                                   | Likelihood | Impact | Mitigation                                                                                      |
+| ------------------------------------------------------ | ---------- | ------ | ----------------------------------------------------------------------------------------------- |
+| Embedding quality insufficient for meaningful clusters | Medium     | High   | Evaluate on real data early. Try multiple Sentence Transformers models. See TD-08.              |
+| UMAP layout not visually meaningful with small dataset | Medium     | Medium | Tune UMAP parameters. Minimum viable dataset of ~1,000 items before Movie Universe is useful.   |
+| Prisma + pgvector friction                             | Medium     | Medium | Document and implement the raw SQL pattern early. Encapsulate in a reusable utility. See TD-04. |
+| TMDB rate limiting causing poor UX                     | Low        | Medium | Implement retry logic, cache aggressively, fetch on-demand rather than upfront.                 |
+| Recommendation quality poor initially                  | High       | Medium | Expected. Treat as a baseline and iterate. Document evaluation metrics. See Phase 6.            |
+| Hosting costs exceed near-zero target                  | Low        | Medium | Evaluate providers before deployment. Prefer serverless PostgreSQL (Neon, Supabase free tier).  |
+| Monorepo tooling overhead                              | Low        | Low    | Start simple. Turborepo adds minimal overhead. See TD-02.                                       |
 
 ---
 

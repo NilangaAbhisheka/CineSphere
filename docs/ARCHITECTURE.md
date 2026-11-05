@@ -70,6 +70,7 @@ flowchart TD
 **Technology:** Next.js 14+ with TypeScript, Tailwind CSS, PixiJS
 
 **Responsibilities:**
+
 - Render all user interface pages and components.
 - Manage client-side state (library status, filters, UI state).
 - Consume the NestJS REST API exclusively — the frontend never connects directly to the database.
@@ -77,6 +78,7 @@ flowchart TD
 - Handle all user input, form validation on the client side, and display error states.
 
 **Does not:**
+
 - Contain business logic (recommendation scoring, statistics aggregation, etc.).
 - Connect to TMDB, PostgreSQL, or Ollama directly.
 - Perform embedding or ML operations.
@@ -92,6 +94,7 @@ flowchart TD
 **Technology:** NestJS with TypeScript
 
 **Responsibilities:**
+
 - Expose all REST API endpoints consumed by the frontend.
 - Implement business logic for library management, statistics, recommendations, and import/export.
 - Integrate with the TMDB API and cache responses in PostgreSQL.
@@ -102,6 +105,7 @@ flowchart TD
 - Handle authentication (approach: TD-10).
 
 **Does not:**
+
 - Contain ML logic (embedding generation, clustering, UMAP). Those live in the Python `ml/` package.
 - Render the UI.
 
@@ -122,6 +126,7 @@ flowchart TD
 **Technology:** Python 3.11+, Sentence Transformers, scikit-learn, HDBSCAN, UMAP-learn, numpy, pandas, psycopg2 or asyncpg
 
 **Responsibilities:**
+
 - Generate semantic embeddings for catalogue items using Sentence Transformers.
 - Compute cosine similarity and precompute nearest-neighbour relationships.
 - Run HDBSCAN clustering on high-dimensional embedding space.
@@ -139,6 +144,7 @@ flowchart TD
 ### 2.5 Infrastructure — `infrastructure/` [Proposed]
 
 **Docker Compose** provides the local development environment:
+
 - PostgreSQL 16 with pgvector extension.
 - NestJS API (or runs outside Docker during active development — to be decided).
 - Next.js frontend (or runs outside Docker — same decision).
@@ -218,17 +224,17 @@ sequenceDiagram
 
 PostgreSQL with pgvector serves as the single data store. Its responsibilities:
 
-| Responsibility | Table/Schema Area |
-|---|---|
-| Catalogue metadata (movies, TV, seasons, episodes) | Catalogue tables |
-| Personal library entries, statuses, ratings, progress | Library tables |
-| Semantic embeddings (pgvector `vector` type) | `MediaEmbedding` |
-| Precomputed cosine similarity neighbours | `MediaSimilarity` |
-| Cluster assignments and UMAP 2D coordinates | `ClusterAssignment` |
-| Recommendation records, scores, and reasons | `RecommendationRecord` |
-| Recommendation feedback and impressions | `RecommendationFeedback`, `RecommendationImpression` |
-| Taste profile and historical snapshots | `TasteProfile`, `TasteProfileSnapshot` |
-| User preferences and settings | `UserPreference` |
+| Responsibility                                        | Table/Schema Area                                    |
+| ----------------------------------------------------- | ---------------------------------------------------- |
+| Catalogue metadata (movies, TV, seasons, episodes)    | Catalogue tables                                     |
+| Personal library entries, statuses, ratings, progress | Library tables                                       |
+| Semantic embeddings (pgvector `vector` type)          | `MediaEmbedding`                                     |
+| Precomputed cosine similarity neighbours              | `MediaSimilarity`                                    |
+| Cluster assignments and UMAP 2D coordinates           | `ClusterAssignment`                                  |
+| Recommendation records, scores, and reasons           | `RecommendationRecord`                               |
+| Recommendation feedback and impressions               | `RecommendationFeedback`, `RecommendationImpression` |
+| Taste profile and historical snapshots                | `TasteProfile`, `TasteProfileSnapshot`               |
+| User preferences and settings                         | `UserPreference`                                     |
 
 > See [`DATABASE_DESIGN.md`](DATABASE_DESIGN.md) for the full proposed schema.
 
@@ -253,14 +259,14 @@ flowchart LR
     Raw["Item content\n(overview, genres,\nkeywords, cast, themes)"]
     Embed["Sentence Transformer\nEmbedding\n(high-dimensional)"]
     pgvector[("pgvector\n(stored in PostgreSQL)")]
-    
+
     Cosine["Cosine Similarity\nNearest Neighbours"]
     HDBSCAN["HDBSCAN Clustering"]
     UMAP["UMAP\n(2D coords only)"]
-    
+
     Reco["Recommendation\nScoring"]
     Map["Movie Universe\nVisualization"]
-    
+
     Raw --> Embed
     Embed --> pgvector
     pgvector --> Cosine
@@ -284,13 +290,13 @@ The recommendation engine is **independent of LLM availability**. Ollama enhance
 Score = 0.35·S + 0.25·P + 0.20·M + 0.10·Q + 0.10·N
 ```
 
-| Component | Description | Source |
-|---|---|---|
-| S — Semantic Similarity | Cosine similarity between item embedding and positive user preference embedding | pgvector |
-| P — Preference Match | Match against genre, theme, and style preference signals derived from library | Library ratings + feedback |
-| M — Mood Match | Match against current mood context (predefined mood categories or LLM-parsed) | User input / Ollama |
-| Q — Quality Signal | Normalized TMDB rating × popularity, adjusted for recency | TMDB metadata |
-| N — Novelty | Penalizes items too similar to recently recommended or recently watched | Recommendation history |
+| Component               | Description                                                                     | Source                     |
+| ----------------------- | ------------------------------------------------------------------------------- | -------------------------- |
+| S — Semantic Similarity | Cosine similarity between item embedding and positive user preference embedding | pgvector                   |
+| P — Preference Match    | Match against genre, theme, and style preference signals derived from library   | Library ratings + feedback |
+| M — Mood Match          | Match against current mood context (predefined mood categories or LLM-parsed)   | User input / Ollama        |
+| Q — Quality Signal      | Normalized TMDB rating × popularity, adjusted for recency                       | TMDB metadata              |
+| N — Novelty             | Penalizes items too similar to recently recommended or recently watched         | Recommendation history     |
 
 **These weights are initial experimental values and must be configurable.** They are not proven optimal. Weights should be tunable via configuration and evaluated over time against stored recommendation outcome data.
 
@@ -305,11 +311,11 @@ Both are computed by the Python ML layer and stored. The scoring model uses both
 
 ### 6.3 Diversity Modes
 
-| Mode | Behaviour |
-|---|---|
+| Mode            | Behaviour                                                                       |
+| --------------- | ------------------------------------------------------------------------------- |
 | Safe (Familiar) | High weight on semantic similarity. Narrow candidate pool. Low novelty penalty. |
-| Balanced | Default weights as above. |
-| Experimental | Increased novelty weight. Broader candidate pool. Wider diversity within batch. |
+| Balanced        | Default weights as above.                                                       |
+| Experimental    | Increased novelty weight. Broader candidate pool. Wider diversity within batch. |
 
 Diversity within a recommendation batch (intra-list diversity) is applied after initial ranking to avoid showing ten variations of the same thing.
 
@@ -317,19 +323,20 @@ Diversity within a recommendation batch (intra-list diversity) is applied after 
 
 ## 7. Local vs. Hosted Operating Mode
 
-| Capability | Local Mode | Hosted Portfolio Mode |
-|---|---|---|
-| Core library tracking | ✓ Available | ✓ Available (read-only in demo) |
-| TMDB search and catalogue | ✓ Available | ✓ Available |
-| Recommendation engine | ✓ Available (live computation) | ✓ Available (from precomputed data) |
-| Movie Universe map | ✓ Available (live embedding data) | ✓ Available (precomputed fixture) |
-| Statistics | ✓ Available | ✓ Available (from fixture data) |
-| Ollama LLM features | ✓ Available (if Ollama running) | ✗ Disabled |
-| Conversational discovery | ✓ Available (if Ollama running) | ✗ Disabled |
-| Personal data | ✓ Full personal data | ✗ Anonymized/curated fixture only |
-| Embedding generation | ✓ Runs on-demand | Pre-deployed — no on-demand generation |
+| Capability                | Local Mode                        | Hosted Portfolio Mode                  |
+| ------------------------- | --------------------------------- | -------------------------------------- |
+| Core library tracking     | ✓ Available                       | ✓ Available (read-only in demo)        |
+| TMDB search and catalogue | ✓ Available                       | ✓ Available                            |
+| Recommendation engine     | ✓ Available (live computation)    | ✓ Available (from precomputed data)    |
+| Movie Universe map        | ✓ Available (live embedding data) | ✓ Available (precomputed fixture)      |
+| Statistics                | ✓ Available                       | ✓ Available (from fixture data)        |
+| Ollama LLM features       | ✓ Available (if Ollama running)   | ✗ Disabled                             |
+| Conversational discovery  | ✓ Available (if Ollama running)   | ✗ Disabled                             |
+| Personal data             | ✓ Full personal data              | ✗ Anonymized/curated fixture only      |
+| Embedding generation      | ✓ Runs on-demand                  | Pre-deployed — no on-demand generation |
 
 **The `HOSTED_MODE` environment variable** switches behaviour. When set to `true`:
+
 - Ollama feature flags are forced off regardless of other config.
 - Write operations may be restricted (read-only demo mode).
 - The application loads from precomputed fixture data for ML results.
@@ -354,6 +361,7 @@ flowchart TD
 ```
 
 Ollama integration points:
+
 1. **Conversational discovery** — parse natural language into catalogue filter parameters.
 2. **Taste profile narration** — generate a readable prose description of the structured taste profile.
 3. **Mood interpretation** — map freeform mood descriptions to genre/theme/tone signals.
@@ -365,26 +373,31 @@ None of these integration points affect the recommendation scoring pipeline. The
 ## 9. Error Handling Strategy
 
 **At the API boundary:**
+
 - All controllers use validation pipes (NestJS `ValidationPipe`) to reject malformed requests with clear error messages.
 - API errors return consistent JSON error shapes with an HTTP status code, error code, and message.
 - 500-level errors are caught by a global exception filter and logged without exposing internal stack traces to the client.
 
 **TMDB API failures:**
+
 - If TMDB is unavailable, return cached data if present, or a clear error message.
 - Apply retry logic with exponential backoff for transient failures.
 - Rate limit errors (429) are handled with automatic retry after the specified delay.
 
 **Ollama failures:**
+
 - If Ollama is not reachable, the backend marks LLM features as unavailable.
 - LLM-dependent API endpoints return a `503` with a `LLM_UNAVAILABLE` error code.
 - The frontend renders an appropriate fallback or disabled state — no unhandled error.
 
 **Import failures:**
+
 - Validation errors for individual import records are collected and returned in the response.
 - Invalid records are never silently discarded.
 - If the transaction fails mid-import, the entire operation rolls back.
 
 **ML pipeline failures:**
+
 - Scripts emit detailed error output and exit with non-zero codes.
 - Partial results are not written to the database — write operations occur after all computations succeed.
 - The API does not expose ML pipeline failures directly to users; it surfaces a simplified status.
@@ -406,13 +419,13 @@ None of these integration points affect the recommendation scoring pipeline. The
 
 CineSphere is a single-user personal application. The architectural choices below are appropriate for this scale:
 
-| Area | Current Approach | Upgrade Path (If Needed) |
-|---|---|---|
-| Vector search | pgvector exact cosine search | Enable HNSW index for approximate nearest neighbour if search latency degrades |
-| Embedding computation | On-demand Python scripts | Dedicated ML service (not needed now) |
-| Database | Single PostgreSQL instance | Managed PostgreSQL (Neon, Supabase) for hosted deployment |
-| Caching | No explicit cache layer | Add database query result caching if measured latency warrants it |
-| Background jobs | On-demand scripts | Simple job queue (pg-boss, BullMQ) if real-time triggers become necessary |
+| Area                  | Current Approach             | Upgrade Path (If Needed)                                                       |
+| --------------------- | ---------------------------- | ------------------------------------------------------------------------------ |
+| Vector search         | pgvector exact cosine search | Enable HNSW index for approximate nearest neighbour if search latency degrades |
+| Embedding computation | On-demand Python scripts     | Dedicated ML service (not needed now)                                          |
+| Database              | Single PostgreSQL instance   | Managed PostgreSQL (Neon, Supabase) for hosted deployment                      |
+| Caching               | No explicit cache layer      | Add database query result caching if measured latency warrants it              |
+| Background jobs       | On-demand scripts            | Simple job queue (pg-boss, BullMQ) if real-time triggers become necessary      |
 
 **Do not introduce Redis, Kafka, Kubernetes, or other infrastructure without a demonstrated, measured performance problem.** Document the problem before proposing the solution.
 
@@ -420,15 +433,41 @@ CineSphere is a single-user personal application. The architectural choices belo
 
 ## 12. Architectural Decisions Log
 
-| ID | Decision | Rationale |
-|---|---|---|
-| AD-01 | TypeScript monorepo | Shares types between frontend and backend without duplication. Single repository simplifies development. |
-| AD-02 | Python ML as offline scripts, not a service | No justification for a persistent ML service at this scale. Scripts are simpler to maintain and debug. |
-| AD-03 | PostgreSQL as the sole data store | Avoids polyglot persistence complexity. pgvector brings vector operations into PostgreSQL. |
-| AD-04 | Prisma ORM | Type-safe database access. Prisma's migration system is appropriate for a TypeScript project. Raw SQL used only where Prisma cannot express the operation (pgvector). |
-| AD-05 | UMAP for visualization only | UMAP distorts distances. Using 2D coordinates for similarity would produce incorrect results. The original high-dimensional embeddings are the semantic source of truth. |
-| AD-06 | HDBSCAN over k-means | HDBSCAN finds natural cluster boundaries and handles noise. k-means requires a predetermined cluster count and assumes spherical clusters. |
-| AD-07 | Recommendation engine independent of LLM | LLM unavailability must not break recommendations. LLMs are probabilistic and difficult to evaluate. Deterministic scoring is auditable and improvable. |
-| AD-08 | On-demand TMDB fetch and local cache | Avoids bulk catalogue processing upfront. Grows the local catalogue incrementally as the user explores. |
-| AD-09 | Separate positive and negative preference signals | A single averaged user embedding loses polarity information. Maintaining both produces more precise preference matching. |
-| AD-10 | Atomic import transactions | Partial imports that corrupt the database are worse than failed imports. Roll back cleanly. |
+| ID    | Decision                                            | Rationale                                                                                                                                                                                                                            |
+| ----- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AD-01 | TypeScript monorepo                                 | Shares types between frontend and backend without duplication. Single repository simplifies development.                                                                                                                             |
+| AD-02 | Python ML as offline scripts, not a service         | No justification for a persistent ML service at this scale. Scripts are simpler to maintain and debug.                                                                                                                               |
+| AD-03 | PostgreSQL as the sole data store                   | Avoids polyglot persistence complexity. pgvector brings vector operations into PostgreSQL.                                                                                                                                           |
+| AD-04 | Prisma ORM                                          | Type-safe database access. Prisma's migration system is appropriate for a TypeScript project. Raw SQL used only where Prisma cannot express the operation (pgvector).                                                                |
+| AD-05 | UMAP for visualization only                         | UMAP distorts distances. Using 2D coordinates for similarity would produce incorrect results. The original high-dimensional embeddings are the semantic source of truth.                                                             |
+| AD-06 | HDBSCAN over k-means                                | HDBSCAN finds natural cluster boundaries and handles noise. k-means requires a predetermined cluster count and assumes spherical clusters.                                                                                           |
+| AD-07 | Recommendation engine independent of LLM            | LLM unavailability must not break recommendations. LLMs are probabilistic and difficult to evaluate. Deterministic scoring is auditable and improvable.                                                                              |
+| AD-08 | On-demand TMDB fetch and local cache                | Avoids bulk catalogue processing upfront. Grows the local catalogue incrementally as the user explores.                                                                                                                              |
+| AD-09 | Separate positive and negative preference signals   | A single averaged user embedding loses polarity information. Maintaining both produces more precise preference matching.                                                                                                             |
+| AD-10 | Atomic import transactions                          | Partial imports that corrupt the database are worse than failed imports. Roll back cleanly.                                                                                                                                          |
+| AD-11 | Turborepo with pnpm workspaces (TD-02 resolved)     | Selected over Nx. Provides fast task orchestration, pipeline caching, and native Next.js integration without Nx's high maintenance overhead or enterprise complexity.                                                                |
+| AD-12 | Prisma + pgvector isolated pattern (TD-04 resolved) | Prisma manages standard relational schema and migrations (`CREATE EXTENSION IF NOT EXISTS vector`). pgvector vector calculations are strictly encapsulated in `VectorRepository` via parameterized `$queryRaw`. Avoids a second ORM. |
+
+---
+
+## 13. Resolved Technical Decisions Detail
+
+### 13.1 Resolution of TD-02: Monorepo Tooling (Turborepo vs. Nx)
+
+- **Selected:** Turborepo 2.x with pnpm 10 workspaces (`pnpm-workspace.yaml`).
+- **Evaluation Summary:**
+  1. _Configuration Complexity:_ Turborepo uses a single declarative `turbo.json`, whereas Nx introduces project graphs, executors, and heavy generator plugins.
+  2. _Next.js & NestJS Integration:_ Turborepo natively supports Next.js App Router and allows NestJS to compile cleanly via Nest CLI without framework plugins.
+  3. _Dependency Management:_ Fully delegated to pnpm workspaces (`workspace:*`), ensuring fast, symlinked, deterministic installations.
+  4. _Maintenance Overhead:_ Minimal. Turborepo stays unobtrusive and does not require periodic monorepo framework migration scripts.
+- **Python ML Decoupling:** The `ml/` Python package operates independently with its own `pyproject.toml` and virtual environment, completely decoupled from JavaScript workspace dependency graphs.
+
+### 13.2 Resolution of TD-04: Prisma + pgvector Integration Pattern
+
+- **Selected:** Hybrid Prisma Relational + Encapsulated pgvector Raw SQL (`VectorRepository`).
+- **Evaluation Summary:**
+  1. _Relational Operations:_ Handled 100% by Prisma Client (type-safe queries, relations, interactive transactions).
+  2. _Extension & Migration Management:_ Handled via Prisma migrations (`CREATE EXTENSION IF NOT EXISTS vector;` executed in migration SQL).
+  3. _Vector Operations:_ pgvector cosine similarity operators (`<=>`) are executed via parameterized `prisma.$queryRaw` queries strictly inside `apps/api/src/database/vector.repository.ts`.
+  4. _Anti-Scatter Rule:_ Raw SQL is never permitted inside NestJS controllers or general domain services. All vector operations must route through `VectorRepository`.
+  5. _TD-08 Dependency Handling:_ Vector column dimensions (384 vs 768) are not permanently locked in Phase 1. The pgvector extension is verified with dynamic operations; the final `MediaEmbedding.embedding` column definition and HNSW index will be migrated in Phase 5 upon formal evaluation of the embedding model.

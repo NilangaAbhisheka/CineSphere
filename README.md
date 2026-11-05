@@ -20,7 +20,7 @@ Existing streaming platforms and tracking tools share the same fundamental limit
 
 - Recommendations are driven by aggregate popularity, not personal taste.
 - Watch history is fragmented across multiple services with no unified view.
-- No platform provides a semantic understanding of *why* a viewer likes what they like.
+- No platform provides a semantic understanding of _why_ a viewer likes what they like.
 - Personal analytics and taste evolution are unavailable or superficial.
 - Data portability is limited or absent.
 
@@ -41,44 +41,44 @@ CineSphere addresses these problems for a single user who wants to own their ent
 
 ## Core Features
 
-| Feature | Description | Status |
-|---|---|---|
-| **My Library** | Track movies and TV shows with status, ratings, progress, and notes | Planned |
-| **Discover** | Search, browse trending content, apply mood and genre filters | Planned |
-| **For You** | Hybrid recommendation engine with diversity controls and explanations | Planned |
-| **AI Taste Profile** | Structured model of personal viewing preferences | Planned |
-| **Taste Evolution** | Snapshots of preference changes over time | Planned |
-| **Movie Universe** | Interactive 2D semantic map of movies powered by embeddings and PixiJS | Planned |
-| **Statistics** | Personal viewing analytics and history | Planned |
-| **Import / Export** | JSON and CSV data portability | Planned |
-| **Local LLM** | Optional conversational discovery via Ollama (local only) | Planned |
+| Feature              | Description                                                            | Status  |
+| -------------------- | ---------------------------------------------------------------------- | ------- |
+| **My Library**       | Track movies and TV shows with status, ratings, progress, and notes    | Planned |
+| **Discover**         | Search, browse trending content, apply mood and genre filters          | Planned |
+| **For You**          | Hybrid recommendation engine with diversity controls and explanations  | Planned |
+| **AI Taste Profile** | Structured model of personal viewing preferences                       | Planned |
+| **Taste Evolution**  | Snapshots of preference changes over time                              | Planned |
+| **Movie Universe**   | Interactive 2D semantic map of movies powered by embeddings and PixiJS | Planned |
+| **Statistics**       | Personal viewing analytics and history                                 | Planned |
+| **Import / Export**  | JSON and CSV data portability                                          | Planned |
+| **Local LLM**        | Optional conversational discovery via Ollama (local only)              | Planned |
 
 ---
 
 ## Technology Stack
 
-| Area | Technology |
-|---|---|
-| Frontend | Next.js 14+ with TypeScript |
-| Styling | Tailwind CSS |
-| Backend | NestJS with TypeScript |
-| API | REST |
-| Database | PostgreSQL 16+ |
-| Vector search | pgvector |
-| ORM | Prisma |
-| Machine Learning | Python 3.11+ |
-| Embeddings | Sentence Transformers |
-| ML utilities | scikit-learn |
-| Clustering | HDBSCAN |
-| Dimensionality reduction | UMAP |
-| Interactive visualization | PixiJS |
-| Movie metadata | TMDB API |
-| Local LLM | Ollama (optional) |
-| Frontend testing | Playwright, Jest, React Testing Library |
-| Backend testing | Jest |
-| Python testing | Pytest |
-| Local infrastructure | Docker Compose |
-| Version control | Git + GitHub |
+| Area                      | Technology                              |
+| ------------------------- | --------------------------------------- |
+| Frontend                  | Next.js 14+ with TypeScript             |
+| Styling                   | Tailwind CSS                            |
+| Backend                   | NestJS with TypeScript                  |
+| API                       | REST                                    |
+| Database                  | PostgreSQL 16+                          |
+| Vector search             | pgvector                                |
+| ORM                       | Prisma                                  |
+| Machine Learning          | Python 3.11+                            |
+| Embeddings                | Sentence Transformers                   |
+| ML utilities              | scikit-learn                            |
+| Clustering                | HDBSCAN                                 |
+| Dimensionality reduction  | UMAP                                    |
+| Interactive visualization | PixiJS                                  |
+| Movie metadata            | TMDB API                                |
+| Local LLM                 | Ollama (optional)                       |
+| Frontend testing          | Playwright, Jest, React Testing Library |
+| Backend testing           | Jest                                    |
+| Python testing            | Pytest                                  |
+| Local infrastructure      | Docker Compose                          |
+| Version control           | Git + GitHub                            |
 
 ---
 
@@ -176,7 +176,8 @@ CineSphere enforces production-quality engineering standards and architectural b
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 20+ (managed via `.nvmrc`)
+- pnpm 10+ (`npm install -g pnpm`)
 - Python 3.11+
 - Docker and Docker Compose
 - Git
@@ -192,45 +193,48 @@ cd cinesphere
 
 ```bash
 cp .env.example .env
-# Edit .env and fill in required values (see Environment Variables below)
+# Edit .env and supply your TMDB_API_KEY for catalogue access
 ```
 
-### 3. Start the infrastructure
+### 3. Start the database infrastructure
 
 ```bash
 docker compose up -d
+# Verifies pgvector/pgvector:pg16 container on localhost:5432
 ```
-
-This starts PostgreSQL with pgvector. Optionally starts Ollama if enabled in your `.env`.
 
 ### 4. Install dependencies
 
 ```bash
-# TypeScript monorepo
-npm install
+# Install TypeScript monorepo dependencies
+pnpm install
 
-# Python ML package
+# Set up Python ML virtual environment
 cd ml
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+# Linux/macOS: source .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
+cd ..
 ```
 
-### 5. Set up the database
+### 5. Run database migrations
 
 ```bash
-# Run Prisma migrations
-npx prisma migrate dev
+# Apply initial pgvector extension and foundation migrations
+pnpm --filter @cinesphere/api prisma:deploy
 ```
 
-### 6. Start the development servers
+### 6. Start development servers
 
 ```bash
-# Start both web and API in development mode
-npm run dev
+# Concurrently run Next.js frontend (port 3000) and NestJS API (port 4000)
+pnpm dev
 ```
 
-Access the application at `http://localhost:3000`.
+- Frontend starter: `http://localhost:3000`
+- API health check: `http://localhost:4000/api/health`
+- Swagger OpenAPI: `http://localhost:4000/api/docs`
 
 ---
 
@@ -239,26 +243,28 @@ Access the application at `http://localhost:3000`.
 CineSphere uses environment variables to configure application parameters, external API keys, database connections, and optional AI services.
 
 ### Configuration Template & Local Setup
+
 - **Template (`.env.example`):** The tracked template file defining all identified configuration keys with safe example defaults or empty placeholders.
 - **Local File (`.env`):** Created by copying `.env.example` (`cp .env.example .env`). This file contains your machine's local configuration and API keys. It is strictly excluded from version control via `.gitignore`.
 
 ### Server-Side vs. Client-Side Variables
+
 - **Public Variables (`NEXT_PUBLIC_*`):** Next.js exposes variables prefixed with `NEXT_PUBLIC_` directly to browser-side JavaScript bundles (e.g., `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_HOSTED_MODE`). Only non-sensitive URLs and feature flags may use this prefix.
 - **Server-Only Secrets:** All database credentials (`DATABASE_URL`, `POSTGRES_PASSWORD`), TMDB API keys (`TMDB_API_KEY`), and session secrets (`SESSION_SECRET`) omit the `NEXT_PUBLIC_` prefix and are strictly confined to server-side runtimes (NestJS and Next.js server components). Never expose secrets to the client.
 
 Key variables:
 
-| Variable | Scope | Description |
-|---|---|---|
-| `DATABASE_URL` | Server | PostgreSQL + pgvector connection string |
-| `TMDB_API_KEY` | Server | TMDB API v3 key (required for catalogue lookups) |
-| `TMDB_READ_ACCESS_TOKEN` | Server | TMDB API v4 read access token (optional alternative) |
-| `OLLAMA_BASE_URL` | Server | Ollama API base URL (default: `http://localhost:11434`) |
-| `OLLAMA_MODEL` | Server | Ollama model tag (e.g., `llama3.2`) |
-| `OLLAMA_ENABLED` | Server | Set to `true` to enable local AI features |
-| `NEXT_PUBLIC_API_URL` | Client & Server | Public backend API URL consumed by the web browser |
-| `HOSTED_MODE` | Server | Set to `true` in hosted portfolio deployment |
-| `NEXT_PUBLIC_HOSTED_MODE` | Client & Server | Hosted mode flag consumed by frontend UI components |
+| Variable                  | Scope           | Description                                             |
+| ------------------------- | --------------- | ------------------------------------------------------- |
+| `DATABASE_URL`            | Server          | PostgreSQL + pgvector connection string                 |
+| `TMDB_API_KEY`            | Server          | TMDB API v3 key (required for catalogue lookups)        |
+| `TMDB_READ_ACCESS_TOKEN`  | Server          | TMDB API v4 read access token (optional alternative)    |
+| `OLLAMA_BASE_URL`         | Server          | Ollama API base URL (default: `http://localhost:11434`) |
+| `OLLAMA_MODEL`            | Server          | Ollama model tag (e.g., `llama3.2`)                     |
+| `OLLAMA_ENABLED`          | Server          | Set to `true` to enable local AI features               |
+| `NEXT_PUBLIC_API_URL`     | Client & Server | Public backend API URL consumed by the web browser      |
+| `HOSTED_MODE`             | Server          | Set to `true` in hosted portfolio deployment            |
+| `NEXT_PUBLIC_HOSTED_MODE` | Client & Server | Hosted mode flag consumed by frontend UI components     |
 
 ---
 
@@ -286,6 +292,7 @@ CineSphere optionally integrates with [Ollama](https://ollama.com/) to power con
 **Ollama is entirely optional.** All core features — including the recommendation engine, library tracking, statistics, and Movie Universe — work without it.
 
 To enable Ollama:
+
 1. Install Ollama locally: https://ollama.com/download
 2. Pull a model: `ollama pull llama3.2`
 3. Set `OLLAMA_ENABLED=true` and `OLLAMA_MODEL=llama3.2` in your `.env`
@@ -297,10 +304,13 @@ LLM-dependent features degrade gracefully when Ollama is unavailable — they ei
 ## Operating Modes
 
 ### Local Mode
+
 Full functionality including optional LLM features. Requires Docker Compose and a TMDB API key. No paid services required.
 
 ### Hosted Portfolio Mode
+
 CineSphere can be deployed publicly to demonstrate the project. In this mode:
+
 - Ollama is not available — LLM-dependent features are disabled.
 - The public demo uses a curated, anonymized dataset — no personal watch history is exposed.
 - Embeddings, clusters, and UMAP coordinates are precomputed and deployed with the demo data.
@@ -319,24 +329,31 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
 
 ## Project Status
 
-**Current phase:** Phase 1 — Project Foundation (Environment & Tooling Initialization)
+**Current phase:** Phase 1 — Project Foundation (Foundation Baseline Verified)
 
-**What exists:**
-- Project documentation, project plan, and architecture design (`docs/`)
+**What exists & is verified:**
+
+- TypeScript monorepo with Turborepo 2.x and pnpm 10 workspaces
+- Next.js 14+ App Router frontend starter ([`apps/web`](apps/web))
+- NestJS REST API backend with Swagger and health check endpoint ([`apps/api`](apps/api))
+- Shared TypeScript contracts and DTOs ([`packages/shared`](packages/shared))
+- Shared linting and TypeScript configs ([`packages/config`](packages/config))
+- Dockerized PostgreSQL 16 database with `pgvector` extension enabled (`0.8.7`)
+- Prisma 6 ORM integration with isolated `VectorRepository` pattern
+- Initial Prisma migrations executed and verified with volume persistence
+- Python ML package structure with Ruff linter and Pytest test suite ([`ml/`](ml))
 - Antigravity AI engineering instructions ([`AGENTS.md`](AGENTS.md)) & Cursor rules ([`.cursor/rules/cinesphere.mdc`](.cursor/rules/cinesphere.mdc))
-- Database schema specification and ER diagrams ([`docs/DATABASE_DESIGN.md`](docs/DATABASE_DESIGN.md))
-- Project progress tracker with phased milestones ([`tasks.md`](tasks.md))
-- Git repository initialization on `main` branch with comprehensive [`.gitignore`](.gitignore)
-- Root configuration files ([`.editorconfig`](.editorconfig), [`.gitattributes`](.gitattributes), [`.dockerignore`](.dockerignore), [`.nvmrc`](.nvmrc))
-- Environment variable templates ([`.env.example`](.env.example)) and local development environment ([`.env`](.env))
+- Architectural specifications, project plan, and database design ([`docs/`](docs))
 
-**What does not exist yet:**
-- Monorepo package structure and scaffolding (Next.js & NestJS)
-- Application source code and dependencies
-- Database migrations and Prisma client generation
-- Docker Compose multi-service definitions
-- API endpoints and frontend views
-- Python ML scripts
+**What does not exist yet (Upcoming Phases):**
+
+- TMDB API client integration and movie/TV catalogue storage (Phase 2)
+- Personal library tracking and watch progress mutations (Phase 3)
+- Viewing statistics and data import/export pipelines (Phase 4)
+- Sentence Transformers embedding generation and candidate scoring (Phase 5)
+- Movie Universe PixiJS canvas visualization (Phase 8)
+
+> See [`tasks.md`](tasks.md) for the full project roadmap and current task status.
 
 > See [`tasks.md`](tasks.md) for the full project roadmap and current task status.
 
@@ -344,18 +361,18 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
 
 ## Roadmap
 
-| Phase | Description |
-|---|---|
-| **1** | Project foundation — monorepo, tooling, Docker, database baseline |
-| **2** | TMDB integration and catalogue management |
-| **3** | Personal library and tracking |
-| **4** | Statistics and data import/export |
-| **5** | Recommendation engine foundation |
-| **6** | Recommendation intelligence, diversity, and taste profiling |
-| **7** | Local LLM integration |
-| **8** | Movie Universe interactive map |
-| **9** | Testing, security, and QA |
-| **10** | Deployment and portfolio preparation |
+| Phase  | Description                                                       |
+| ------ | ----------------------------------------------------------------- |
+| **1**  | Project foundation — monorepo, tooling, Docker, database baseline |
+| **2**  | TMDB integration and catalogue management                         |
+| **3**  | Personal library and tracking                                     |
+| **4**  | Statistics and data import/export                                 |
+| **5**  | Recommendation engine foundation                                  |
+| **6**  | Recommendation intelligence, diversity, and taste profiling       |
+| **7**  | Local LLM integration                                             |
+| **8**  | Movie Universe interactive map                                    |
+| **9**  | Testing, security, and QA                                         |
+| **10** | Deployment and portfolio preparation                              |
 
 ---
 

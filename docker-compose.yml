@@ -1,0 +1,49 @@
+# ==============================================================================
+# CineSphere — Local Development Docker Compose
+# ==============================================================================
+# Services:
+#   - postgres: PostgreSQL 16+ with pgvector extension enabled
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f postgres
+#   docker compose down
+# ==============================================================================
+
+name: cinesphere
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: cinesphere-postgres
+    restart: unless-stopped
+    ports:
+      # Bound strictly to localhost to prevent external network exposure
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cinesphere_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cinesphere_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-cinesphere}
+    volumes:
+      - cinesphere_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-cinesphere_user} -d ${POSTGRES_DB:-cinesphere}',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - cinesphere-network
+
+volumes:
+  cinesphere_postgres_data:
+    name: cinesphere_postgres_data
+
+networks:
+  cinesphere-network:
+    name: cinesphere-network
+    driver: bridge

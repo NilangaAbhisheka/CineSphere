@@ -38,6 +38,7 @@ Before changing any existing file:
 5. Never overwrite or discard existing user code without explicit permission.
 
 Before creating a new file:
+
 1. Search the codebase for existing implementations of similar functionality.
 2. Do not create a new service, utility, or module if the functionality already exists.
 
@@ -47,12 +48,12 @@ Before creating a new file:
 
 ### 3.1 Component Boundaries
 
-| Layer | Owns | Does NOT own |
-|---|---|---|
-| Frontend (`apps/web/`) | UI rendering, client state, API consumption | Business logic, database access, ML operations |
-| Backend (`apps/api/`) | REST API, business logic, TMDB integration, Prisma access | Frontend rendering, ML computation |
-| Python ML (`ml/`) | Embedding generation, clustering, UMAP, scoring scripts | Frontend/backend request handling |
-| Database | Data persistence, vector storage | Business logic, application state |
+| Layer                  | Owns                                                      | Does NOT own                                   |
+| ---------------------- | --------------------------------------------------------- | ---------------------------------------------- |
+| Frontend (`apps/web/`) | UI rendering, client state, API consumption               | Business logic, database access, ML operations |
+| Backend (`apps/api/`)  | REST API, business logic, TMDB integration, Prisma access | Frontend rendering, ML computation             |
+| Python ML (`ml/`)      | Embedding generation, clustering, UMAP, scoring scripts   | Frontend/backend request handling              |
+| Database               | Data persistence, vector storage                          | Business logic, application state              |
 
 **Do not blur these boundaries.** If the frontend needs data from the ML layer, the ML layer writes results to the database, the backend reads them, and the frontend queries the backend. That is the data flow.
 
@@ -127,14 +128,15 @@ These are non-negotiable and apply to every task:
 
 Write tests for meaningful functionality. Do not treat a successful TypeScript compilation or a passing lint check as proof that functionality works.
 
-| Test type | Scope | Tool |
-|---|---|---|
-| Unit | Business logic, scoring functions, validation, utilities | Jest (TS), Pytest (Python) |
-| Integration | API endpoints with database interaction (mocked or test DB) | Jest + Supertest |
-| End-to-end | Key user workflows through the full stack | Playwright |
-| ML tests | Embedding output shapes, similarity computation, clustering | Pytest |
+| Test type   | Scope                                                       | Tool                       |
+| ----------- | ----------------------------------------------------------- | -------------------------- |
+| Unit        | Business logic, scoring functions, validation, utilities    | Jest (TS), Pytest (Python) |
+| Integration | API endpoints with database interaction (mocked or test DB) | Jest + Supertest           |
+| End-to-end  | Key user workflows through the full stack                   | Playwright                 |
+| ML tests    | Embedding output shapes, similarity computation, clustering | Pytest                     |
 
 **What must have tests:**
+
 - Recommendation scoring logic (all five components, edge cases).
 - Import validation (valid input, invalid input, partial failures, duplicate detection).
 - Library CRUD operations.
@@ -175,20 +177,24 @@ Handle errors explicitly at every system boundary:
 Follow this 10-step cycle for every non-trivial task:
 
 ### Step 1 — Understand the Task
+
 - Read the task description and any linked `tasks.md` entry.
 - Identify the phase, deliverables, and dependencies.
 - Confirm the task is not already implemented.
 
 ### Step 2 — Inspect Relevant Documentation
+
 - Read the relevant documentation files (architecture, database design, project plan).
 - Identify explicit constraints, scoring formulas, or non-functional requirements.
 
 ### Step 3 — Review Existing Implementation
+
 - Inspect the existing codebase and dependencies.
 - Read files that will be touched or depended upon.
 - Understand current patterns and avoid duplicating existing functionality.
 
 ### Step 4 — Explain the Proposed Implementation Plan
+
 - Before writing any code, outline:
   - What you are going to build.
   - Which files you will create or modify.
@@ -197,16 +203,19 @@ Follow this 10-step cycle for every non-trivial task:
 - If the plan involves an architectural boundary change, flag it explicitly and obtain confirmation.
 
 ### Step 5 — Identify Affected Files and Dependencies
+
 - List all files that will be created, modified, or moved.
 - Confirm none of them contain work that would be overwritten without permission.
 
 ### Step 6 — Implement in Manageable Logical Units
+
 - Implement the change in focused, logical increments.
 - Keep each change coherent — do not mix unrelated changes in a single step.
 - Follow the TypeScript and Python standards above.
 - Do not leave the codebase in a broken state between steps.
 
 ### Step 7 — Run Relevant Tests and Validation
+
 - Run the TypeScript type-checker (`tsc --noEmit`).
 - Run the linter (`eslint`).
 - Run existing tests to confirm nothing is broken.
@@ -214,17 +223,20 @@ Follow this 10-step cycle for every non-trivial task:
 - For Python, run Ruff/Flake8 and Pytest.
 
 ### Step 8 — Review the Resulting Changes
+
 - Read through every file you modified.
 - Confirm the implementation matches the stated plan.
 - Confirm no security vulnerabilities (secrets, unvalidated input, parameterization).
 - Confirm tests and checks pass cleanly.
 
 ### Step 9 — Update Documentation and tasks.md
+
 - Update `tasks.md` to mark completed tasks with `[x]` (verified only).
 - Update relevant documentation if behaviour or architecture changed.
 - Add decisions made to the Architectural Decisions Log in `docs/ARCHITECTURE.md` if appropriate.
 
 ### Step 10 — Summarize Changes, Verification Results, and Next Steps
+
 - State clearly what was implemented.
 - Provide verification and test execution results.
 - State what was deliberately left out or deferred.

@@ -7,13 +7,16 @@ This document defines the mandatory engineering standards, architectural boundar
 ## 1. Project Context & Vision
 
 ### 1.1 Purpose
+
 CineSphere is a **personal movie and television tracking, discovery, recommendation, and analytics platform** built for a single user. It provides a sophisticated entertainment intelligence experience combining personal watch history tracking, a hybrid content-based recommendation engine, semantic taste profiling, and an interactive 2D Movie Universe semantic map.
 
 ### 1.2 Scope & Non-Goals
+
 - **Single-User Scope:** CineSphere is built for a single user and will eventually be deployed as a public portfolio demonstration.
 - **Strict Non-Goals:** Do NOT design multi-tenant SaaS architecture, subscription or billing systems, commercial authentication flows, open user registration, or social networks. Avoid premature complexity.
 
 ### 1.3 Two Operating Modes
+
 1. **Local Mode:**
    - Full application functionality.
    - Optional local LLM integration via **Ollama** (e.g., `llama3.2`).
@@ -33,27 +36,28 @@ CineSphere is a **personal movie and television tracking, discovery, recommendat
 
 Every component must adhere to the approved technology stack. Do not introduce new frameworks, runtimes, or databases without explicit justification.
 
-| Area | Approved Technology | Notes |
-|---|---|---|
-| **Frontend** | Next.js 14+ (App Router) + TypeScript | Modern React Server Components; client components only when required (`'use client'`). |
-| **Styling** | Tailwind CSS | Utility-first styling. |
-| **Backend** | NestJS + TypeScript | Structured modular REST API with dependency injection. |
-| **API Protocol** | REST (JSON) | Clean, typed REST endpoints with DTO validation. |
-| **Database** | PostgreSQL 16+ with `pgvector` | Single primary relational store and vector similarity engine. |
-| **ORM** | Prisma | Type-safe database client. Raw SQL (`$queryRaw`) strictly isolated for pgvector operations. |
-| **Machine Learning** | Python 3.11+ | Offline / on-demand scripts in `ml/`. Not a persistent microservice. |
-| **Embeddings** | Sentence Transformers | Local semantic vector generation. |
-| **ML Utilities** | scikit-learn, numpy, pandas | Mathematical utilities and preprocessing. |
-| **Clustering** | HDBSCAN | Density-based clustering in high-dimensional embedding space. |
-| **Dimensionality Reduction** | UMAP (`umap-learn`) | Generates 2D coordinates for visual rendering **only**. |
-| **Visualization** | PixiJS | High-performance 2D WebGL canvas rendering for Movie Universe. |
-| **Metadata Provider** | TMDB API (v3/v4) | On-demand external movie/TV metadata cache. TMDB attribution required. |
-| **Local LLM** | Ollama | Optional local model runner. System must never hard-depend on it. |
-| **Testing** | Jest, Playwright (TS), Pytest (Python) | Unit, integration, E2E, and ML pipeline validation. |
-| **Infrastructure** | Docker Compose | Local development containerization. |
-| **Version Control** | Git + GitHub | Conventional Commits, clean history. |
+| Area                         | Approved Technology                    | Notes                                                                                       |
+| ---------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Frontend**                 | Next.js 14+ (App Router) + TypeScript  | Modern React Server Components; client components only when required (`'use client'`).      |
+| **Styling**                  | Tailwind CSS                           | Utility-first styling.                                                                      |
+| **Backend**                  | NestJS + TypeScript                    | Structured modular REST API with dependency injection.                                      |
+| **API Protocol**             | REST (JSON)                            | Clean, typed REST endpoints with DTO validation.                                            |
+| **Database**                 | PostgreSQL 16+ with `pgvector`         | Single primary relational store and vector similarity engine.                               |
+| **ORM**                      | Prisma                                 | Type-safe database client. Raw SQL (`$queryRaw`) strictly isolated for pgvector operations. |
+| **Machine Learning**         | Python 3.11+                           | Offline / on-demand scripts in `ml/`. Not a persistent microservice.                        |
+| **Embeddings**               | Sentence Transformers                  | Local semantic vector generation.                                                           |
+| **ML Utilities**             | scikit-learn, numpy, pandas            | Mathematical utilities and preprocessing.                                                   |
+| **Clustering**               | HDBSCAN                                | Density-based clustering in high-dimensional embedding space.                               |
+| **Dimensionality Reduction** | UMAP (`umap-learn`)                    | Generates 2D coordinates for visual rendering **only**.                                     |
+| **Visualization**            | PixiJS                                 | High-performance 2D WebGL canvas rendering for Movie Universe.                              |
+| **Metadata Provider**        | TMDB API (v3/v4)                       | On-demand external movie/TV metadata cache. TMDB attribution required.                      |
+| **Local LLM**                | Ollama                                 | Optional local model runner. System must never hard-depend on it.                           |
+| **Testing**                  | Jest, Playwright (TS), Pytest (Python) | Unit, integration, E2E, and ML pipeline validation.                                         |
+| **Infrastructure**           | Docker Compose                         | Local development containerization.                                                         |
+| **Version Control**          | Git + GitHub                           | Conventional Commits, clean history.                                                        |
 
 ### Prohibited Infrastructure
+
 Do **not** introduce Redis, Kafka, RabbitMQ, Celery, Spark, Kubernetes, Elasticsearch, GraphQL, or alternative databases unless a documented and verified performance bottleneck necessitates it.
 
 ---
@@ -87,12 +91,14 @@ cinesphere/
 ```
 
 ### 3.1 Strict Layer Separation
+
 - **`apps/web` (Frontend):** Consumes the NestJS REST API. Contains no direct database access, no TMDB API keys, and no ML code.
 - **`apps/api` (Backend):** Implements all business logic, TMDB proxy/caching, user tracking, and database interactions via Prisma. Exposes typed REST endpoints.
 - **`ml/` (Python ML):** Executes on-demand or batch scripts directly against the database (or via CLI). Generates embeddings, computes similarity matrices, runs clustering, and outputs 2D UMAP coordinates.
 - **Data Flow:** ML scripts write results to PostgreSQL $\to$ NestJS API serves data $\to$ Next.js UI displays data. Data never flows in reverse.
 
 ### 3.2 Recommendation Engine Rules
+
 - **LLM Independence:** The recommendation engine is a **hybrid content-based mathematical scoring model** completely independent of LLMs.
 - **Scoring Formula:**
   $$\text{Score} = 0.35S + 0.25P + 0.20M + 0.10Q + 0.10N$$
@@ -107,11 +113,13 @@ cinesphere/
 - **Immutability:** Historical recommendation records (`RecommendationRecord`) must never be recalculated or overwritten when scoring formulas evolve.
 
 ### 3.3 Movie Universe Rules
+
 - **High-Dimensional Ground Truth:** All similarity calculations, nearest-neighbour queries, and HDBSCAN clustering must run on the original high-dimensional embeddings (e.g., 384 or 768 dimensions).
 - **UMAP is Visualization-Only:** 2D UMAP coordinates (`umapX`, `umapY`) are generated strictly for PixiJS canvas layout. **Never** use 2D coordinates for similarity queries or ranking.
 - **Progressive Catalogue Growth:** Do not attempt to embed the entire TMDB catalogue. Fetch and embed titles incrementally as discovered or tracked.
 
 ### 3.4 Optional Local LLM (Ollama)
+
 - Ollama is an auxiliary enhancement for conversational discovery and narrative taste descriptions.
 - The system must perform a health check on startup. If Ollama is unavailable or `OLLAMA_ENABLED=false`, the API must return a structured fallback (`LLM_UNAVAILABLE`), and the UI must gracefully disable the conversational prompt without error.
 
@@ -120,24 +128,28 @@ cinesphere/
 ## 4. Engineering Standards & Best Practices
 
 ### 4.1 TypeScript Standards
+
 - **Strict Mode:** `strict: true` is mandatory across all `tsconfig.json` files.
 - **Explicit Return Types:** All exported functions, service methods, and controller actions must specify explicit return types.
 - **No `any`:** Avoid `any` escapes. Use proper generic types, discriminated unions, or `unknown` with type narrowing.
 - **Shared Contracts:** DTOs and API interfaces must live in `packages/shared` to ensure frontend-backend synchrony.
 
 ### 4.2 Python Standards
+
 - **Python 3.11+:** Use type hints throughout (`typing` / built-in generics).
 - **Tooling:** Format with Black, lint with Ruff or Flake8.
 - **Data Validation:** Use Pydantic models or dataclasses for structured schemas instead of untyped dictionaries.
 - **Batch Processing:** Always batch vector database insertions and heavy computations.
 
 ### 4.3 Database & Prisma Standards
+
 - **Schema Responsibility:** Prisma manages the relational schema. pgvector columns and HNSW indexes are maintained via explicit SQL migration scripts.
 - **Repository Encapsulation:** Wrap raw SQL vector operations in a dedicated `VectorRepository` or service. Never inline `$queryRaw` across disparate modules.
 - **Atomic Transactions:** All multi-step mutations (especially data imports and batch status updates) must execute within interactive Prisma transactions (`$transaction`).
 - **Never Silently Drop Data:** In import pipelines (JSON/CSV), validate every record and return detailed error diagnostics for invalid entries. Never discard bad records silently.
 
 ### 4.4 Security & Secrets
+
 - **Zero Secrets in Code:** Never commit passwords, TMDB API keys, session secrets, or tokens.
 - **Environment Isolation:** Use `.env` (ignored by Git) and `.env.example` (tracked template).
 - **Input Sanitization:** All incoming requests must be validated using NestJS `ValidationPipe` with `whitelist: true` and `forbidNonWhitelisted: true`.
@@ -145,6 +157,7 @@ cinesphere/
 - **Log Hygiene:** Never log passwords, tokens, or personal watch history.
 
 ### 4.5 Testing Expectations
+
 - **Unit Testing:** Mandatory for recommendation scoring formulas, candidate filtering, statistics calculations, and import parsing.
 - **Integration Testing:** Required for API endpoints and database repository interactions.
 - **End-to-End Testing:** Validate key user workflows with Playwright.
@@ -152,6 +165,7 @@ cinesphere/
 - **Rule:** A passing compilation is not proof of functionality. Write and run automated tests.
 
 ### 4.6 Git & Commit Conventions
+
 - Use **Conventional Commits**:
   - `feat:` new user-facing or backend functionality
   - `fix:` bug resolution
@@ -180,6 +194,7 @@ For every non-trivial implementation task, Antigravity must execute the followin
 10. **Summarize Changes & Next Steps:** Deliver a concise summary of implemented items, verification results, open technical decisions, and recommended next milestones.
 
 ### Autonomy vs. Approval
+
 - **Full Autonomy:** Code creation, refactoring, adding tests, standard bug fixes, and documentation synchronization within the established architecture.
 - **Explicit Consultation Required:**
   - Introducing new infrastructure or external dependencies.

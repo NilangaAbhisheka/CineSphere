@@ -6,21 +6,21 @@
 
 ## Project Overview
 
-| Field | Value |
-|---|---|
-| Project | CineSphere |
-| Type | Personal movie and TV tracking, discovery, recommendation, and analytics platform |
-| Architecture | TypeScript monorepo (Next.js + NestJS) with separate Python ML package |
-| Phase | **Phase 1 — Project Foundation** |
-| Current Milestone | Documentation and architecture initialization |
-| Last Updated | 2026-11-05 |
+| Field             | Value                                                                             |
+| ----------------- | --------------------------------------------------------------------------------- |
+| Project           | CineSphere                                                                        |
+| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform |
+| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package            |
+| Phase             | **Phase 1 — Project Foundation**                                                  |
+| Current Milestone | Phase 1 Complete — Monorepo & Database Foundation Verified                        |
+| Last Updated      | 2026-11-06                                                                        |
 
 ---
 
 ## Overall Progress
 
 ```
-Phase 1  — Project Foundation                  █░░░░░░░░░░░░░░░  12% (docs, git, root configs, env)
+Phase 1  — Project Foundation                  ████████████████  95% (monorepo, docker, pgvector, prisma, tooling, CI workflow)
 Phase 2  — Catalogue and TMDB Integration      ░░░░░░░░░░░░░░░░  0%
 Phase 3  — Personal Library and Tracking       ░░░░░░░░░░░░░░░░  0%
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
@@ -42,18 +42,18 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ## Pending Technical Decisions
 
-| ID | Decision | Context | Status |
-|---|---|---|---|
-| TD-01 | License selection | No license chosen yet. Decide before public release. | **Open** |
-| TD-02 | Monorepo tooling | Choose between Turborepo and Nx for the TypeScript monorepo. Turborepo is simpler; Nx adds more structure. | **Open** |
-| TD-03 | NestJS module structure | Decide on a module boundary strategy (feature modules vs. domain modules) before API scaffolding begins. | **Open** |
-| TD-04 | Prisma + pgvector strategy | Prisma does not natively support pgvector operations. Decide between raw SQL queries via `$queryRaw`, a thin pg client wrapper, or a library like `pgvector-node`. | **Open** |
-| TD-05 | Frontend state management | Determine whether Zustand, Jotai, or React Context is sufficient for client state before significant UI work begins. | **Open** |
-| TD-06 | Recommendation weight tuning strategy | Initial scoring weights (S=0.35, P=0.25, M=0.20, Q=0.10, N=0.10) are unvalidated. Document evaluation methodology and when weights should be revised. | **Open** |
-| TD-07 | TMDB data seeding scope | Decide which TMDB datasets to pre-fetch at startup versus on-demand. Avoids processing entire catalogue. | **Open** |
-| TD-08 | Embedding model selection | Select the specific Sentence Transformers model (e.g., `all-MiniLM-L6-v2`, `all-mpnet-base-v2`). Consider embedding dimensionality and quality tradeoffs. | **Open** |
-| TD-09 | Public portfolio anonymization strategy | Determine exactly which data to include/exclude in the hosted demo. Decide whether to ship a precomputed fixture dataset or redact from the live database. | **Open** |
-| TD-10 | Authentication approach | Single-user local app may use a simple password or no auth. Hosted demo needs at minimum a read-only public view with optional owner login. | **Open** |
+| ID    | Decision                                | Context                                                                                                                                                    | Status       |
+| ----- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| TD-01 | License selection                       | No license chosen yet. Decide before public release.                                                                                                       | **Open**     |
+| TD-02 | Monorepo tooling                        | Choose between Turborepo and Nx. Resolved: Turborepo with pnpm workspaces (lightweight, zero unnecessary plugins).                                         | **Resolved** |
+| TD-03 | NestJS module structure                 | Decide on module boundary strategy. Resolved: Feature/domain modular architecture with global database module.                                             | **Resolved** |
+| TD-04 | Prisma + pgvector strategy              | Prisma lacks native vector operators. Resolved: Prisma for relational models + isolated parameterized `$queryRaw` in `VectorRepository`.                   | **Resolved** |
+| TD-05 | Frontend state management               | Determine whether Zustand, Jotai, or React Context is sufficient for client state before significant UI work begins.                                       | **Open**     |
+| TD-06 | Recommendation weight tuning strategy   | Initial scoring weights (S=0.35, P=0.25, M=0.20, Q=0.10, N=0.10) are unvalidated. Document evaluation methodology and when weights should be revised.      | **Open**     |
+| TD-07 | TMDB data seeding scope                 | Decide which TMDB datasets to pre-fetch at startup versus on-demand. Avoids processing entire catalogue.                                                   | **Open**     |
+| TD-08 | Embedding model selection               | Select the specific Sentence Transformers model (e.g., `all-MiniLM-L6-v2`, `all-mpnet-base-v2`). Consider embedding dimensionality and quality tradeoffs.  | **Open**     |
+| TD-09 | Public portfolio anonymization strategy | Determine exactly which data to include/exclude in the hosted demo. Decide whether to ship a precomputed fixture dataset or redact from the live database. | **Open**     |
+| TD-10 | Authentication approach                 | Single-user local app may use a simple password or no auth. Hosted demo needs at minimum a read-only public view with optional owner login.                | **Open**     |
 
 ---
 
@@ -64,6 +64,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 **Dependencies:** None (starting phase).
 
 **Completion Criteria:**
+
 - Repository structure matches the documented target layout.
 - All applications run locally via Docker Compose.
 - Linting, formatting, and type-checking pass on an empty codebase.
@@ -89,52 +90,55 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 - [x] Initialize Git repository with a meaningful `.gitignore`
 - [x] Establish root configuration files (`.editorconfig`, `.gitattributes`, `.dockerignore`, `.nvmrc`)
-- [ ] Set up TypeScript monorepo root (`package.json`, `tsconfig.json`)
-- [ ] Choose and configure monorepo tool (Turborepo or Nx) — see TD-02
-- [ ] Scaffold `apps/web/` — Next.js + TypeScript project
-- [ ] Scaffold `apps/api/` — NestJS + TypeScript project
-- [ ] Scaffold `packages/shared/` — shared TypeScript types and utilities
-- [ ] Scaffold `packages/config/` — shared ESLint, Prettier, TypeScript config
-- [ ] Scaffold `ml/` — Python package with `pyproject.toml` or `setup.py`
+- [x] Set up TypeScript monorepo root (`package.json`, `tsconfig.json`, `pnpm-workspace.yaml`, `turbo.json`)
+- [x] Choose and configure monorepo tool (Turborepo with pnpm workspaces) — see TD-02
+- [x] Scaffold `apps/web/` — Next.js 14+ App Router + TypeScript + Tailwind CSS
+- [x] Scaffold `apps/api/` — NestJS + TypeScript REST API + Swagger
+- [x] Scaffold `packages/shared/` — shared TypeScript types, DTOs, and contracts
+- [x] Scaffold `packages/config/` — shared ESLint and TypeScript configurations
+- [x] Scaffold `ml/` — Python package with `pyproject.toml` and test suite
 - [x] Add `docs/` directory structure
 
 ### 1.3 Developer Tooling
 
-- [ ] Configure ESLint for TypeScript (frontend and backend)
-- [ ] Configure Prettier project-wide
-- [ ] Configure TypeScript strict mode in all TypeScript packages
-- [ ] Configure Python linting (Ruff or Flake8) and formatting (Black)
+- [x] Configure ESLint for TypeScript (frontend and backend)
+- [x] Configure Prettier project-wide
+- [x] Configure TypeScript strict mode in all TypeScript packages
+- [x] Configure Python linting and formatting (Ruff)
 - [ ] Configure pre-commit hooks (Husky + lint-staged or pre-commit for Python)
-- [ ] Confirm all tooling passes on empty project
+- [x] Confirm all tooling passes across packages (`build`, `typecheck`, `lint`, `format:check`, `test`)
 
 ### 1.4 Docker Compose and Infrastructure
 
-- [ ] Create `docker-compose.yml` for local development
-  - [ ] PostgreSQL with pgvector extension enabled
-  - [ ] Next.js dev server container (or run outside Docker — document the decision)
-  - [ ] NestJS dev server container
+- [x] Create `docker-compose.yml` for local development
+  - [x] PostgreSQL 16 with pgvector extension enabled (`pgvector/pgvector:pg16`)
+  - [ ] Next.js dev server container (run outside Docker for development)
+  - [ ] NestJS dev server container (run outside Docker for development)
   - [ ] Optional Ollama container (disabled by default)
 - [x] Create `.env.example` with all required environment variables documented
 - [x] Create local `.env` with development defaults (git-ignored)
-- [ ] Confirm `docker compose up` starts all core services without errors
-- [ ] Verify PostgreSQL is accessible with the configured credentials
-- [ ] Verify pgvector extension installs correctly
+- [x] Confirm `docker compose up` starts all core services without errors
+- [x] Verify PostgreSQL is accessible with the configured credentials
+- [x] Verify pgvector extension installs and operates correctly (`<vector 0.8.7>`)
+- [x] Verify database volume persistence across container restarts
 
 ### 1.5 Database and ORM Baseline
 
-- [ ] Configure Prisma with PostgreSQL connection
-- [ ] Enable pgvector extension via initial migration or setup script
-- [ ] Document Prisma + pgvector interaction pattern (see TD-04)
-- [ ] Create initial Prisma schema skeleton (entities without migrations yet)
-- [ ] Confirm Prisma client generates successfully
+- [x] Configure Prisma with PostgreSQL connection
+- [x] Enable pgvector extension via initial migration (`20261105000000_init_pgvector`)
+- [x] Document Prisma + pgvector interaction pattern (see TD-04)
+- [x] Create initial Prisma schema skeleton (`User`, `SystemConfig`)
+- [x] Confirm Prisma client generates successfully (`prisma generate`)
+- [x] Verify VectorRepository parameterized vector queries and health status diagnostic endpoint
 
 ### 1.6 CI Baseline (Optional for Early Phase)
 
-- [ ] Set up GitHub Actions workflow
-  - [ ] Lint and type-check
-  - [ ] Run unit tests
-  - [ ] Build check
-- [ ] Confirm CI passes on main branch
+- [x] Set up GitHub Actions workflow (`.github/workflows/ci.yml`)
+  - [x] Lint and type-check (Turborepo + pnpm)
+  - [x] Run unit tests (Jest across packages)
+  - [x] Build check (Next.js & NestJS compilation)
+  - [x] Python ML checks (Ruff lint/format & Pytest)
+- [ ] Confirm CI passes on main branch (pending initial remote push)
 
 ---
 
@@ -145,6 +149,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 **Dependencies:** Phase 1 complete (database running, Prisma configured).
 
 **Completion Criteria:**
+
 - TMDB API integration fetches movie and TV details reliably.
 - Catalogue records are stored in PostgreSQL.
 - Search returns accurate results.
@@ -202,6 +207,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 **Dependencies:** Phase 2 complete (catalogue established).
 
 **Completion Criteria:**
+
 - User can add, update, and remove library entries.
 - Movie tracking supports all required fields.
 - TV tracking supports episode and season progress.
@@ -264,6 +270,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 **Dependencies:** Phase 3 complete (library data exists).
 
 **Completion Criteria:**
+
 - Statistics page renders correct aggregated data.
 - Import and export work reliably without data loss.
 - Invalid import records are reported and never silently discarded.
@@ -321,6 +328,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 **Dependencies:** Phase 3 complete (library data provides preference signals). Phase 2 complete (catalogue data for candidates).
 
 **Completion Criteria:**
+
 - Semantic embeddings are generated for catalogue items.
 - Cosine similarity nearest neighbours are precomputed.
 - Preference signals are derived from library data.
@@ -394,6 +402,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 **Dependencies:** Phase 5 complete (baseline pipeline working).
 
 **Completion Criteria:**
+
 - Diversity modes (Familiar / Balanced / Experimental) work and differ meaningfully.
 - Feedback is recorded correctly and influences subsequent recommendations.
 - Recommendation quality metrics are calculated.
@@ -465,6 +474,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 **Dependencies:** Phase 6 complete (recommendation system and taste profile exist).
 
 **Completion Criteria:**
+
 - LLM features work when Ollama is running locally.
 - Application operates fully without Ollama (all non-LLM features unaffected).
 - No LLM calls are made in hosted portfolio mode.
@@ -508,6 +518,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 **Dependencies:** Phase 5 complete (embeddings and similarity precomputed). Requires sufficient catalogue data to form meaningful clusters.
 
 **Completion Criteria:**
+
 - Clusters are semantically coherent.
 - 2D UMAP coordinates are generated for visualization only (not used for similarity).
 - PixiJS renders the map with acceptable performance.
@@ -558,6 +569,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 **Dependencies:** Phases 1–8 feature implementation substantially complete.
 
 **Completion Criteria:**
+
 - All critical business logic has unit test coverage.
 - Key user flows have integration and end-to-end test coverage.
 - Python ML pipelines have pytest coverage.
@@ -624,6 +636,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 **Dependencies:** Phases 1–9 complete or feature-complete with known deficiencies documented.
 
 **Completion Criteria:**
+
 - Application is publicly accessible.
 - Personal watch history is not exposed in the public demo.
 - LLM features degrade gracefully (Ollama not available in hosted environment).
@@ -675,19 +688,20 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ## Completed Milestones
 
-| Milestone | Completed | Notes |
-|---|---|---|
-| Documentation and architecture initialization | 2026-11-05 | All foundation docs created. No implementation yet. |
+| Milestone                                                         | Completed  | Notes                                                                             |
+| ----------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------- |
+| Documentation and architecture initialization                     | 2026-11-05 | All foundation docs created. No implementation yet.                               |
 | Antigravity setup, Git initialization & environment configuration | 2026-11-05 | AGENTS.md, Git init (main), .gitignore, .env.example, .env, root configs created. |
+| Monorepo initialization & PostgreSQL + pgvector foundation        | 2026-11-06 | TD-02/TD-04 resolved. Turborepo+pnpm, Next.js, NestJS, Prisma, pgvector verified. |
 
 ---
 
 ## Deferred Items
 
-| Item | Deferred To | Reason |
-|---|---|---|
-| `docs/api/` API specification stubs | Phase 2 | No API endpoints exist yet. Document alongside implementation. |
-| Redis / caching layer | Deferred indefinitely | No demonstrated performance requirement yet. Revisit if needed. |
-| Microservice extraction | Deferred indefinitely | Monolith is appropriate until specific scaling needs are proven. |
-| Multi-user support | Deferred indefinitely | Out of scope. Single-user personal app. |
-| CI/CD pipeline | Phase 1 (optional) | Useful but not blocking initial feature development. |
+| Item                                | Deferred To           | Reason                                                           |
+| ----------------------------------- | --------------------- | ---------------------------------------------------------------- |
+| `docs/api/` API specification stubs | Phase 2               | No API endpoints exist yet. Document alongside implementation.   |
+| Redis / caching layer               | Deferred indefinitely | No demonstrated performance requirement yet. Revisit if needed.  |
+| Microservice extraction             | Deferred indefinitely | Monolith is appropriate until specific scaling needs are proven. |
+| Multi-user support                  | Deferred indefinitely | Out of scope. Single-user personal app.                          |
+| CI/CD pipeline                      | Phase 1 (optional)    | Useful but not blocking initial feature development.             |

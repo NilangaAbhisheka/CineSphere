@@ -1,0 +1,33 @@
+// ==============================================================================
+// CineSphere — Prisma Schema (Foundation)
+// ==============================================================================
+// NOTE: Full application entities (Media, Library, Recommendations, TasteProfile)
+// will be migrated incrementally in subsequent phases.
+// Vector operations are isolated via VectorRepository using parameterized raw SQL.
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  displayName String   @default("CineSphere User") @db.VarChar(100)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("users")
+}
+
+model SystemConfig {
+  key       String   @id @db.VarChar(100)
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("system_configs")
+}
