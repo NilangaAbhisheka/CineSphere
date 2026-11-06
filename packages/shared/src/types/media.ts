@@ -20,3 +20,17 @@ export interface MediaSummary {
   releaseDate?: string;
   genres: MediaGenre[];
 }
+
+export interface PersonSummary {
+  id: string;
+  tmdbId: number;
+  name: string;
+}
+
+export interface PersonCreditSummary {
+  id: string;
+  personId: string;
+  personName?: string;
+  movieId?: string | null;
+  tvShowId?: string | null;
+}

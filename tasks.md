@@ -12,7 +12,7 @@
 | Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform |
 | Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package            |
 | Phase             | **Phase 1 — Project Foundation**                                                  |
-| Current Milestone | Phase 1 Complete — Monorepo & Database Foundation Verified                        |
+| Current Milestone | Phase 2A Complete — Catalogue Database Foundation Verified                        |
 | Last Updated      | 2026-11-06                                                                        |
 
 ---
@@ -21,7 +21,7 @@
 
 ```
 Phase 1  — Project Foundation                  ████████████████  95% (monorepo, docker, pgvector, prisma, tooling, CI workflow)
-Phase 2  — Catalogue and TMDB Integration      ░░░░░░░░░░░░░░░░  0%
+Phase 2  — Catalogue and TMDB Integration      ████░░░░░░░░░░░░  25% (Phase 2A schema, migrations, tests)
 Phase 3  — Personal Library and Tracking       ░░░░░░░░░░░░░░░░  0%
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
@@ -166,12 +166,13 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [ ] Store the TMDB API key securely via environment variables
 - [ ] Add TMDB attribution where required by their terms of service
 
-### 2.2 Catalogue Data Model
+### 2.2 Catalogue Data Model (Phase 2A Implemented)
 
-- [ ] Finalize and migrate `Media`, `Movie`, `TvShow`, `Season`, `Episode` schema
-- [ ] Migrate `Genre`, `Keyword`, `Person` (cast/crew) reference tables
-- [ ] Write Prisma migrations
-- [ ] Confirm Prisma client reflects the schema correctly
+- [x] Finalize and migrate simplified `Movie`, `TvShow`, `Season`, `Episode` schema
+- [x] Migrate `Genre`, `Keyword`, `Person`, and single combined `PersonCredit` models
+- [x] Write Prisma migration (`20261106000000_catalogue_foundation`) with PostgreSQL CHECK constraint
+- [x] Confirm Prisma client reflects the schema correctly (`prisma generate`)
+- [x] Add PostgreSQL integration tests for database constraints, relationships, and cascade behaviors
 
 ### 2.3 Catalogue Seeding and Sync
 

@@ -1,9 +1,20 @@
 // ==============================================================================
-// CineSphere — Prisma Schema (Foundation)
+// CineSphere — Prisma Schema
 // ==============================================================================
-// NOTE: Full application entities (Media, Library, Recommendations, TasteProfile)
-// will be migrated incrementally in subsequent phases.
-// Vector operations are isolated via VectorRepository using parameterized raw SQL.
+// Phase 1: Foundation tables (User, SystemConfig)
+// Phase 2A: Catalogue tables (Movie, TvShow, Season, Episode, Genre, Keyword,
+//           Person, PersonCredit)
+//
+// ARCHITECTURE NOTES:
+//   - Vector operations are isolated in VectorRepository using raw SQL.
+//     No vector columns are defined here (pending TD-08: embedding model selection).
+//   - PersonCredit uses a nullable movieId / tvShowId pair.
+//     The database enforces exactly-one-of via a CHECK constraint in the migration.
+//     Prisma cannot express this constraint natively; it is documented and preserved
+//     in migration SQL.
+//   - Genre and Keyword records are shared between Movie and TvShow via implicit
+//     many-to-many join tables (Prisma generates _MovieToGenre, _TvShowToGenre,
+//     _MovieToKeyword, _TvShowToKeyword automatically).
 // ==============================================================================
 
 generator client {
@@ -14,6 +25,8 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// ── Foundation ────────────────────────────────────────────────────────────────
 
 model User {
   id          String   @id @default(uuid()) @db.Uuid
@@ -30,4 +43,180 @@ model SystemConfig {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   @@map("system_configs")
+}
+
+// ── Catalogue: Genres & Keywords ──────────────────────────────────────────────
+
+model Genre {
+  tmdbId Int    @unique
+  name   String @db.VarChar(100)
+
+  movies  Movie[]
+  tvShows TvShow[]
+
+  @@id([tmdbId])
+  @@map("genres")
+}
+
+model Keyword {
+  tmdbId Int    @unique
+  name   String @db.VarChar(255)
+
+  movies  Movie[]
+  tvShows TvShow[]
+
+  @@id([tmdbId])
+  @@map("keywords")
+}
+
+// ── Catalogue: Movie ──────────────────────────────────────────────────────────
+
+model Movie {
+  id            String    @id @default(uuid()) @db.Uuid
+  tmdbId        Int       @unique
+  title         String    @db.VarChar(500)
+  originalTitle String?   @db.VarChar(500)
+  overview      String?   @db.Text
+  releaseDate   DateTime? @db.Date
+  runtime       Int? // minutes
+  originalLanguage String? @db.VarChar(10)
+  popularity    Float?
+  voteAverage   Float?
+  voteCount     Int?
+  posterPath    String?   @db.VarChar(255)
+  backdropPath  String?   @db.VarChar(255)
+  adult         Boolean   @default(false)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  syncedAt      DateTime? @db.Timestamptz(6)
+
+  genres        Genre[]
+  keywords      Keyword[]
+  personCredits PersonCredit[]
+
+  @@index([tmdbId])
+  @@index([popularity])
+  @@map("movies")
+}
+
+// ── Catalogue: TV Show ────────────────────────────────────────────────────────
+
+model TvShow {
+  id               String    @id @default(uuid()) @db.Uuid
+  tmdbId           Int       @unique
+  name             String    @db.VarChar(500)
+  originalName     String?   @db.VarChar(500)
+  overview         String?   @db.Text
+  firstAirDate     DateTime? @db.Date
+  lastAirDate      DateTime? @db.Date
+  originalLanguage String?   @db.VarChar(10)
+  popularity       Float?
+  voteAverage      Float?
+  voteCount        Int?
+  posterPath       String?   @db.VarChar(255)
+  backdropPath     String?   @db.VarChar(255)
+  status           String?   @db.VarChar(50)
+  numberOfSeasons  Int?
+  numberOfEpisodes Int?
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
+  syncedAt         DateTime? @db.Timestamptz(6)
+
+  genres        Genre[]
+  keywords      Keyword[]
+  seasons       Season[]
+  personCredits PersonCredit[]
+
+  @@index([tmdbId])
+  @@index([popularity])
+  @@map("tv_shows")
+}
+
+// ── Catalogue: Season ─────────────────────────────────────────────────────────
+
+model Season {
+  id           String    @id @default(uuid()) @db.Uuid
+  tmdbId       Int?      // TMDB season IDs can be absent for special seasons
+  seasonNumber Int
+  name         String?   @db.VarChar(255)
+  overview     String?   @db.Text
+  posterPath   String?   @db.VarChar(255)
+  airDate      DateTime? @db.Date
+
+  tvShowId String @db.Uuid
+  tvShow   TvShow @relation(fields: [tvShowId], references: [id], onDelete: Cascade)
+
+  episodes Episode[]
+
+  // A season number must be unique within a TV show (supports season 0 / specials)
+  @@unique([tvShowId, seasonNumber])
+  @@index([tvShowId])
+  @@map("seasons")
+}
+
+// ── Catalogue: Episode ────────────────────────────────────────────────────────
+
+model Episode {
+  id            String    @id @default(uuid()) @db.Uuid
+  tmdbId        Int?      // TMDB episode IDs can be absent
+  episodeNumber Int
+  name          String?   @db.VarChar(255)
+  overview      String?   @db.Text
+  airDate       DateTime? @db.Date
+  runtime       Int? // minutes
+
+  seasonId String @db.Uuid
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  // Episode number must be unique within a season
+  @@unique([seasonId, episodeNumber])
+  @@index([seasonId])
+  @@map("episodes")
+}
+
+// ── Catalogue: People ─────────────────────────────────────────────────────────
+
+model Person {
+  id        String   @id @default(uuid()) @db.Uuid
+  tmdbId    Int      @unique
+  name      String   @db.VarChar(255)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  personCredits PersonCredit[]
+
+  @@index([tmdbId])
+  @@map("persons")
+}
+
+// ── Catalogue: PersonCredit ───────────────────────────────────────────────────
+//
+// A single combined table for movie AND TV show cast appearances.
+//
+// CONSTRAINT: Exactly one of movieId or tvShowId must be non-null.
+//   This is enforced by a PostgreSQL CHECK constraint in the migration:
+//     CHECK (
+//       (movie_id IS NOT NULL AND tv_show_id IS NULL) OR
+//       (movie_id IS NULL AND tv_show_id IS NOT NULL)
+//     )
+//   Prisma cannot express this directly; it is documented here and present in
+//   the migration SQL.
+//
+// UNIQUENESS: A person may appear only once per movie and once per TV show.
+//   Enforced by unique constraints on (person_id, movie_id) and
+//   (person_id, tv_show_id) respectively (with NULLs excluded via partial index).
+//
+model PersonCredit {
+  id        String  @id @default(uuid()) @db.Uuid
+  personId  String  @db.Uuid
+  movieId   String? @db.Uuid
+  tvShowId  String? @db.Uuid
+
+  person  Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
+  movie   Movie?  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  tvShow  TvShow? @relation(fields: [tvShowId], references: [id], onDelete: Cascade)
+
+  // Index for "all credits belonging to a person"
+  @@index([personId])
+  @@map("person_credits")
 }
