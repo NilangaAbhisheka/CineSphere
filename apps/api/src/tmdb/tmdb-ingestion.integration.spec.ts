@@ -302,5 +302,44 @@ describe('TMDB Ingestion Integration Tests', () => {
       expect(savedSeason?.episodes[0].episodeNumber).toBe(1);
       expect(savedSeason?.episodes[0].tmdbId).toBeNull();
     });
+
+    it('correctly handles concurrent ingestion without duplicate key errors', async () => {
+      const movieTmdbId = nextTmdbId();
+      const genreTmdbId = nextTmdbId();
+      const actorTmdbId = nextTmdbId();
+
+      const movieData: MappedMovieData = {
+        tmdbId: movieTmdbId,
+        title: `Concurrent Movie ${movieTmdbId}`,
+        originalTitle: null,
+        overview: 'Concurrency test',
+        releaseDate: new Date('2022-01-01'),
+        runtime: 100,
+        originalLanguage: 'en',
+        popularity: 10,
+        voteAverage: 7,
+        voteCount: 100,
+        posterPath: null,
+        backdropPath: null,
+        adult: false,
+        genres: [{ tmdbId: genreTmdbId, name: 'Sci-Fi' }],
+        keywords: [],
+        cast: [{ tmdbId: actorTmdbId, name: 'Concurrent Actor' }],
+      };
+
+      // Run two simultaneous saves of the exact same movie
+      const [res1, res2] = await Promise.all([
+        catalogueRepo.saveMovie(movieData),
+        catalogueRepo.saveMovie(movieData),
+      ]);
+
+      expect(res1.id).toBe(res2.id);
+
+      const count = await prisma.movie.count({ where: { tmdbId: movieTmdbId } });
+      expect(count).toBe(1);
+
+      const creditCount = await prisma.personCredit.count({ where: { movieId: res1.id } });
+      expect(creditCount).toBe(1);
+    });
   });
 });

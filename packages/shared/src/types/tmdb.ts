@@ -18,4 +18,5 @@ export interface IngestTvShowResult {
   keywordsCount: number;
   castCount: number;
   syncedAt: Date;
+  isPartial?: boolean;
 }

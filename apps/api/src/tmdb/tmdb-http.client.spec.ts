@@ -29,27 +29,15 @@ describe('TmdbHttpClient', () => {
       expect(headers.Accept).toBe('application/json');
     });
 
-    it('falls back to api_key query param when Bearer token is absent', async () => {
-      configService.get.mockImplementation((key: string) => {
-        if (key === 'TMDB_BASE_URL') return 'https://api.themoviedb.org/3';
-        if (key === 'TMDB_READ_ACCESS_TOKEN') return null;
-        if (key === 'TMDB_API_KEY') return 'mock_api_key';
-        return null;
-      });
-
-      const fallbackClient = new TmdbHttpClient(configService);
-      const headers = fallbackClient.getHeaders();
-      expect(headers.Authorization).toBeUndefined();
-
-      const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 550 }),
+    it('redacts sensitive details from error messages on 404', async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 404,
       } as Response);
 
-      await fallbackClient.get('/movie/550');
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const calledUrl = mockFetch.mock.calls[0][0] as string;
-      expect(calledUrl).toContain('api_key=mock_api_key');
+      await expect(client.get('/movie/999999999', {}, { maxRetries: 2 })).rejects.toThrow(
+        'Resource not found on TMDB (HTTP 404): /movie/999999999',
+      );
     });
   });
 
@@ -77,7 +65,7 @@ describe('TmdbHttpClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('throws non-retryable error on 404 Not Found', async () => {
+    it('throws non-retryable error on 404 Not Found without leaking query params or tokens', async () => {
       const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValue({
         ok: false,
         status: 404,

@@ -123,6 +123,7 @@ describe('TmdbService', () => {
         keywordsCount: 0,
         castCount: 0,
         syncedAt: mockDate,
+        isPartial: false,
       });
     });
   });

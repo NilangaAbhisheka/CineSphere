@@ -95,8 +95,10 @@ export class TmdbService {
     }
 
     this.logger.log(
-      `Successfully ingested TV show "${mappedShow.name}" (TMDB ${tmdbId}) -> ${seasonsSaved} seasons, ${totalEpisodes} episodes`,
+      `Successfully ingested TV show "${mappedShow.name}" (TMDB ${tmdbId}) -> ${seasonsSaved}/${mappedShow.seasons.length} seasons, ${totalEpisodes} episodes`,
     );
+
+    const isPartial = seasonsSaved < mappedShow.seasons.length;
 
     return {
       id: showId,
@@ -108,6 +110,7 @@ export class TmdbService {
       keywordsCount: mappedShow.keywords.length,
       castCount: mappedShow.cast.length,
       syncedAt,
+      isPartial,
     };
   }
 }

@@ -11,7 +11,6 @@ export class TmdbHttpClient {
   private readonly logger = new Logger(TmdbHttpClient.name);
   private readonly baseUrl: string;
   private readonly readAccessToken: string | null;
-  private readonly apiKey: string | null;
   private readonly defaultTimeoutMs: number;
   private readonly defaultMaxRetries: number;
 
@@ -20,13 +19,12 @@ export class TmdbHttpClient {
       this.configService.get<string>('TMDB_BASE_URL') || 'https://api.themoviedb.org/3'
     ).replace(/\/$/, '');
     this.readAccessToken = this.configService.get<string>('TMDB_READ_ACCESS_TOKEN') || null;
-    this.apiKey = this.configService.get<string>('TMDB_API_KEY') || null;
     this.defaultTimeoutMs = 10000;
     this.defaultMaxRetries = 3;
 
-    if (!this.readAccessToken && !this.apiKey) {
+    if (!this.readAccessToken) {
       this.logger.warn(
-        'Neither TMDB_READ_ACCESS_TOKEN nor TMDB_API_KEY is configured. TMDB API requests will fail authentication.',
+        'TMDB_READ_ACCESS_TOKEN is not configured. TMDB API requests will fail authentication.',
       );
     }
   }
@@ -62,19 +60,15 @@ export class TmdbHttpClient {
       }
     }
 
-    // Fall back to API key query param if Bearer token is not present
-    if (!this.readAccessToken && this.apiKey) {
-      url.searchParams.set('api_key', this.apiKey);
-    }
-
     const timeoutMs = options?.timeoutMs ?? this.defaultTimeoutMs;
     const maxRetries = options?.maxRetries ?? this.defaultMaxRetries;
 
-    return this.requestWithRetry<T>(url.toString(), timeoutMs, maxRetries);
+    return this.requestWithRetry<T>(url.toString(), cleanEndpoint, timeoutMs, maxRetries);
   }
 
   private async requestWithRetry<T>(
     url: string,
+    cleanEndpoint: string,
     timeoutMs: number,
     maxRetries: number,
   ): Promise<T> {
@@ -106,7 +100,7 @@ export class TmdbHttpClient {
           );
         }
         if (status === 404) {
-          throw new Error(`Resource not found on TMDB (HTTP 404): ${url}`);
+          throw new Error(`Resource not found on TMDB (HTTP 404): ${cleanEndpoint}`);
         }
         if (status >= 400 && status < 500 && status !== 429) {
           throw new Error(`TMDB request rejected with client error (HTTP ${status}).`);
