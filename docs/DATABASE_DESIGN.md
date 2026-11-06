@@ -1,12 +1,12 @@
 # CineSphere — Database Design
 
-**Status:** Proposed / Pre-Implementation
+**Status:** Phase 2A Catalogue Foundation Implemented & Aligned
 
-**Last Updated:** 2026-11-05
+**Last Updated:** 2026-11-06
 
-**Version:** 1.0
+**Version:** 1.1
 
-> This is a proposed logical database design. No migrations have been created yet. The schema will be implemented incrementally, starting in Phase 1–2. Treat this document as the design specification, not an implementation record.
+> This document defines the CineSphere database architecture. Phase 1 foundation tables and Phase 2A catalogue tables have been implemented and verified with PostgreSQL/Prisma migrations. Higher-phase tables remain design specifications.
 
 ---
 
@@ -169,9 +169,6 @@ The catalogue database uses a direct, maintainable relational structure without 
 **Indexes:**
 
 - `movies_tmdbId_key` (UNIQUE)
-
-- `movies_tmdbId_idx`
-
 - `movies_popularity_idx`
 
 ---
@@ -225,9 +222,6 @@ The catalogue database uses a direct, maintainable relational structure without 
 **Indexes:**
 
 - `tv_shows_tmdbId_key` (UNIQUE)
-
-- `tv_shows_tmdbId_idx`
-
 - `tv_shows_popularity_idx`
 
 ---
@@ -258,8 +252,8 @@ The catalogue database uses a direct, maintainable relational structure without 
 
 **Constraints & Indexes:**
 
+- `seasons_tmdbId_key` (UNIQUE, nullable)
 - `UNIQUE(tvShowId, seasonNumber)` — prevents duplicate season numbers in a TV show.
-
 - `seasons_tvShowId_idx`
 
 ---
@@ -290,8 +284,8 @@ The catalogue database uses a direct, maintainable relational structure without 
 
 **Constraints & Indexes:**
 
+- `episodes_tmdbId_key` (UNIQUE, nullable)
 - `UNIQUE(seasonId, episodeNumber)` — prevents duplicate episode numbers in a season.
-
 - `episodes_seasonId_idx`
 
 ---
@@ -343,8 +337,6 @@ Both models share many-to-many relationships with movies and TV shows via Prisma
 **Indexes:**
 
 - `persons_tmdbId_key` (UNIQUE)
-
-- `persons_tmdbId_idx`
 
 ---
 

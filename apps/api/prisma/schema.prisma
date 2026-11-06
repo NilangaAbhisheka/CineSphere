@@ -29,10 +29,10 @@ datasource db {
 // ── Foundation ────────────────────────────────────────────────────────────────
 
 model User {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   displayName String   @default("CineSphere User") @db.VarChar(100)
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@map("users")
 }
@@ -40,7 +40,7 @@ model User {
 model SystemConfig {
   key       String   @id @db.VarChar(100)
   value     String   @db.Text
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@map("system_configs")
 }
@@ -48,31 +48,29 @@ model SystemConfig {
 // ── Catalogue: Genres & Keywords ──────────────────────────────────────────────
 
 model Genre {
-  tmdbId Int    @unique
+  tmdbId Int    @id
   name   String @db.VarChar(100)
 
   movies  Movie[]
   tvShows TvShow[]
 
-  @@id([tmdbId])
   @@map("genres")
 }
 
 model Keyword {
-  tmdbId Int    @unique
+  tmdbId Int    @id
   name   String @db.VarChar(255)
 
   movies  Movie[]
   tvShows TvShow[]
 
-  @@id([tmdbId])
   @@map("keywords")
 }
 
 // ── Catalogue: Movie ──────────────────────────────────────────────────────────
 
 model Movie {
-  id            String    @id @default(uuid()) @db.Uuid
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tmdbId        Int       @unique
   title         String    @db.VarChar(500)
   originalTitle String?   @db.VarChar(500)
@@ -87,14 +85,13 @@ model Movie {
   backdropPath  String?   @db.VarChar(255)
   adult         Boolean   @default(false)
   createdAt     DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
   syncedAt      DateTime? @db.Timestamptz(6)
 
   genres        Genre[]
   keywords      Keyword[]
   personCredits PersonCredit[]
 
-  @@index([tmdbId])
   @@index([popularity])
   @@map("movies")
 }
@@ -102,7 +99,7 @@ model Movie {
 // ── Catalogue: TV Show ────────────────────────────────────────────────────────
 
 model TvShow {
-  id               String    @id @default(uuid()) @db.Uuid
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tmdbId           Int       @unique
   name             String    @db.VarChar(500)
   originalName     String?   @db.VarChar(500)
@@ -119,7 +116,7 @@ model TvShow {
   numberOfSeasons  Int?
   numberOfEpisodes Int?
   createdAt        DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
   syncedAt         DateTime? @db.Timestamptz(6)
 
   genres        Genre[]
@@ -127,7 +124,6 @@ model TvShow {
   seasons       Season[]
   personCredits PersonCredit[]
 
-  @@index([tmdbId])
   @@index([popularity])
   @@map("tv_shows")
 }
@@ -135,8 +131,8 @@ model TvShow {
 // ── Catalogue: Season ─────────────────────────────────────────────────────────
 
 model Season {
-  id           String    @id @default(uuid()) @db.Uuid
-  tmdbId       Int?      // TMDB season IDs can be absent for special seasons
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tmdbId       Int?      @unique // TMDB season IDs can be absent for special seasons, unique when present
   seasonNumber Int
   name         String?   @db.VarChar(255)
   overview     String?   @db.Text
@@ -157,8 +153,8 @@ model Season {
 // ── Catalogue: Episode ────────────────────────────────────────────────────────
 
 model Episode {
-  id            String    @id @default(uuid()) @db.Uuid
-  tmdbId        Int?      // TMDB episode IDs can be absent
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tmdbId        Int?      @unique // TMDB episode IDs can be absent, unique when present
   episodeNumber Int
   name          String?   @db.VarChar(255)
   overview      String?   @db.Text
@@ -177,15 +173,14 @@ model Episode {
 // ── Catalogue: People ─────────────────────────────────────────────────────────
 
 model Person {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tmdbId    Int      @unique
   name      String   @db.VarChar(255)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   personCredits PersonCredit[]
 
-  @@index([tmdbId])
   @@map("persons")
 }
 
@@ -207,7 +202,7 @@ model Person {
 //   (person_id, tv_show_id) respectively (with NULLs excluded via partial index).
 //
 model PersonCredit {
-  id        String  @id @default(uuid()) @db.Uuid
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   personId  String  @db.Uuid
   movieId   String? @db.Uuid
   tvShowId  String? @db.Uuid

@@ -166,13 +166,16 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [ ] Store the TMDB API key securely via environment variables
 - [ ] Add TMDB attribution where required by their terms of service
 
-### 2.2 Catalogue Data Model (Phase 2A Implemented)
+### 2.2 Catalogue Data Model (Phase 2A Complete & Verified)
 
 - [x] Finalize and migrate simplified `Movie`, `TvShow`, `Season`, `Episode` schema
 - [x] Migrate `Genre`, `Keyword`, `Person`, and single combined `PersonCredit` models
 - [x] Write Prisma migration (`20261106000000_catalogue_foundation`) with PostgreSQL CHECK constraint
+- [x] Create `migration_lock.toml` for PostgreSQL connector tracking
+- [x] Add nullable unique constraints on `Season.tmdbId` and `Episode.tmdbId` (`20261106232000_catalogue_constraints_alignment`)
+- [x] Clean up redundant indexes (`movies_tmdbId_idx`, `tv_shows_tmdbId_idx`, `persons_tmdbId_idx`)
 - [x] Confirm Prisma client reflects the schema correctly (`prisma generate`)
-- [x] Add PostgreSQL integration tests for database constraints, relationships, and cascade behaviors
+- [x] Add PostgreSQL integration tests for database constraints, relationships, unique indexes, and cascade behaviors (37/37 passing)
 
 ### 2.3 Catalogue Seeding and Sync
 

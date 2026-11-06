@@ -292,6 +292,34 @@ describe('Catalogue Integration Tests', () => {
       expect(s1.id).not.toBe(s2.id);
     });
 
+    it('allows multiple seasons with tmdbId = NULL', async () => {
+      const show1 = await createTvShow();
+      const show2 = await createTvShow();
+      const s1 = await prisma.season.create({
+        data: { tvShowId: show1.id, seasonNumber: 1, tmdbId: null },
+      });
+      const s2 = await prisma.season.create({
+        data: { tvShowId: show2.id, seasonNumber: 1, tmdbId: null },
+      });
+      expect(s1.tmdbId).toBeNull();
+      expect(s2.tmdbId).toBeNull();
+      expect(s1.id).not.toBe(s2.id);
+    });
+
+    it('rejects duplicate non-null season TMDB IDs', async () => {
+      const show1 = await createTvShow();
+      const show2 = await createTvShow();
+      const seasonTmdbId = uniqueTmdbId();
+      await prisma.season.create({
+        data: { tvShowId: show1.id, seasonNumber: 1, tmdbId: seasonTmdbId },
+      });
+      await expect(
+        prisma.season.create({
+          data: { tvShowId: show2.id, seasonNumber: 1, tmdbId: seasonTmdbId },
+        }),
+      ).rejects.toThrow();
+    });
+
     it('cascades deletion to seasons when a TV show is deleted', async () => {
       const show = await createTvShow();
       const season = await prisma.season.create({
@@ -337,6 +365,38 @@ describe('Catalogue Integration Tests', () => {
       });
       expect(ep.name).toBeNull();
       expect(ep.runtime).toBeNull();
+    });
+
+    it('allows multiple episodes with tmdbId = NULL', async () => {
+      const show = await createTvShow();
+      const season = await prisma.season.create({
+        data: { tvShowId: show.id, seasonNumber: 1 },
+      });
+      const ep1 = await prisma.episode.create({
+        data: { seasonId: season.id, episodeNumber: 1, tmdbId: null },
+      });
+      const ep2 = await prisma.episode.create({
+        data: { seasonId: season.id, episodeNumber: 2, tmdbId: null },
+      });
+      expect(ep1.tmdbId).toBeNull();
+      expect(ep2.tmdbId).toBeNull();
+      expect(ep1.id).not.toBe(ep2.id);
+    });
+
+    it('rejects duplicate non-null episode TMDB IDs', async () => {
+      const show = await createTvShow();
+      const season = await prisma.season.create({
+        data: { tvShowId: show.id, seasonNumber: 1 },
+      });
+      const epTmdbId = uniqueTmdbId();
+      await prisma.episode.create({
+        data: { seasonId: season.id, episodeNumber: 1, tmdbId: epTmdbId },
+      });
+      await expect(
+        prisma.episode.create({
+          data: { seasonId: season.id, episodeNumber: 2, tmdbId: epTmdbId },
+        }),
+      ).rejects.toThrow();
     });
 
     it('cascades deletion to episodes when a season is deleted', async () => {
