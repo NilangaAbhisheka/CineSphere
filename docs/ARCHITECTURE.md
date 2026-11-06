@@ -109,7 +109,12 @@ flowchart TD
 - Contain ML logic (embedding generation, clustering, UMAP). Those live in the Python `ml/` package.
 - Render the UI.
 
-**Module structure [Proposed]:** Feature-based NestJS modules. Each domain (catalogue, library, recommendations, statistics, auth, etc.) has its own module. See TD-03 for the final module boundary decision.
+**Module structure:** Feature-based NestJS modules:
+
+- `DatabaseModule`: Global database access via `PrismaService` and `VectorRepository`.
+- `HealthModule`: System health checks, DB connectivity, and pgvector diagnostics.
+- `TmdbModule`: TMDB metadata integration and catalogue ingestion (`TmdbHttpClient`, `TmdbMapper`, `CatalogueRepository`, `TmdbService`, `TmdbController`).
+- Future domains (library, recommendations, statistics) follow the same feature-module architecture.
 
 ---
 

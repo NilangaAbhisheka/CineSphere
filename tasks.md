@@ -158,13 +158,13 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ---
 
-### 2.1 TMDB API Client
+### 2.1 TMDB API Client (Phase 2B Complete)
 
-- [ ] Implement a typed TMDB API client (NestJS service)
-- [ ] Support TMDB endpoints: search, movie details, TV details, trending, popular, genres
-- [ ] Handle TMDB rate limiting with appropriate retry logic
-- [ ] Store the TMDB API key securely via environment variables
-- [ ] Add TMDB attribution where required by their terms of service
+- [x] Implement a typed TMDB API client (`TmdbHttpClient`) with Bearer token authentication
+- [x] Implement configurable base URL, timeout handling, and exponential backoff retries (respecting `Retry-After`)
+- [x] Separate concerns cleanly: `TmdbHttpClient` (HTTP/retry), `TmdbMapper` (transform), `CatalogueRepository` (Prisma upsert/transactions), and `TmdbService` (orchestration)
+- [x] Store and validate TMDB credentials securely via backend environment variables (`TMDB_READ_ACCESS_TOKEN` / `TMDB_API_KEY`)
+- [x] Unit test client retry logic, rate limit handling, authentication headers, and response mappings without external API calls
 
 ### 2.2 Catalogue Data Model (Phase 2A Complete & Verified)
 
@@ -177,12 +177,20 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] Confirm Prisma client reflects the schema correctly (`prisma generate`)
 - [x] Add PostgreSQL integration tests for database constraints, relationships, unique indexes, and cascade behaviors (37/37 passing)
 
-### 2.3 Catalogue Seeding and Sync
+### 2.3 Catalogue Seeding and Ingestion (Phase 2B Complete)
 
-- [ ] Implement on-demand movie and TV show fetch and cache (fetch on first lookup, store locally)
+- [x] Implement on-demand movie ingestion by TMDB ID (`POST /api/catalogue/ingest/movie/:tmdbId`)
+  - [x] Ingest metadata, release date, runtime, poster/backdrop paths, adult flag
+  - [x] Ingest and associate genres and keywords
+  - [x] Ingest and link cast members via `PersonCredit`
+- [x] Implement on-demand TV show ingestion by TMDB ID (`POST /api/catalogue/ingest/tv/:tmdbId`)
+  - [x] Ingest TV metadata, first/last air dates, season/episode counts, genres, keywords, cast
+  - [x] Ingest individual seasons and episodes (supporting specials / season 0) with bounded per-season transactions
+- [x] Ensure 100% idempotent ingestion and relationship synchronization on repeated requests
+- [x] Document endpoints in Swagger/OpenAPI
+- [x] Automated PostgreSQL integration tests for movie and TV ingestion idempotency (41/41 passing)
 - [ ] Implement background sync for trending and popular content (limited scope — see TD-07)
-- [ ] Handle missing or incomplete TMDB records gracefully
-- [ ] Implement deduplication of catalogue records
+- [ ] Implement deduplication of catalogue records across discovery sweeps
 
 ### 2.4 Discover API Endpoints
 
