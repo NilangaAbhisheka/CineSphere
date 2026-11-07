@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import {
   MappedGenre,
@@ -8,6 +9,33 @@ import {
   MappedSeasonData,
   MappedTvShowData,
 } from './tmdb.mapper.js';
+
+export interface MovieFilterOptions {
+  query?: string;
+  page?: number;
+  limit?: number;
+  genreId?: number;
+  year?: number;
+  minRating?: number;
+  maxRating?: number;
+  language?: string;
+  sortBy?: 'popularity' | 'rating' | 'releaseDate' | 'title';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface TvShowFilterOptions {
+  query?: string;
+  page?: number;
+  limit?: number;
+  genreId?: number;
+  firstAirDateYear?: number;
+  minRating?: number;
+  maxRating?: number;
+  language?: string;
+  status?: string;
+  sortBy?: 'popularity' | 'rating' | 'firstAirDate' | 'name';
+  sortOrder?: 'asc' | 'desc';
+}
 
 @Injectable()
 export class CatalogueRepository {
@@ -349,5 +377,317 @@ export class CatalogueRepository {
       },
       { maxWait: 10000, timeout: 20000 },
     );
+  }
+
+  public async findMovies(filter: MovieFilterOptions) {
+    const page = Math.max(1, filter.page ?? 1);
+    const limit = Math.min(100, Math.max(1, filter.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.MovieWhereInput = {};
+
+    if (filter.query && filter.query.trim()) {
+      where.title = {
+        contains: filter.query.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    if (filter.genreId !== undefined) {
+      where.genres = {
+        some: {
+          tmdbId: filter.genreId,
+        },
+      };
+    }
+
+    if (filter.year !== undefined) {
+      const startOfYear = new Date(Date.UTC(filter.year, 0, 1));
+      const endOfYear = new Date(Date.UTC(filter.year, 11, 31, 23, 59, 59, 999));
+      where.releaseDate = {
+        gte: startOfYear,
+        lte: endOfYear,
+      };
+    }
+
+    if (filter.minRating !== undefined || filter.maxRating !== undefined) {
+      where.voteAverage = {};
+      if (filter.minRating !== undefined) {
+        where.voteAverage.gte = filter.minRating;
+      }
+      if (filter.maxRating !== undefined) {
+        where.voteAverage.lte = filter.maxRating;
+      }
+    }
+
+    if (filter.language && filter.language.trim()) {
+      where.originalLanguage = {
+        equals: filter.language.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    const sortBy = filter.sortBy || 'popularity';
+    const sortOrder = filter.sortOrder || 'desc';
+
+    let primaryField: keyof Prisma.MovieOrderByWithRelationInput;
+    switch (sortBy) {
+      case 'rating':
+        primaryField = 'voteAverage';
+        break;
+      case 'releaseDate':
+        primaryField = 'releaseDate';
+        break;
+      case 'title':
+        primaryField = 'title';
+        break;
+      case 'popularity':
+      default:
+        primaryField = 'popularity';
+        break;
+    }
+
+    const orderBy: Prisma.MovieOrderByWithRelationInput[] = [
+      { [primaryField]: sortOrder },
+      { id: 'asc' },
+    ];
+
+    const [items, totalResults] = await Promise.all([
+      this.prisma.movie.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          tmdbId: true,
+          title: true,
+          originalTitle: true,
+          overview: true,
+          releaseDate: true,
+          runtime: true,
+          originalLanguage: true,
+          popularity: true,
+          voteAverage: true,
+          voteCount: true,
+          posterPath: true,
+          backdropPath: true,
+          genres: {
+            select: {
+              tmdbId: true,
+              name: true,
+            },
+          },
+        },
+      }),
+      this.prisma.movie.count({ where }),
+    ]);
+
+    return {
+      items,
+      totalResults,
+      page,
+      limit,
+      totalPages: Math.ceil(totalResults / limit),
+    };
+  }
+
+  public async findMovieById(id: string) {
+    return this.prisma.movie.findUnique({
+      where: { id },
+      include: {
+        genres: {
+          select: {
+            tmdbId: true,
+            name: true,
+          },
+        },
+        keywords: {
+          select: {
+            tmdbId: true,
+            name: true,
+          },
+        },
+        personCredits: {
+          select: {
+            id: true,
+            person: {
+              select: {
+                id: true,
+                tmdbId: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  public async findTvShows(filter: TvShowFilterOptions) {
+    const page = Math.max(1, filter.page ?? 1);
+    const limit = Math.min(100, Math.max(1, filter.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.TvShowWhereInput = {};
+
+    if (filter.query && filter.query.trim()) {
+      where.name = {
+        contains: filter.query.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    if (filter.genreId !== undefined) {
+      where.genres = {
+        some: {
+          tmdbId: filter.genreId,
+        },
+      };
+    }
+
+    if (filter.firstAirDateYear !== undefined) {
+      const startOfYear = new Date(Date.UTC(filter.firstAirDateYear, 0, 1));
+      const endOfYear = new Date(Date.UTC(filter.firstAirDateYear, 11, 31, 23, 59, 59, 999));
+      where.firstAirDate = {
+        gte: startOfYear,
+        lte: endOfYear,
+      };
+    }
+
+    if (filter.minRating !== undefined || filter.maxRating !== undefined) {
+      where.voteAverage = {};
+      if (filter.minRating !== undefined) {
+        where.voteAverage.gte = filter.minRating;
+      }
+      if (filter.maxRating !== undefined) {
+        where.voteAverage.lte = filter.maxRating;
+      }
+    }
+
+    if (filter.language && filter.language.trim()) {
+      where.originalLanguage = {
+        equals: filter.language.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    if (filter.status && filter.status.trim()) {
+      where.status = {
+        equals: filter.status.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    const sortBy = filter.sortBy || 'popularity';
+    const sortOrder = filter.sortOrder || 'desc';
+
+    let primaryField: keyof Prisma.TvShowOrderByWithRelationInput;
+    switch (sortBy) {
+      case 'rating':
+        primaryField = 'voteAverage';
+        break;
+      case 'firstAirDate':
+        primaryField = 'firstAirDate';
+        break;
+      case 'name':
+        primaryField = 'name';
+        break;
+      case 'popularity':
+      default:
+        primaryField = 'popularity';
+        break;
+    }
+
+    const orderBy: Prisma.TvShowOrderByWithRelationInput[] = [
+      { [primaryField]: sortOrder },
+      { id: 'asc' },
+    ];
+
+    const [items, totalResults] = await Promise.all([
+      this.prisma.tvShow.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          tmdbId: true,
+          name: true,
+          originalName: true,
+          overview: true,
+          firstAirDate: true,
+          lastAirDate: true,
+          originalLanguage: true,
+          popularity: true,
+          voteAverage: true,
+          voteCount: true,
+          posterPath: true,
+          backdropPath: true,
+          status: true,
+          numberOfSeasons: true,
+          numberOfEpisodes: true,
+          genres: {
+            select: {
+              tmdbId: true,
+              name: true,
+            },
+          },
+        },
+      }),
+      this.prisma.tvShow.count({ where }),
+    ]);
+
+    return {
+      items,
+      totalResults,
+      page,
+      limit,
+      totalPages: Math.ceil(totalResults / limit),
+    };
+  }
+
+  public async findTvShowById(id: string) {
+    return this.prisma.tvShow.findUnique({
+      where: { id },
+      include: {
+        genres: {
+          select: {
+            tmdbId: true,
+            name: true,
+          },
+        },
+        keywords: {
+          select: {
+            tmdbId: true,
+            name: true,
+          },
+        },
+        personCredits: {
+          select: {
+            id: true,
+            person: {
+              select: {
+                id: true,
+                tmdbId: true,
+                name: true,
+              },
+            },
+          },
+        },
+        seasons: {
+          orderBy: {
+            seasonNumber: 'asc',
+          },
+          include: {
+            episodes: {
+              orderBy: {
+                episodeNumber: 'asc',
+              },
+            },
+          },
+        },
+      },
+    });
   }
 }

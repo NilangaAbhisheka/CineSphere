@@ -1,9 +1,16 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { IngestMovieResult, IngestTvShowResult } from '@cinesphere/shared';
+import {
+  IngestMovieResult,
+  IngestTvShowResult,
+  TmdbMovieSearchResult,
+  TmdbSearchResponse,
+  TmdbTvSearchResult,
+} from '@cinesphere/shared';
 import { TmdbHttpClient } from './tmdb-http.client.js';
 import { TmdbMapper } from './tmdb.mapper.js';
 import { CatalogueRepository } from './catalogue.repository.js';
 import {
+  RawTmdbSearchResponse,
   TmdbMovieDetailsResponse,
   TmdbSeasonDetailsResponse,
   TmdbTvShowDetailsResponse,
@@ -111,6 +118,72 @@ export class TmdbService {
       castCount: mappedShow.cast.length,
       syncedAt,
       isPartial,
+    };
+  }
+
+  public async searchMovies(
+    query: string,
+    page: number = 1,
+    includeAdult: boolean = false,
+    year?: number,
+    primaryReleaseYear?: number,
+  ): Promise<TmdbSearchResponse<TmdbMovieSearchResult>> {
+    this.logger.log(`Searching TMDB movies with query="${query}", page=${page}...`);
+
+    const params: Record<string, string | number | boolean | undefined> = {
+      query,
+      page,
+      include_adult: includeAdult,
+    };
+
+    if (year !== undefined) {
+      params.year = year;
+    }
+    if (primaryReleaseYear !== undefined) {
+      params.primary_release_year = primaryReleaseYear;
+    }
+
+    const raw = await this.httpClient.get<RawTmdbSearchResponse<TmdbMovieSearchResult>>(
+      '/search/movie',
+      params,
+    );
+
+    return {
+      page: raw.page ?? page,
+      totalPages: raw.total_pages ?? 0,
+      totalResults: raw.total_results ?? 0,
+      results: raw.results ?? [],
+    };
+  }
+
+  public async searchTvShows(
+    query: string,
+    page: number = 1,
+    includeAdult: boolean = false,
+    firstAirDateYear?: number,
+  ): Promise<TmdbSearchResponse<TmdbTvSearchResult>> {
+    this.logger.log(`Searching TMDB TV shows with query="${query}", page=${page}...`);
+
+    const params: Record<string, string | number | boolean | undefined> = {
+      query,
+      page,
+      include_adult: includeAdult,
+    };
+
+    if (firstAirDateYear !== undefined) {
+      params.first_air_date_year = firstAirDateYear;
+    }
+
+    const raw = await this.httpClient.get<RawTmdbSearchResponse<TmdbTvSearchResult>>(
+      '/search/tv',
+      params,
+    );
+
+    return {
+      page: raw.page ?? page,
+      totalPages: raw.total_pages ?? 0,
+      totalResults: raw.total_results ?? 0,
+      results: raw.results ?? [],
     };
   }
 }

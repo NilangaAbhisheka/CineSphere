@@ -106,3 +106,10 @@ export interface TmdbSeasonDetailsResponse {
   air_date?: string | null;
   episodes: TmdbEpisodeDetails[];
 }
+
+export interface RawTmdbSearchResponse<T> {
+  page: number;
+  results: T[];
+  total_pages: number;
+  total_results: number;
+}

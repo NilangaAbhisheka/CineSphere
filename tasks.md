@@ -12,7 +12,7 @@
 | Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform |
 | Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package            |
 | Phase             | **Phase 2 — Catalogue and TMDB Integration**                                      |
-| Current Milestone | Phase 2B Complete — TMDB Ingestion & Reliability Audit Verified                    |
+| Current Milestone | Phase 2C Complete — Catalogue Discovery & TMDB Search Endpoints Verified          |
 | Last Updated      | 2026-11-07                                                                        |
 
 ---
@@ -21,7 +21,7 @@
 
 ```
 Phase 1  — Project Foundation                  ████████████████  95% (monorepo, docker, pgvector, prisma, tooling, CI workflow)
-Phase 2  — Catalogue and TMDB Integration      ████████░░░░░░░░  50% (Phase 2A schema & Phase 2B ingestion/audit verified)
+Phase 2  — Catalogue and TMDB Integration      ████████████░░░░  75% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery verified)
 Phase 3  — Personal Library and Tracking       ░░░░░░░░░░░░░░░░  0%
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
@@ -193,15 +193,33 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [ ] Implement background sync for trending and popular content (limited scope — see TD-07)
 - [ ] Implement deduplication of catalogue records across discovery sweeps
 
-### 2.4 Discover API Endpoints
+### 2.4 Discover API Endpoints (Phase 2C Complete)
 
-- [ ] `GET /api/catalogue/search?q=...` — full-text search
-- [ ] `GET /api/catalogue/trending`
-- [ ] `GET /api/catalogue/popular`
-- [ ] `GET /api/catalogue/movie/:tmdbId`
-- [ ] `GET /api/catalogue/tv/:tmdbId`
-- [ ] `GET /api/catalogue/genres`
-- [ ] Add filtering parameters (genre, year, type, rating, runtime)
+- [x] Remote TMDB search endpoints (`GET /api/discover/tmdb/movies`, `GET /api/discover/tmdb/tv`)
+  - [x] Query validation, pagination (`page`, `totalPages`, `totalResults`, `results`)
+  - [x] Adult filtering with default to `false`
+  - [x] Query filters: `year`, `primaryReleaseYear`, `firstAirDateYear`
+  - [x] Zero persistence to PostgreSQL during search queries
+- [x] Local movie catalogue endpoint (`GET /api/catalogue/movies`)
+  - [x] Database-side filtering by `query` (case-insensitive substring title matching)
+  - [x] Filters: `genreId`, `year`, `minRating`, `maxRating`, `language`
+  - [x] Stable secondary sorting by `id asc` and configurable primary sort (`popularity`, `rating`, `releaseDate`, `title`)
+  - [x] Database-side pagination with enforced maximum page size (100)
+- [x] Local TV show catalogue endpoint (`GET /api/catalogue/tv`)
+  - [x] Database-side filtering by `query` (case-insensitive substring name matching)
+  - [x] Filters: `genreId`, `firstAirDateYear`, `minRating`, `maxRating`, `language`, `status`
+  - [x] Stable secondary sorting by `id asc` and configurable primary sort (`popularity`, `rating`, `firstAirDate`, `name`)
+  - [x] Database-side pagination with enforced maximum page size (100)
+- [x] Local movie details endpoint (`GET /api/catalogue/movies/:id`)
+  - [x] Retrieve by internal UUID (v4) with `ParseUUIDPipe` validation
+  - [x] Full metadata, genres, keywords, and associated cast members via `PersonCredit` -> `Person`
+  - [x] 404 response on non-existent records
+- [x] Local TV show details endpoint (`GET /api/catalogue/tv/:id`)
+  - [x] Retrieve by internal UUID (v4) with `ParseUUIDPipe` validation
+  - [x] Full metadata, genres, keywords, associated cast members, and hierarchical seasons and episodes
+  - [x] Ordered seasons (`seasonNumber asc`, preserving season 0) and ordered episodes (`episodeNumber asc`)
+  - [x] 404 response on non-existent records
+- [x] Unit and PostgreSQL integration tests for TMDB search, local catalogue filtering, pagination, ordering, and details endpoints (53 unit tests, 57 integration tests passing)
 
 ### 2.5 Frontend Discover Page
 
