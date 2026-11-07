@@ -44,8 +44,14 @@ export default function DiscoverPage() {
   const [trendingMovies, setTrendingMovies] = useState<UnifiedMediaItem[]>([]);
   const [trendingTvShows, setTrendingTvShows] = useState<UnifiedMediaItem[]>([]);
   const [popularMovies, setPopularMovies] = useState<UnifiedMediaItem[]>([]);
+  const [popularTvShows, setPopularTvShows] = useState<UnifiedMediaItem[]>([]);
   const [curatedLoading, setCuratedLoading] = useState(false);
-  const [curatedError, setCuratedError] = useState<string | null>(null);
+  const [curatedErrors, setCuratedErrors] = useState<{
+    trendingMovies?: string;
+    trendingTv?: string;
+    popularMovies?: string;
+    popularTv?: string;
+  }>({});
 
   // ── Local Catalogue State ──────────────────────────────────────────────────
   const [catMediaType, setCatMediaType] = useState<'movie' | 'tv'>('movie');
@@ -90,45 +96,76 @@ export default function DiscoverPage() {
   // ── 2. Fetch Curated Trending/Popular on mount ──────────────────────────────
   const loadCuratedContent = useCallback(async () => {
     setCuratedLoading(true);
-    setCuratedError(null);
+    setCuratedErrors({});
+
+    const mapTmdbMovie = (m: TmdbMovieSearchResult): UnifiedMediaItem => ({
+      tmdbId: m.id,
+      title: m.title,
+      overview: m.overview,
+      posterPath: m.poster_path,
+      backdropPath: m.backdrop_path,
+      releaseDate: m.release_date,
+      voteAverage: m.vote_average,
+      popularity: m.popularity,
+      mediaType: 'movie',
+    });
+
+    const mapTmdbTv = (t: TmdbTvSearchResult): UnifiedMediaItem => ({
+      tmdbId: t.id,
+      title: t.name,
+      overview: t.overview,
+      posterPath: t.poster_path,
+      backdropPath: t.backdrop_path,
+      releaseDate: t.first_air_date,
+      voteAverage: t.vote_average,
+      popularity: t.popularity,
+      mediaType: 'tv',
+    });
 
     try {
-      const [trendingMovRes, trendingTvRes, popularMovRes] = await Promise.all([
+      const [trendMResult, trendTvResult, popMResult, popTvResult] = await Promise.allSettled([
         apiClient.getTrendingMovies(1),
         apiClient.getTrendingTvShows(1),
         apiClient.getPopularMovies(1),
+        apiClient.getPopularTvShows(1),
       ]);
 
-      const mapTmdbMovie = (m: TmdbMovieSearchResult): UnifiedMediaItem => ({
-        tmdbId: m.id,
-        title: m.title,
-        overview: m.overview,
-        posterPath: m.poster_path,
-        backdropPath: m.backdrop_path,
-        releaseDate: m.release_date,
-        voteAverage: m.vote_average,
-        popularity: m.popularity,
-        mediaType: 'movie',
-      });
+      const newErrors: {
+        trendingMovies?: string;
+        trendingTv?: string;
+        popularMovies?: string;
+        popularTv?: string;
+      } = {};
 
-      const mapTmdbTv = (t: TmdbTvSearchResult): UnifiedMediaItem => ({
-        tmdbId: t.id,
-        title: t.name,
-        overview: t.overview,
-        posterPath: t.poster_path,
-        backdropPath: t.backdrop_path,
-        releaseDate: t.first_air_date,
-        voteAverage: t.vote_average,
-        popularity: t.popularity,
-        mediaType: 'tv',
-      });
+      if (trendMResult.status === 'fulfilled') {
+        setTrendingMovies(trendMResult.value.results.slice(0, 10).map(mapTmdbMovie));
+      } else {
+        newErrors.trendingMovies =
+          (trendMResult.reason as Error)?.message || 'Failed to load trending movies.';
+      }
 
-      setTrendingMovies(trendingMovRes.results.slice(0, 10).map(mapTmdbMovie));
-      setTrendingTvShows(trendingTvRes.results.slice(0, 10).map(mapTmdbTv));
-      setPopularMovies(popularMovRes.results.slice(0, 10).map(mapTmdbMovie));
-    } catch (err: unknown) {
-      const error = err as Error;
-      setCuratedError(error.message || 'Failed to load trending content from TMDB.');
+      if (trendTvResult.status === 'fulfilled') {
+        setTrendingTvShows(trendTvResult.value.results.slice(0, 10).map(mapTmdbTv));
+      } else {
+        newErrors.trendingTv =
+          (trendTvResult.reason as Error)?.message || 'Failed to load trending TV shows.';
+      }
+
+      if (popMResult.status === 'fulfilled') {
+        setPopularMovies(popMResult.value.results.slice(0, 10).map(mapTmdbMovie));
+      } else {
+        newErrors.popularMovies =
+          (popMResult.reason as Error)?.message || 'Failed to load popular movies.';
+      }
+
+      if (popTvResult.status === 'fulfilled') {
+        setPopularTvShows(popTvResult.value.results.slice(0, 10).map(mapTmdbTv));
+      } else {
+        newErrors.popularTv =
+          (popTvResult.reason as Error)?.message || 'Failed to load popular TV shows.';
+      }
+
+      setCuratedErrors(newErrors);
     } finally {
       setCuratedLoading(false);
     }
@@ -640,8 +677,6 @@ export default function DiscoverPage() {
             {/* ── Default Curated View: Trending & Popular (when search is empty) ── */}
             {!hasSearchQuery && (
               <div className="space-y-12">
-                {curatedError && <ErrorState message={curatedError} onRetry={loadCuratedContent} />}
-
                 {/* Trending Movies Today */}
                 <section className="space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2">
@@ -653,6 +688,11 @@ export default function DiscoverPage() {
 
                   {curatedLoading ? (
                     <LoadingSkeletonGrid count={5} />
+                  ) : curatedErrors.trendingMovies ? (
+                    <ErrorState
+                      message={curatedErrors.trendingMovies}
+                      onRetry={loadCuratedContent}
+                    />
                   ) : trendingMovies.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
                       {trendingMovies.map((movie) => (
@@ -673,6 +713,8 @@ export default function DiscoverPage() {
 
                   {curatedLoading ? (
                     <LoadingSkeletonGrid count={5} />
+                  ) : curatedErrors.trendingTv ? (
+                    <ErrorState message={curatedErrors.trendingTv} onRetry={loadCuratedContent} />
                   ) : trendingTvShows.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
                       {trendingTvShows.map((tv) => (
@@ -682,7 +724,7 @@ export default function DiscoverPage() {
                   ) : null}
                 </section>
 
-                {/* Popular Movies */}
+                {/* Most Popular Movies */}
                 <section className="space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                     <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
@@ -693,10 +735,37 @@ export default function DiscoverPage() {
 
                   {curatedLoading ? (
                     <LoadingSkeletonGrid count={5} />
+                  ) : curatedErrors.popularMovies ? (
+                    <ErrorState
+                      message={curatedErrors.popularMovies}
+                      onRetry={loadCuratedContent}
+                    />
                   ) : popularMovies.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
                       {popularMovies.map((movie) => (
                         <MediaCard key={`pop-m-${movie.tmdbId}`} item={movie} />
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
+
+                {/* Most Popular TV Shows */}
+                <section className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                      <span className="text-emerald-400">📺</span> Most Popular TV Shows
+                    </h2>
+                    <span className="text-xs text-slate-500 font-mono">Audience Favorites</span>
+                  </div>
+
+                  {curatedLoading ? (
+                    <LoadingSkeletonGrid count={5} />
+                  ) : curatedErrors.popularTv ? (
+                    <ErrorState message={curatedErrors.popularTv} onRetry={loadCuratedContent} />
+                  ) : popularTvShows.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
+                      {popularTvShows.map((tv) => (
+                        <MediaCard key={`pop-tv-${tv.tmdbId}`} item={tv} />
                       ))}
                     </div>
                   ) : null}
@@ -788,7 +857,7 @@ export default function DiscoverPage() {
               </div>
 
               {/* Filter Controls Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-xs pt-1 border-t border-slate-800">
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3 text-xs pt-1 border-t border-slate-800">
                 {/* Genre Filter */}
                 <div>
                   <label className="block text-slate-400 mb-1 font-medium">Genre</label>
@@ -824,6 +893,43 @@ export default function DiscoverPage() {
                     placeholder="e.g. 2023"
                     className="w-full py-1.5 px-2 rounded-lg border border-slate-700 bg-slate-950 text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-400"
                   />
+                </div>
+
+                {/* Language Filter */}
+                <div>
+                  <label className="block text-slate-400 mb-1 font-medium">Language</label>
+                  <input
+                    type="text"
+                    maxLength={10}
+                    value={catLanguage}
+                    onChange={(e) => {
+                      setCatLanguage(e.target.value);
+                      setCatPage(1);
+                    }}
+                    placeholder="e.g. en, fr"
+                    className="w-full py-1.5 px-2 rounded-lg border border-slate-700 bg-slate-950 text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                  />
+                </div>
+
+                {/* TV Status Filter (active when TV is selected) */}
+                <div>
+                  <label className="block text-slate-400 mb-1 font-medium">Status</label>
+                  <select
+                    value={catStatus}
+                    disabled={catMediaType !== 'tv'}
+                    onChange={(e) => {
+                      setCatStatus(e.target.value);
+                      setCatPage(1);
+                    }}
+                    className="w-full py-1.5 px-2 rounded-lg border border-slate-700 bg-slate-950 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-sky-400"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Returning Series">Returning</option>
+                    <option value="Ended">Ended</option>
+                    <option value="Canceled">Canceled</option>
+                    <option value="In Production">In Production</option>
+                    <option value="Planned">Planned</option>
+                  </select>
                 </div>
 
                 {/* Min Rating */}
