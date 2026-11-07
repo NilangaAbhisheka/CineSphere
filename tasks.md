@@ -334,7 +334,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] Discover page — `AddLibraryModal` integrated into all 6 `MediaCard` sections (search results, trending movies, trending TV, popular movies, popular TV, catalogue results)
 - [x] Home page CTAs updated to point to `/library` and `/discover`
 - [x] Jest test suite for `@cinesphere/web` configured (`jest.config.js`, `src/test/setup.ts`, `jest-environment-jsdom`, `@testing-library/react`)
-- [x] Frontend test suite: **63/63 tests passing across 4 suites** (`api-client.library.spec.ts`, `library-card.spec.tsx`, `add-library-modal.spec.tsx`, `library/page.spec.tsx`)
+- [x] Frontend test suite: **81/81 tests passing across 5 suites** (`api-client.library.spec.ts`, `library-card.spec.tsx`, `add-library-modal.spec.tsx`, `library/page.spec.tsx`, `library-detail-modal.spec.tsx`)
 - [x] TypeScript `tsc --noEmit`: 0 errors
 - [x] ESLint `next lint`: 0 warnings, 0 errors
 - [x] Next.js production build `next build`: exit 0, all pages generated (`/library` 9.23 kB, `/discover` 8.2 kB)

@@ -588,13 +588,22 @@ export function LibraryDetailModal({
                     </h3>
 
                     {logFeedback && (
-                      <p className="text-xs font-semibold text-emerald-400">{logFeedback}</p>
+                      <p
+                        className={`text-xs font-semibold ${
+                          logFeedback.startsWith('Failed') ? 'text-rose-400' : 'text-emerald-400'
+                        }`}
+                      >
+                        {logFeedback}
+                      </p>
                     )}
 
                     <form onSubmit={handleLogView} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-[11px] text-slate-400 mb-1">Watched Date</label>
+                        <label htmlFor="log-watched-date" className="block text-[11px] text-slate-400 mb-1">
+                          Watched Date
+                        </label>
                         <input
+                          id="log-watched-date"
                           type="date"
                           value={logDate}
                           onChange={(e) => setLogDate(e.target.value)}
@@ -603,8 +612,11 @@ export function LibraryDetailModal({
                       </div>
 
                       <div>
-                        <label className="block text-[11px] text-slate-400 mb-1">Session Rating (optional)</label>
+                        <label htmlFor="log-session-rating" className="block text-[11px] text-slate-400 mb-1">
+                          Session Rating (optional)
+                        </label>
                         <select
+                          id="log-session-rating"
                           value={logRating}
                           onChange={(e) => setLogRating(e.target.value)}
                           className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-700 bg-slate-800 text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-400"
@@ -618,8 +630,11 @@ export function LibraryDetailModal({
                       </div>
 
                       <div>
-                        <label className="block text-[11px] text-slate-400 mb-1">Notes (optional)</label>
+                        <label htmlFor="log-session-notes" className="block text-[11px] text-slate-400 mb-1">
+                          Notes (optional)
+                        </label>
                         <input
+                          id="log-session-notes"
                           type="text"
                           value={logNotes}
                           onChange={(e) => setLogNotes(e.target.value)}
@@ -648,7 +663,11 @@ export function LibraryDetailModal({
                     {entry.viewingEvents && entry.viewingEvents.length > 0 ? (
                       <div className="divide-y divide-slate-800/80 rounded-xl border border-slate-800 bg-slate-950/30 overflow-hidden">
                         {entry.viewingEvents.map((evt) => (
-                          <div key={evt.id} className="p-3 flex items-center justify-between text-xs">
+                          <div
+                            key={evt.id}
+                            data-testid="viewing-history-item"
+                            className="p-3 flex items-center justify-between text-xs"
+                          >
                             <div className="flex items-center gap-3">
                               <span className="text-slate-400 font-mono">
                                 {new Date(evt.watchedAt).toLocaleDateString(undefined, {
@@ -800,6 +819,7 @@ export function LibraryDetailModal({
                                     return (
                                       <div
                                         key={ep.id}
+                                        data-testid={`episode-row-${ep.id}`}
                                         className={`p-3 flex items-center justify-between gap-3 text-xs transition-colors ${
                                           isWatched
                                             ? 'bg-emerald-950/10 hover:bg-emerald-950/20'

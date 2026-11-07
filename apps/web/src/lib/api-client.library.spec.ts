@@ -71,7 +71,7 @@ describe('ApiClient — library methods', () => {
   describe('listLibrary', () => {
     it('calls GET /library and returns a paginated result', async () => {
       const payload: PaginatedResult<LibraryEntryListItem> = {
-        data: [makeListItem()],
+        items: [makeListItem()],
         totalResults: 1,
         page: 1,
         limit: 20,
@@ -81,12 +81,12 @@ describe('ApiClient — library methods', () => {
       const client = await getClient();
       const result = await client.listLibrary();
       expect(result.totalResults).toBe(1);
-      expect(result.data).toHaveLength(1);
+      expect(result.items).toHaveLength(1);
       expect((globalThis.fetch as jest.Mock).mock.calls[0][0]).toContain('/library');
     });
 
     it('passes status and mediaType query params', async () => {
-      globalThis.fetch = makeFetchOk({ data: [], totalResults: 0, page: 1, limit: 20, totalPages: 0 });
+      globalThis.fetch = makeFetchOk({ items: [], totalResults: 0, page: 1, limit: 20, totalPages: 0 });
       const client = await getClient();
       await client.listLibrary({ status: 'COMPLETED', mediaType: 'MOVIE', page: 2 });
       const url: string = (globalThis.fetch as jest.Mock).mock.calls[0][0];
@@ -183,7 +183,7 @@ describe('ApiClient — library methods', () => {
 
   describe('markAllWatched', () => {
     it('defaults includeSpecials to false', async () => {
-      globalThis.fetch = makeFetchOk({ marked: 10, skipped: 2 });
+      globalThis.fetch = makeFetchOk({ addedCount: 10 });
       const client = await getClient();
       await client.markAllWatched('lib-1');
       const [, init] = (globalThis.fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
@@ -191,7 +191,7 @@ describe('ApiClient — library methods', () => {
     });
 
     it('passes includeSpecials=true when explicitly set', async () => {
-      globalThis.fetch = makeFetchOk({ marked: 12, skipped: 0 });
+      globalThis.fetch = makeFetchOk({ addedCount: 12 });
       const client = await getClient();
       await client.markAllWatched('lib-1', true);
       const [, init] = (globalThis.fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
