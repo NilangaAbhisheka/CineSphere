@@ -12,7 +12,7 @@
 | Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform |
 | Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package            |
 | Phase             | **Phase 3 — Personal Library and Tracking**                                       |
-| Current Milestone | Phase 3 Stages 3.0–3.3 Complete (Database Foundation, Bootstrap, Integrity Triggers, Integration Tests) |
+| Current Milestone | Phase 3 Stage 3.4 Complete (Library REST API, Error Mapper, DTOs, Unit & Integration Tests) |
 | Last Updated      | 2026-11-07                                                                        |
 
 ---
@@ -22,7 +22,7 @@
 ```
 Phase 1  — Project Foundation                  ████████████████  95% (monorepo, docker, pgvector, prisma, tooling, CI workflow)
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
-Phase 3  — Personal Library and Tracking       ████████░░░░░░░░  30% (Stages 3.0–3.3: DB foundation, bootstrap, integrity, tests complete)
+Phase 3  — Personal Library and Tracking       ███████████░░░░░  55% (Stages 3.0–3.4: DB foundation, bootstrap, integrity, and Library REST API complete)
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
@@ -295,18 +295,25 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] ESLint: 0 errors
 - [x] AGENTS.md updated with Phase 3 section 3.5 (four-model design, ownership invariants, READ COMMITTED requirement, trigger lock order, empirically verified Prisma error characteristics, migration workflow, test commands)
 
-### 3.4 Library API Endpoints
+### 3.4 Library API Implementation (Stage 3.4 Complete ✅)
 
-- [ ] `GET /api/library` — list user library with filters (status, type, mediaType)
-- [ ] `POST /api/library` — add title to library
-- [ ] `PATCH /api/library/:id` — update status, rating, notes
-- [ ] `DELETE /api/library/:id` — remove from library
-- [ ] `GET /api/library/:id` — get single library entry with viewing events
-- [ ] `POST /api/library/:id/views` — record a viewing event (movie rewatch or episode log)
-- [ ] `PUT /api/library/:id/episodes/:episodeId` — mark episode watched (create EpisodeProgress)
-- [ ] `DELETE /api/library/:id/episodes/:episodeId` — mark episode unwatched (delete EpisodeProgress)
-- [ ] `PUT /api/library/:id/seasons/:seasonId/rating` — set/update season rating
-- [ ] `DELETE /api/library/:id/seasons/:seasonId/rating` — remove season rating
+- [x] Centralized error mapping via `DatabaseErrorMapper` (translates Prisma P2002, P2003, P2025, P2010/trigger P0001, CHECK 23514, and raw pg 40P01 deadlock to clean HTTP exceptions)
+- [x] Custom half-step rating validator (`IsHalfStepRating` decorator and validation function for 1.0–10.0 in 0.5 increments)
+- [x] `POST /api/library` — add movie or TV show to library (resolving tmdbId via on-demand ingestion outside transactions; user ID enforced from `SingleUserBootstrap`)
+- [x] `GET /api/library` — paginated listing with status, mediaType, sortBy, sortOrder filtering and total count
+- [x] `GET /api/library/:id` — get single library entry with viewing events, episode progress, season ratings, and computed watch statistics
+- [x] `PATCH /api/library/:id` — update entry status, personalRating, notes under READ COMMITTED transaction isolation
+- [x] `DELETE /api/library/:id` — remove library entry (204 No Content, cascades cleanly to child records)
+- [x] `POST /api/library/:id/viewing-events` — append-only viewing event creation (derived watch statistics recalculate dynamically)
+- [x] `POST /api/library/:id/episode-progress` — idempotent episode progress tracking (`alreadyWatched: true` flag returned when already tracked)
+- [x] `DELETE /api/library/:id/episode-progress/:episodeId` — idempotent episode progress removal (204 No Content)
+- [x] `POST /api/library/:id/mark-all-watched` — atomic batch episode progress insertion using `INSERT ... SELECT ... ON CONFLICT DO NOTHING` (supports `includeSpecials` flag)
+- [x] `POST /api/library/:id/season-ratings` — create season rating (enforces TV entry type and valid season belonging to show)
+- [x] `PATCH /api/library/:id/season-ratings/:seasonId` — update season rating (1.0–10.0 half-step validation)
+- [x] Shared library contracts & DTOs in `@cinesphere/shared` (`LibraryMediaType`, `LibraryStatus`, response and request types)
+- [x] Unit test suite: 108/108 passing across 12 suites (including DatabaseErrorMapper, LibraryController, LibraryService)
+- [x] Integration test suite: 137/137 passing across 7 suites (including 25 new library integration tests covering CRUD, cascade delete, idempotency, TV restrictions, batch mark-all-watched, and trigger validation)
+- [x] Strict TypeScript (`tsc --noEmit`), NestJS build, and ESLint 0 errors / 0 warnings across all workspaces
 
 ### 3.5 Movie Tracking
 
