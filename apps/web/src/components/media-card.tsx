@@ -17,7 +17,13 @@ export interface UnifiedMediaItem {
   genres?: { id: number; name: string }[];
 }
 
-export function MediaCard({ item }: { item: UnifiedMediaItem }) {
+export function MediaCard({
+  item,
+  onAddToLibrary,
+}: {
+  item: UnifiedMediaItem;
+  onAddToLibrary?: (item: UnifiedMediaItem) => void;
+}) {
   const [imgError, setImgError] = useState(false);
 
   const rawPosterUrl = getTmdbImageUrl(item.posterPath, 'w500');
@@ -107,6 +113,24 @@ export function MediaCard({ item }: { item: UnifiedMediaItem }) {
 
         {item.overview && (
           <p className="text-xs text-slate-400/90 line-clamp-2 leading-relaxed">{item.overview}</p>
+        )}
+
+        {onAddToLibrary && (
+          <div className="pt-2 mt-auto border-t border-slate-800/80">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddToLibrary(item);
+              }}
+              className="w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 border border-sky-500/30 flex items-center justify-center gap-1.5 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-400"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Add to Library
+            </button>
+          </div>
         )}
       </div>
     </article>

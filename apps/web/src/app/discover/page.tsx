@@ -17,6 +17,7 @@ import {
 } from '@/lib/api-client';
 import { useDebounce } from '@/hooks/use-debounce';
 import { MediaCard, UnifiedMediaItem } from '@/components/media-card';
+import { AddLibraryModal } from '@/components/add-library-modal';
 import { TmdbAttribution } from '@/components/tmdb-attribution';
 import { EmptyState, ErrorState, LoadingSkeletonGrid } from '@/components/states';
 
@@ -24,6 +25,9 @@ type DiscoveryTab = 'remote' | 'catalogue';
 type MediaTypeSelection = 'all' | 'movie' | 'tv';
 
 export default function DiscoverPage() {
+  // ── Add to Library Modal State ─────────────────────────────────────────────
+  const [addModalItem, setAddModalItem] = useState<UnifiedMediaItem | null>(null);
+
   // ── Active Tab ─────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<DiscoveryTab>('remote');
 
@@ -641,7 +645,11 @@ export default function DiscoverPage() {
                   <>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
                       {remoteResults.map((item) => (
-                        <MediaCard key={`${item.mediaType}-${item.tmdbId}`} item={item} />
+                        <MediaCard
+                          key={`${item.mediaType}-${item.tmdbId}`}
+                          item={item}
+                          onAddToLibrary={(media) => setAddModalItem(media)}
+                        />
                       ))}
                     </div>
 
@@ -696,7 +704,11 @@ export default function DiscoverPage() {
                   ) : trendingMovies.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
                       {trendingMovies.map((movie) => (
-                        <MediaCard key={`trend-m-${movie.tmdbId}`} item={movie} />
+                        <MediaCard
+                          key={`trend-m-${movie.tmdbId}`}
+                          item={movie}
+                          onAddToLibrary={(media) => setAddModalItem(media)}
+                        />
                       ))}
                     </div>
                   ) : null}
@@ -718,7 +730,11 @@ export default function DiscoverPage() {
                   ) : trendingTvShows.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
                       {trendingTvShows.map((tv) => (
-                        <MediaCard key={`trend-tv-${tv.tmdbId}`} item={tv} />
+                        <MediaCard
+                          key={`trend-tv-${tv.tmdbId}`}
+                          item={tv}
+                          onAddToLibrary={(media) => setAddModalItem(media)}
+                        />
                       ))}
                     </div>
                   ) : null}
@@ -743,7 +759,11 @@ export default function DiscoverPage() {
                   ) : popularMovies.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
                       {popularMovies.map((movie) => (
-                        <MediaCard key={`pop-m-${movie.tmdbId}`} item={movie} />
+                        <MediaCard
+                          key={`pop-m-${movie.tmdbId}`}
+                          item={movie}
+                          onAddToLibrary={(media) => setAddModalItem(media)}
+                        />
                       ))}
                     </div>
                   ) : null}
@@ -765,7 +785,11 @@ export default function DiscoverPage() {
                   ) : popularTvShows.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
                       {popularTvShows.map((tv) => (
-                        <MediaCard key={`pop-tv-${tv.tmdbId}`} item={tv} />
+                        <MediaCard
+                          key={`pop-tv-${tv.tmdbId}`}
+                          item={tv}
+                          onAddToLibrary={(media) => setAddModalItem(media)}
+                        />
                       ))}
                     </div>
                   ) : null}
@@ -1047,6 +1071,7 @@ export default function DiscoverPage() {
                     <MediaCard
                       key={`cat-${item.mediaType}-${item.id || item.tmdbId}`}
                       item={item}
+                      onAddToLibrary={(media) => setAddModalItem(media)}
                     />
                   ))}
                 </div>
@@ -1085,6 +1110,13 @@ export default function DiscoverPage() {
       <footer className="pt-10 border-t border-slate-800/80">
         <TmdbAttribution />
       </footer>
+
+      {/* ── Add to Library Modal ─────────────────────────────────────────────── */}
+      <AddLibraryModal
+        item={addModalItem}
+        isOpen={Boolean(addModalItem)}
+        onClose={() => setAddModalItem(null)}
+      />
     </div>
   );
 }

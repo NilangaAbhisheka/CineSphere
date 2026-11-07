@@ -11,6 +11,7 @@ export function Navbar() {
   const navItems = [
     { label: 'Home', href: '/' },
     { label: 'Discover', href: '/discover' },
+    { label: 'My Library', href: '/library' },
   ];
 
   return (

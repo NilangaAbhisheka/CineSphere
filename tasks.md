@@ -12,8 +12,8 @@
 | Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform |
 | Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package            |
 | Phase             | **Phase 3 — Personal Library and Tracking**                                       |
-| Current Milestone | Phase 3 Stage 3.4 Complete (Library REST API, Error Mapper, DTOs, Unit & Integration Tests) |
-| Last Updated      | 2026-11-07                                                                        |
+| Current Milestone | Phase 3 Stage 3.5 Complete (Frontend Personal Library — My Library page, LibraryCard, AddLibraryModal, LibraryDetailModal, Discover integration, 63 frontend unit tests) |
+| Last Updated      | 2026-11-08                                                                        |
 
 ---
 
@@ -22,7 +22,7 @@
 ```
 Phase 1  — Project Foundation                  ████████████████  95% (monorepo, docker, pgvector, prisma, tooling, CI workflow)
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
-Phase 3  — Personal Library and Tracking       ███████████░░░░░  55% (Stages 3.0–3.4: DB foundation, bootstrap, integrity, and Library REST API complete)
+Phase 3  — Personal Library and Tracking       █████████████░░░  75% (Stages 3.0–3.5: DB foundation, bootstrap, integrity, Library REST API, and Frontend Personal Library complete)
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
@@ -315,32 +315,50 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] Integration test suite: 137/137 passing across 7 suites (including 25 new library integration tests covering CRUD, cascade delete, idempotency, TV restrictions, batch mark-all-watched, and trigger validation)
 - [x] Strict TypeScript (`tsc --noEmit`), NestJS build, and ESLint 0 errors / 0 warnings across all workspaces
 
-### 3.5 Movie Tracking
+### 3.5 Frontend Personal Library (Stage 3.5 — Complete)
 
-- [ ] Track status, personal rating, watched date, rewatch count, notes
-- [ ] Support multiple rewatch records via ViewingEvent (not just rewatch count)
-- [ ] Validate rating values: 1.0–10.0 half-step increments (enforced at DB and API layer)
+- [x] Extended `ApiClient` with all 11 library API methods (`listLibrary`, `getLibraryEntry`, `createLibraryEntry`, `updateLibraryEntry`, `deleteLibraryEntry`, `createViewingEvent`, `createEpisodeProgress`, `deleteEpisodeProgress`, `markAllWatched`, `createSeasonRating`, `updateSeasonRating`)
+- [x] Added `getBackdropPlaceholderUrl()` to `tmdb-image.ts` utilities
+- [x] Added `My Library` navigation link to Navbar (`/library`)
+- [x] `MediaCard` extended with optional `onAddToLibrary` prop and inline "Add to Library" button
+- [x] `AddLibraryModal` — dialog for adding titles to the library with status selection (4 options), optional personal rating (1.0–10.0 half-step dropdown), optional notes, 409 duplicate handling, loading/success/error states, ESC-to-close
+- [x] `LibraryCard` — library entry card with poster, status badge (colour-coded), media type badge, personal rating badge, movie watch count / TV episode progress bar, Manage Tracking button, keyboard navigation (Enter/Space)
+- [x] `LibraryDetailModal` — full library management modal with:
+  - Backdrop hero + poster + title metadata
+  - Inline status pill selector and personal rating dropdown
+  - Personal notes textarea with Save button
+  - **Movie**: watch count stats, Log Viewing Event form (date/rating/notes), Viewing History timeline
+  - **TV**: overall progress bar, Mark All Watched with includeSpecials toggle, season-by-season accordion with episode toggle rows, season rating dropdown per season
+  - Delete with confirmation dialog
+- [x] `/library` page — My Library with status tabs (All / Watching / Plan to Watch / Completed / Dropped), media type toggle, sort dropdown (6 options), result count, loading skeleton, error state, empty state, paginated 5-column grid, LibraryDetailModal wired with onEntryUpdated/onEntryDeleted callbacks
+- [x] Discover page — `AddLibraryModal` integrated into all 6 `MediaCard` sections (search results, trending movies, trending TV, popular movies, popular TV, catalogue results)
+- [x] Home page CTAs updated to point to `/library` and `/discover`
+- [x] Jest test suite for `@cinesphere/web` configured (`jest.config.js`, `src/test/setup.ts`, `jest-environment-jsdom`, `@testing-library/react`)
+- [x] Frontend test suite: **63/63 tests passing across 4 suites** (`api-client.library.spec.ts`, `library-card.spec.tsx`, `add-library-modal.spec.tsx`, `library/page.spec.tsx`)
+- [x] TypeScript `tsc --noEmit`: 0 errors
+- [x] ESLint `next lint`: 0 warnings, 0 errors
+- [x] Next.js production build `next build`: exit 0, all pages generated (`/library` 9.23 kB, `/discover` 8.2 kB)
 
-### 3.6 TV Show Tracking
-
-- [ ] Track overall status, episode progress, season ratings
-- [ ] Calculate overall episode completion percentage
-- [ ] Handle shows with ongoing seasons
-
-### 3.7 Dashboard
+### 3.6 Dashboard
 
 - [ ] Recently watched titles
 - [ ] Continue watching section
 - [ ] Quick recommendation strip
 - [ ] Basic viewing stats summary (counts, recent activity)
 
-### 3.8 My Library Frontend
+### 3.7 Statistics Frontend
 
-- [ ] Library list view with status filter tabs (All / Watching / Completed / Plan to Watch / Dropped)
-- [ ] Library entry detail panel or modal
-- [ ] Inline status and rating updates
-- [ ] TV episode progress updater
-- [ ] Search and sort within library
+- [ ] Statistics page with charts
+- [ ] Genre distribution chart
+- [ ] Activity timeline chart
+- [ ] Rating distribution chart
+- [ ] Summary cards (totals, averages)
+
+### 3.8 Testing and Hardening
+
+- [ ] Playwright E2E: library add → manage → delete flow
+- [ ] Playwright E2E: TV episode progress marking flow
+- [ ] Backend regression tests after any new API additions
 
 ---
 

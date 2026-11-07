@@ -1,13 +1,26 @@
 import {
+  CreateEpisodeProgressRequest,
+  CreateLibraryEntryRequest,
+  CreateSeasonRatingRequest,
+  CreateViewingEventRequest,
+  EpisodeProgressResponse,
+  LibraryEntryListItem,
+  LibraryEntryResponse,
+  ListLibraryQuery,
+  MarkAllWatchedResponse,
   MediaGenre,
   MovieDetails,
   MovieListItem,
   PaginatedResult,
+  SeasonRatingResponse,
   TmdbMovieSearchResult,
   TmdbSearchResponse,
   TmdbTvSearchResult,
   TvShowDetails,
   TvShowListItem,
+  UpdateLibraryEntryRequest,
+  UpdateSeasonRatingRequest,
+  ViewingEventResponse,
 } from '@cinesphere/shared';
 
 export interface TmdbMovieSearchParams {
@@ -117,6 +130,58 @@ class ApiClient {
           // Non-JSON response
         }
         throw new ApiClientError(response.status, errorMsg, responseBody);
+      }
+
+      return (await response.json()) as T;
+    } catch (err: unknown) {
+      if (err instanceof ApiClientError) {
+        throw err;
+      }
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw err;
+      }
+      const error = err as Error;
+      throw new ApiClientError(0, error.message || 'Network connection failed');
+    }
+  }
+
+  private async mutate<T>(
+    endpoint: string,
+    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+    body?: unknown,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${this.baseUrl}${cleanEndpoint}`;
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal,
+      });
+
+      if (!response.ok) {
+        let errorMsg = `API mutation failed with status ${response.status}`;
+        let responseBody: unknown;
+        try {
+          responseBody = await response.json();
+          if (responseBody && typeof responseBody === 'object' && 'message' in responseBody) {
+            const bodyMsg = (responseBody as { message: unknown }).message;
+            errorMsg = Array.isArray(bodyMsg) ? bodyMsg.join(', ') : String(bodyMsg);
+          }
+        } catch {
+          // Non-JSON response
+        }
+        throw new ApiClientError(response.status, errorMsg, responseBody);
+      }
+
+      if (response.status === 204) {
+        return undefined as T;
       }
 
       return (await response.json()) as T;
@@ -268,6 +333,124 @@ class ApiClient {
 
   public async getCatalogueTvShowById(id: string, signal?: AbortSignal): Promise<TvShowDetails> {
     return this.request<TvShowDetails>(`/catalogue/tv/${id}`, undefined, signal);
+  }
+
+  // ── Personal Library Endpoints ─────────────────────────────────────────────
+
+  public async listLibrary(
+    params: ListLibraryQuery = {},
+    signal?: AbortSignal,
+  ): Promise<PaginatedResult<LibraryEntryListItem>> {
+    return this.request<PaginatedResult<LibraryEntryListItem>>(
+      '/library',
+      {
+        status: params.status,
+        mediaType: params.mediaType,
+        page: params.page,
+        limit: params.limit,
+        sortBy: params.sortBy,
+        sortOrder: params.sortOrder,
+      },
+      signal,
+    );
+  }
+
+  public async getLibraryEntry(id: string, signal?: AbortSignal): Promise<LibraryEntryResponse> {
+    return this.request<LibraryEntryResponse>(`/library/${id}`, undefined, signal);
+  }
+
+  public async createLibraryEntry(
+    dto: CreateLibraryEntryRequest,
+    signal?: AbortSignal,
+  ): Promise<LibraryEntryResponse> {
+    return this.mutate<LibraryEntryResponse>('/library', 'POST', dto, signal);
+  }
+
+  public async updateLibraryEntry(
+    id: string,
+    dto: UpdateLibraryEntryRequest,
+    signal?: AbortSignal,
+  ): Promise<LibraryEntryResponse> {
+    return this.mutate<LibraryEntryResponse>(`/library/${id}`, 'PATCH', dto, signal);
+  }
+
+  public async deleteLibraryEntry(id: string, signal?: AbortSignal): Promise<void> {
+    return this.mutate<void>(`/library/${id}`, 'DELETE', undefined, signal);
+  }
+
+  public async createViewingEvent(
+    id: string,
+    dto: CreateViewingEventRequest,
+    signal?: AbortSignal,
+  ): Promise<ViewingEventResponse> {
+    return this.mutate<ViewingEventResponse>(`/library/${id}/viewing-events`, 'POST', dto, signal);
+  }
+
+  public async createEpisodeProgress(
+    id: string,
+    episodeId: string,
+    signal?: AbortSignal,
+  ): Promise<EpisodeProgressResponse> {
+    return this.mutate<EpisodeProgressResponse>(
+      `/library/${id}/episode-progress`,
+      'POST',
+      { episodeId },
+      signal,
+    );
+  }
+
+  public async deleteEpisodeProgress(
+    id: string,
+    episodeId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.mutate<void>(
+      `/library/${id}/episode-progress/${episodeId}`,
+      'DELETE',
+      undefined,
+      signal,
+    );
+  }
+
+  public async markAllWatched(
+    id: string,
+    includeSpecials: boolean = false,
+    signal?: AbortSignal,
+  ): Promise<MarkAllWatchedResponse> {
+    return this.mutate<MarkAllWatchedResponse>(
+      `/library/${id}/mark-all-watched`,
+      'POST',
+      { includeSpecials },
+      signal,
+    );
+  }
+
+  public async createSeasonRating(
+    id: string,
+    seasonId: string,
+    rating: number,
+    signal?: AbortSignal,
+  ): Promise<SeasonRatingResponse> {
+    return this.mutate<SeasonRatingResponse>(
+      `/library/${id}/season-ratings`,
+      'POST',
+      { seasonId, rating },
+      signal,
+    );
+  }
+
+  public async updateSeasonRating(
+    id: string,
+    seasonId: string,
+    rating: number,
+    signal?: AbortSignal,
+  ): Promise<SeasonRatingResponse> {
+    return this.mutate<SeasonRatingResponse>(
+      `/library/${id}/season-ratings/${seasonId}`,
+      'PATCH',
+      { rating },
+      signal,
+    );
   }
 }
 

@@ -56,3 +56,26 @@ export function getPosterPlaceholderUrl(title: string = 'No Image Available'): s
 
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
+
+/**
+ * Returns an inline SVG data URI representing a placeholder backdrop artwork
+ * when a title has no backdrop image on TMDB.
+ */
+export function getBackdropPlaceholderUrl(title: string = 'No Backdrop Available'): string {
+  const safeTitle = title
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .slice(0, 40);
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" fill="none">
+    <rect width="1280" height="720" fill="#0b1120"/>
+    <rect x="20" y="20" width="1240" height="680" rx="16" stroke="#1e293b" stroke-width="2"/>
+    <text x="640" y="360" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="600" fill="#475569" text-anchor="middle">
+      ${safeTitle}
+    </text>
+  </svg>`;
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
