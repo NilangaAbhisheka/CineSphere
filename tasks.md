@@ -11,8 +11,8 @@
 | Project           | CineSphere                                                                        |
 | Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform |
 | Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package            |
-| Phase             | **Phase 2 — Catalogue and TMDB Integration**                                      |
-| Current Milestone | Phase 2 Complete (Catalogue, TMDB Ingestion & Discover UI Verified)               |
+| Phase             | **Phase 3 — Personal Library and Tracking**                                       |
+| Current Milestone | Phase 3 Stages 3.0–3.3 Complete (Database Foundation, Bootstrap, Integrity Triggers, Integration Tests) |
 | Last Updated      | 2026-11-07                                                                        |
 
 ---
@@ -22,7 +22,7 @@
 ```
 Phase 1  — Project Foundation                  ████████████████  95% (monorepo, docker, pgvector, prisma, tooling, CI workflow)
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
-Phase 3  — Personal Library and Tracking       ░░░░░░░░░░░░░░░░  0%
+Phase 3  — Personal Library and Tracking       ████████░░░░░░░░  30% (Stages 3.0–3.3: DB foundation, bootstrap, integrity, tests complete)
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
@@ -249,44 +249,85 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ---
 
-### 3.1 Library Data Model
+### 3.0 Single-User Bootstrap (Stage 3.0 Complete ✅)
 
-- [ ] Migrate `UserLibraryEntry`, `WatchProgress` schema
-- [ ] Migrate `PersonalRating`, `Review` schema
-- [ ] Support status values: Watching, Completed, Plan to Watch, Dropped
-- [ ] Support rewatch tracking for movies
+- [x] Implement `SingleUserBootstrap` provider — validates `CINESPHERE_SINGLE_USER_ID` UUID from env, upserts the single system user on application startup
+- [x] Register in `DatabaseModule` (providers + exports)
+- [x] Add `CINESPHERE_SINGLE_USER_ID` to `.env` and `.env.example`
+- [x] Unit tests: 6/6 passed (`single-user-bootstrap.spec.ts`)
 
-### 3.2 Library API Endpoints
+### 3.1 Library Data Model (Stage 3.1 Complete ✅)
 
-- [ ] `GET /api/library` — list user library with filters (status, type)
+- [x] Add `MediaType` enum (`MOVIE`, `TV`) and `LibraryStatus` enum (`PLAN_TO_WATCH`, `WATCHING`, `COMPLETED`, `DROPPED`) to Prisma schema
+- [x] Migrate `UserLibraryEntry` model — UUID PK, userId, mediaType, nullable movieId, nullable tvShowId, status, nullable personalRating (DECIMAL 4,2), nullable notes, createdAt, updatedAt
+- [x] Migrate `ViewingEvent` model — UUID PK, libraryEntryId, watchedAt, nullable rating (DECIMAL 4,2), nullable notes
+- [x] Migrate `EpisodeProgress` model — composite PK (libraryEntryId, episodeId); existence denotes watched
+- [x] Migrate `SeasonRating` model — UUID PK, unique (libraryEntryId, seasonId), rating (DECIMAL 4,2)
+- [x] Add reverse relations to `User`, `Movie`, `TvShow`, `Season`, `Episode`
+- [x] Foreign-key delete behaviour: `onDelete: Cascade` for User→ULE; `onDelete: Restrict` for Movie/TvShow→ULE; cascade for child models
+- [x] Migration applied and verified: `20261107154129_phase3_models`
+- [x] `prisma validate` ✅, `prisma generate` ✅
+
+### 3.2 Database Integrity (Stage 3.2 Complete ✅)
+
+- [x] XOR CHECK on `user_library_entries`: exactly one of `movie_id` / `tv_show_id` must be set, consistent with `media_type`
+- [x] Rating half-step CHECK on `user_library_entries.personal_rating`, `viewing_events.rating`, `season_ratings.rating` (1.00–10.00, increments of 0.5)
+- [x] Partial unique index: at most one `user_library_entries` row per `(user_id, movie_id)` and `(user_id, tv_show_id)`
+- [x] `trg_validate_episode_progress` (VOLATILE): lock ULE (FOR SHARE) → lock Episode (FOR SHARE) → read seasonId → lock Season (FOR SHARE) → validate tvShowId matches; rejects invalid inserts/updates with SQLSTATE P0001
+- [x] `trg_validate_season_rating` (VOLATILE): lock ULE (FOR SHARE) → lock Season (FOR SHARE) → validate tvShowId matches; rejects invalid inserts/updates with SQLSTATE P0001
+- [x] `trg_protect_ule_tv_show_id` (VOLATILE): prevents updating `tv_show_id` on ULE when EpisodeProgress or SeasonRating records exist
+- [x] `trg_protect_episode_season_id` (VOLATILE): prevents updating `season_id` on Episode when EpisodeProgress records exist for that episode
+- [x] `trg_protect_season_tv_show_id` (VOLATILE): prevents updating `tv_show_id` on Season when SeasonRating or EpisodeProgress records exist
+- [x] All trigger functions declared `VOLATILE` — `SELECT EXISTS` reads fresh READ COMMITTED snapshot after lock acquisition
+- [x] READ COMMITTED documented as mandatory isolation level for all transactions creating/modifying library/episode/season relationships
+- [x] Migration applied and verified: `20261107154249_phase3_integrity`
+
+### 3.3 Database Foundation Verification (Stage 3.3 Complete ✅)
+
+- [x] Fresh database reset verification: `prisma migrate reset --force` applied all 5 migrations from scratch ✅
+- [x] Constraint & ownership integration tests — 41/41 passed (`phase3-constraints.integration.spec.ts`): all valid/invalid ratings, XOR media type, partial unique indexes, trigger validation (EP & SR), parent protection triggers (all 3 cases), cascade/restrict deletion rules
+- [x] Concurrency integration tests — 6/6 passed (`phase3-concurrency.integration.spec.ts`): uses three independent `pg.Client` connections, `waitForBlocked()` polls `pg_blocking_pids()` to prove actual lock contention; tests all 5 parent-update race scenarios + duplicate EP insert + READ COMMITTED documentation
+- [x] Prisma error experiments — 6/6 passed (`phase3-prisma-errors.integration.spec.ts`): empirically verified Prisma 6.19.3 error structures for unique violations (P2002), FK violations (P2003), CHECK violations (PrismaClientUnknownRequestError), trigger P0001 (PrismaClientUnknownRequestError via model, PrismaClientKnownRequestError/P2010 via $executeRaw), deadlocks (pg DatabaseError)
+- [x] All prior unit tests: 69/69 passed
+- [x] All prior integration tests: 112/112 passed (phase3 + catalogue + catalogue-discovery + tmdb-ingestion)
+- [x] TypeScript strict mode: `tsc --noEmit` ✅ (0 errors)
+- [x] NestJS build: `nest build` ✅
+- [x] ESLint: 0 errors
+- [x] AGENTS.md updated with Phase 3 section 3.5 (four-model design, ownership invariants, READ COMMITTED requirement, trigger lock order, empirically verified Prisma error characteristics, migration workflow, test commands)
+
+### 3.4 Library API Endpoints
+
+- [ ] `GET /api/library` — list user library with filters (status, type, mediaType)
 - [ ] `POST /api/library` — add title to library
-- [ ] `PATCH /api/library/:id` — update status, rating, progress
+- [ ] `PATCH /api/library/:id` — update status, rating, notes
 - [ ] `DELETE /api/library/:id` — remove from library
-- [ ] `GET /api/library/:id` — get single library entry
-- [ ] `POST /api/library/:id/progress` — update TV episode progress
+- [ ] `GET /api/library/:id` — get single library entry with viewing events
+- [ ] `POST /api/library/:id/views` — record a viewing event (movie rewatch or episode log)
+- [ ] `PUT /api/library/:id/episodes/:episodeId` — mark episode watched (create EpisodeProgress)
+- [ ] `DELETE /api/library/:id/episodes/:episodeId` — mark episode unwatched (delete EpisodeProgress)
+- [ ] `PUT /api/library/:id/seasons/:seasonId/rating` — set/update season rating
+- [ ] `DELETE /api/library/:id/seasons/:seasonId/rating` — remove season rating
 
-### 3.3 Movie Tracking
+### 3.5 Movie Tracking
 
 - [ ] Track status, personal rating, watched date, rewatch count, notes
-- [ ] Support multiple rewatch records (not just rewatch count)
-- [ ] Validate rating values (e.g., 0.5–10.0 or 1–10 — decide scale)
+- [ ] Support multiple rewatch records via ViewingEvent (not just rewatch count)
+- [ ] Validate rating values: 1.0–10.0 half-step increments (enforced at DB and API layer)
 
-### 3.4 TV Show Tracking
+### 3.6 TV Show Tracking
 
-- [ ] Track overall status, current season, current episode
-- [ ] Track per-season completion
-- [ ] Track optional per-season ratings
+- [ ] Track overall status, episode progress, season ratings
 - [ ] Calculate overall episode completion percentage
 - [ ] Handle shows with ongoing seasons
 
-### 3.5 Dashboard
+### 3.7 Dashboard
 
 - [ ] Recently watched titles
 - [ ] Continue watching section
 - [ ] Quick recommendation strip
 - [ ] Basic viewing stats summary (counts, recent activity)
 
-### 3.6 My Library Frontend
+### 3.8 My Library Frontend
 
 - [ ] Library list view with status filter tabs (All / Watching / Completed / Plan to Watch / Dropped)
 - [ ] Library entry detail panel or modal
@@ -726,6 +767,8 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 | Documentation and architecture initialization                     | 2026-11-05 | All foundation docs created. No implementation yet.                               |
 | Antigravity setup, Git initialization & environment configuration | 2026-11-05 | AGENTS.md, Git init (main), .gitignore, .env.example, .env, root configs created. |
 | Monorepo initialization & PostgreSQL + pgvector foundation        | 2026-11-06 | TD-02/TD-04 resolved. Turborepo+pnpm, Next.js, NestJS, Prisma, pgvector verified. |
+| Phase 2 complete (Catalogue, TMDB Ingestion & Discover UI)        | 2026-11-07 | TMDB client, ingestion, discover API, frontend Discover page, 100+ tests passing.  |
+| Phase 3 Stages 3.0–3.3 complete (Database Foundation)             | 2026-11-07 | SingleUserBootstrap, 4-model schema + integrity migration, 112 integration tests + 69 unit tests all passing. READ COMMITTED + VOLATILE trigger concurrency verified. |
 
 ---
 

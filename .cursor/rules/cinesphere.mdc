@@ -74,6 +74,37 @@ Every LLM-dependent feature must check Ollama availability, return a typed fallb
 ### 6. Imports are always atomic
 An import that partially fails must roll back completely. Never silently skip invalid records — report all errors.
 
+### 7. Personal Library — Four-Model Architecture (Phase 3)
+The personal library is built on exactly four Prisma models:
+- `UserLibraryEntry` — core tracking record (UUID PK, `gen_random_uuid()`). Strict XOR invariant: exactly one of `movieId` or `tvShowId` is non-null, consistent with `mediaType`.
+- `ViewingEvent` — immutable, append-only watch history. Cascade deleted with parent entry.
+- `EpisodeProgress` — composite PK `(libraryEntryId, episodeId)`. Record existence = watched; deletion = unwatched.
+- `SeasonRating` — unique `(libraryEntryId, seasonId)`. Rating DECIMAL(4,2), CHECK 1.00–10.00 half-steps only.
+
+Ownership & deletion invariants:
+- `User` deletion cascades to `UserLibraryEntry`; `Movie`/`TvShow` deletion is RESTRICTED.
+- `UserLibraryEntry` cascades to `ViewingEvent`, `EpisodeProgress`, `SeasonRating`.
+- `Episode` deletion is RESTRICTED when referenced by `EpisodeProgress`; `Season` deletion RESTRICTED when referenced by `SeasonRating`.
+
+### 8. READ COMMITTED is mandatory for library transactions
+All transactions creating or modifying `UserLibraryEntry`, `EpisodeProgress`, and `SeasonRating` **must** run at READ COMMITTED isolation. Do NOT use REPEATABLE READ or SERIALIZABLE — under REPEATABLE READ, the trigger's `SELECT EXISTS` reads a stale snapshot that predates child inserts, defeating the protection trigger's invariant.
+
+### 9. Trigger lock ordering (deadlock-free)
+- `EpisodeProgress` validation trigger: lock `UserLibraryEntry` (FOR SHARE) → lock `Episode` (FOR SHARE, before reading `seasonId`) → lock `Season` (FOR SHARE, before reading `tvShowId`).
+- `SeasonRating` validation trigger: lock `UserLibraryEntry` (FOR SHARE) → lock `Season` (FOR SHARE, before reading `tvShowId`).
+- All five trigger functions must be declared `VOLATILE`.
+- Parent UPDATE protection triggers acquire `FOR NO KEY UPDATE` on the parent row, which conflicts with child `FOR SHARE` locks.
+
+### 10. Prisma error codes — empirically verified in Prisma v6.19.3
+| Error | Constructor | Code | meta |
+|---|---|---|---|
+| Unique violation (23505) | PrismaClientKnownRequestError | P2002 | `{ target: string[] }` |
+| FK violation (23503) | PrismaClientKnownRequestError | P2003 | `{ constraint: string }` |
+| CHECK violation (23514) | PrismaClientUnknownRequestError | (none) | constraint name in `.message` |
+| Trigger P0001 via model method | PrismaClientUnknownRequestError | (none) | `PostgresError { code: "P0001" }` in `.message` |
+| Trigger P0001 via `$executeRaw` | PrismaClientKnownRequestError | P2010 | `{ code: 'P0001', message: string }` |
+| Deadlock (40P01) | pg `DatabaseError` | `40P01` | raw pg error, not a Prisma error |
+
 ---
 
 ## Two Operating Modes

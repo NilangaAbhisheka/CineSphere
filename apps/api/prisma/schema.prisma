@@ -34,6 +34,8 @@ model User {
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
+  libraryEntries UserLibraryEntry[]
+
   @@map("users")
 }
 
@@ -91,6 +93,7 @@ model Movie {
   genres        Genre[]
   keywords      Keyword[]
   personCredits PersonCredit[]
+  libraryEntries UserLibraryEntry[]
 
   @@index([popularity])
   @@map("movies")
@@ -123,6 +126,7 @@ model TvShow {
   keywords      Keyword[]
   seasons       Season[]
   personCredits PersonCredit[]
+  libraryEntries UserLibraryEntry[]
 
   @@index([popularity])
   @@map("tv_shows")
@@ -143,6 +147,7 @@ model Season {
   tvShow   TvShow @relation(fields: [tvShowId], references: [id], onDelete: Cascade)
 
   episodes Episode[]
+  seasonRatings SeasonRating[]
 
   // A season number must be unique within a TV show (supports season 0 / specials)
   @@unique([tvShowId, seasonNumber])
@@ -163,6 +168,8 @@ model Episode {
 
   seasonId String @db.Uuid
   season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  episodeProgresses EpisodeProgress[]
 
   // Episode number must be unique within a season
   @@unique([seasonId, episodeNumber])
@@ -215,3 +222,82 @@ model PersonCredit {
   @@index([personId])
   @@map("person_credits")
 }
+
+// ── Phase 3: Enums ────────────────────────────────────────────────────────────
+
+enum MediaType {
+  MOVIE
+  TV
+}
+
+enum LibraryStatus {
+  PLAN_TO_WATCH
+  WATCHING
+  COMPLETED
+  DROPPED
+}
+
+// ── Phase 3: Personal Library Models ──────────────────────────────────────────
+
+model UserLibraryEntry {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid @map("id")
+  userId         String        @db.Uuid @map("user_id")
+  mediaType      MediaType     @map("media_type")
+  movieId        String?       @db.Uuid @map("movie_id")
+  tvShowId       String?       @db.Uuid @map("tv_show_id")
+  status         LibraryStatus @map("status")
+  personalRating Decimal?      @db.Decimal(4, 2) @map("personal_rating")
+  notes          String?       @db.Text @map("notes")
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt      DateTime      @default(now()) @updatedAt @db.Timestamptz(6) @map("updated_at")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie  Movie?  @relation(fields: [movieId], references: [id], onDelete: Restrict)
+  tvShow TvShow? @relation(fields: [tvShowId], references: [id], onDelete: Restrict)
+
+  viewingEvents     ViewingEvent[]
+  episodeProgresses EpisodeProgress[]
+  seasonRatings     SeasonRating[]
+
+  @@map("user_library_entries")
+}
+
+model ViewingEvent {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid @map("id")
+  libraryEntryId String    @db.Uuid @map("library_entry_id")
+  watchedAt      DateTime  @default(now()) @db.Timestamptz(6) @map("watched_at")
+  rating         Decimal?  @db.Decimal(4, 2) @map("rating")
+  notes          String?   @db.Text @map("notes")
+
+  libraryEntry UserLibraryEntry @relation(fields: [libraryEntryId], references: [id], onDelete: Cascade)
+
+  @@map("viewing_events")
+}
+
+model EpisodeProgress {
+  libraryEntryId String   @db.Uuid @map("library_entry_id")
+  episodeId      String   @db.Uuid @map("episode_id")
+  watchedAt      DateTime @default(now()) @db.Timestamptz(6) @map("watched_at")
+
+  libraryEntry UserLibraryEntry @relation(fields: [libraryEntryId], references: [id], onDelete: Cascade)
+  episode      Episode          @relation(fields: [episodeId], references: [id], onDelete: Restrict)
+
+  @@id([libraryEntryId, episodeId])
+  @@map("episode_progress")
+}
+
+model SeasonRating {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid @map("id")
+  libraryEntryId String   @db.Uuid @map("library_entry_id")
+  seasonId       String   @db.Uuid @map("season_id")
+  rating         Decimal  @db.Decimal(4, 2) @map("rating")
+  createdAt      DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @db.Timestamptz(6) @map("updated_at")
+
+  libraryEntry UserLibraryEntry @relation(fields: [libraryEntryId], references: [id], onDelete: Cascade)
+  season       Season           @relation(fields: [seasonId], references: [id], onDelete: Restrict)
+
+  @@unique([libraryEntryId, seasonId])
+  @@map("season_ratings")
+}
+

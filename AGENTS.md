@@ -123,6 +123,46 @@ cinesphere/
 - Ollama is an auxiliary enhancement for conversational discovery and narrative taste descriptions.
 - The system must perform a health check on startup. If Ollama is unavailable or `OLLAMA_ENABLED=false`, the API must return a structured fallback (`LLM_UNAVAILABLE`), and the UI must gracefully disable the conversational prompt without error.
 
+### 3.5 Personal Library & Tracking Database Foundation (Phase 3)
+
+- **Four-Model Architecture:**
+  1. `UserLibraryEntry`: Core tracking record for a movie or TV show. Primary key UUID via `gen_random_uuid()`. Strict XOR media-type invariant (exactly one of `movieId` or `tvShowId` populated). Status: `PLAN_TO_WATCH`, `WATCHING`, `COMPLETED`, `DROPPED`.
+  2. `ViewingEvent`: Immutable, append-only watch history records with `watchedAt`, optional `rating` (`DECIMAL(4,2)`), and optional `notes`. Cascade deleted with parent entry.
+  3. `EpisodeProgress`: Composite PK `(libraryEntryId, episodeId)`. Record existence denotes "watched"; deletion denotes "unwatched". Cascade deleted with parent entry.
+  4. `SeasonRating`: UUID PK with unique `(libraryEntryId, seasonId)`. Stores season-level `rating` (`DECIMAL(4,2)`). Cascade deleted with parent entry.
+- **Ownership & Deletion Invariants:**
+  - `User` deletion cascades to `UserLibraryEntry`.
+  - `UserLibraryEntry` cascades to `ViewingEvent`, `EpisodeProgress`, and `SeasonRating`.
+  - `Movie` / `TvShow` deletion is RESTRICTED when referenced by `UserLibraryEntry`.
+  - `Episode` deletion is RESTRICTED when referenced by `EpisodeProgress`.
+  - `Season` deletion is RESTRICTED when referenced by `SeasonRating`.
+  - Rating CHECK constraint enforces `1.00 <= rating <= 10.00` and half-step increments only on `DECIMAL(4,2)`.
+  - Partial unique indexes enforce at most one entry per movie (`user_id, movie_id`) and per TV show (`user_id, tv_show_id`) per user.
+- **Transaction Isolation Level Requirement:**
+  - **READ COMMITTED is mandatory** for all transactions creating or modifying library entries, episode progress, and season ratings.
+  - **Do NOT use REPEATABLE READ or SERIALIZABLE** for parent updates: under REPEATABLE READ, the transaction's initial snapshot predates the unblocking of a concurrent child insert, causing the protection trigger's `SELECT EXISTS` to return false and bypass protection.
+- **Trigger Locking Order (Deadlock-Free):**
+  - `EpisodeProgress` validation: `UserLibraryEntry` (`FOR SHARE`) $\to$ `Episode` (`FOR SHARE`) $\to$ `Season` (`FOR SHARE`). Locks are acquired before reading ownership fields to prevent stale-read races.
+  - `SeasonRating` validation: `UserLibraryEntry` (`FOR SHARE`) $\to$ `Season` (`FOR SHARE`).
+  - Parent protection triggers (`VOLATILE`): update statements acquire `FOR NO KEY UPDATE` on the parent row, conflicting with child `FOR SHARE` locks until the child transaction commits.
+- **Prisma Error Characteristics (Empirically Verified in v6.19.3):**
+  - Unique constraint violation (`23505`): `PrismaClientKnownRequestError` with code `P2002` and `meta.target`.
+  - Foreign key violation (`23503`): `PrismaClientKnownRequestError` with code `P2003` and `meta.constraint`.
+  - Trigger `P0001` via model method: `PrismaClientUnknownRequestError` with `PostgresError { code: "P0001", message: "..." }` in message.
+  - Trigger `P0001` via `$executeRaw`: `PrismaClientKnownRequestError` with code `P2010` and `meta.code === 'P0001'`.
+  - CHECK violation (`23514`): `PrismaClientUnknownRequestError` with constraint name in message.
+  - Deadlock (`40P01`): `DatabaseError` with code `40P01` and message `deadlock detected`.
+- **Migration Workflow:**
+  - Tracked migration `<timestamp>_phase3_models`: defines Prisma tables, enums, and foreign-key constraints.
+  - Tracked migration `<timestamp>_phase3_integrity`: defines XOR CHECK, rating CHECKs, partial unique indexes, locking helper functions, and VOLATILE triggers.
+- **Test Commands:**
+  - Unit tests: `pnpm --filter @cinesphere/api test`
+  - Integration tests (all): `pnpm --filter @cinesphere/api exec jest --testPathPatterns="integration" --runInBand`
+  - Concurrency tests: `pnpm --filter @cinesphere/api exec jest --runInBand src/database/phase3-concurrency.integration.spec.ts`
+  - Constraints & triggers: `pnpm --filter @cinesphere/api exec jest --runInBand src/database/phase3-constraints.integration.spec.ts`
+  - Prisma error experiments: `pnpm --filter @cinesphere/api exec jest --runInBand src/database/phase3-prisma-errors.integration.spec.ts`
+
+
 ---
 
 ## 4. Engineering Standards & Best Practices
