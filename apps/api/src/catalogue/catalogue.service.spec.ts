@@ -12,6 +12,7 @@ describe('CatalogueService', () => {
       findMovieById: jest.fn(),
       findTvShows: jest.fn(),
       findTvShowById: jest.fn(),
+      findGenres: jest.fn(),
     } as unknown as jest.Mocked<CatalogueRepository>;
 
     service = new CatalogueService(catalogueRepo);
@@ -306,6 +307,22 @@ describe('CatalogueService', () => {
       catalogueRepo.findTvShowById.mockResolvedValueOnce(null);
 
       await expect(service.getTvShowById('non-existent-uuid')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('listGenres', () => {
+    it('returns mapped genres from repository', async () => {
+      catalogueRepo.findGenres.mockResolvedValueOnce([
+        { tmdbId: 28, name: 'Action' },
+        { tmdbId: 35, name: 'Comedy' },
+      ]);
+
+      const result = await service.listGenres();
+
+      expect(result).toEqual([
+        { id: 28, name: 'Action' },
+        { id: 35, name: 'Comedy' },
+      ]);
     });
   });
 });

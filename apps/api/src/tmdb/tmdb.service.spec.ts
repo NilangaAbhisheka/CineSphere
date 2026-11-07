@@ -231,4 +231,62 @@ describe('TmdbService', () => {
       await expect(service.searchTvShows('Dark')).rejects.toThrow('TMDB Service unavailable');
     });
   });
+
+  describe('trending and popular discovery', () => {
+    it('fetches trending movies', async () => {
+      httpClient.get.mockResolvedValueOnce({
+        page: 1,
+        total_pages: 5,
+        total_results: 100,
+        results: [{ id: 1, title: 'Trending Movie' }],
+      });
+
+      const result = await service.getTrendingMovies('day', 1);
+
+      expect(httpClient.get).toHaveBeenCalledWith('/trending/movie/day', { page: 1 });
+      expect(result.results[0].title).toBe('Trending Movie');
+    });
+
+    it('fetches trending TV shows', async () => {
+      httpClient.get.mockResolvedValueOnce({
+        page: 1,
+        total_pages: 5,
+        total_results: 100,
+        results: [{ id: 2, name: 'Trending TV' }],
+      });
+
+      const result = await service.getTrendingTvShows('day', 1);
+
+      expect(httpClient.get).toHaveBeenCalledWith('/trending/tv/day', { page: 1 });
+      expect(result.results[0].name).toBe('Trending TV');
+    });
+
+    it('fetches popular movies', async () => {
+      httpClient.get.mockResolvedValueOnce({
+        page: 1,
+        total_pages: 10,
+        total_results: 200,
+        results: [{ id: 3, title: 'Popular Movie' }],
+      });
+
+      const result = await service.getPopularMovies(1);
+
+      expect(httpClient.get).toHaveBeenCalledWith('/movie/popular', { page: 1 });
+      expect(result.results[0].title).toBe('Popular Movie');
+    });
+
+    it('fetches popular TV shows', async () => {
+      httpClient.get.mockResolvedValueOnce({
+        page: 1,
+        total_pages: 10,
+        total_results: 200,
+        results: [{ id: 4, name: 'Popular TV' }],
+      });
+
+      const result = await service.getPopularTvShows(1);
+
+      expect(httpClient.get).toHaveBeenCalledWith('/tv/popular', { page: 1 });
+      expect(result.results[0].name).toBe('Popular TV');
+    });
+  });
 });

@@ -2,7 +2,11 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { TmdbMovieSearchResult, TmdbSearchResponse, TmdbTvSearchResult } from '@cinesphere/shared';
 import { TmdbService } from './tmdb.service.js';
-import { TmdbMovieSearchQueryDto, TmdbTvSearchQueryDto } from './dto/discover-tmdb.dto.js';
+import {
+  TmdbMovieSearchQueryDto,
+  TmdbPaginationQueryDto,
+  TmdbTvSearchQueryDto,
+} from './dto/discover-tmdb.dto.js';
 
 @ApiTags('TMDB Discovery')
 @Controller('discover/tmdb')
@@ -58,5 +62,53 @@ export class DiscoverController {
       queryDto.includeAdult,
       queryDto.firstAirDateYear,
     );
+  }
+
+  @Get('trending/movies')
+  @ApiOperation({
+    summary: 'Get trending movies on TMDB',
+    description: 'Fetches today trending movies from TMDB with pagination.',
+  })
+  @ApiResponse({ status: 200, description: 'Paginated trending movies.' })
+  public async getTrendingMovies(
+    @Query() query: TmdbPaginationQueryDto,
+  ): Promise<TmdbSearchResponse<TmdbMovieSearchResult>> {
+    return this.tmdbService.getTrendingMovies('day', query.page);
+  }
+
+  @Get('trending/tv')
+  @ApiOperation({
+    summary: 'Get trending TV shows on TMDB',
+    description: 'Fetches today trending TV shows from TMDB with pagination.',
+  })
+  @ApiResponse({ status: 200, description: 'Paginated trending TV shows.' })
+  public async getTrendingTvShows(
+    @Query() query: TmdbPaginationQueryDto,
+  ): Promise<TmdbSearchResponse<TmdbTvSearchResult>> {
+    return this.tmdbService.getTrendingTvShows('day', query.page);
+  }
+
+  @Get('popular/movies')
+  @ApiOperation({
+    summary: 'Get popular movies on TMDB',
+    description: 'Fetches current popular movies from TMDB with pagination.',
+  })
+  @ApiResponse({ status: 200, description: 'Paginated popular movies.' })
+  public async getPopularMovies(
+    @Query() query: TmdbPaginationQueryDto,
+  ): Promise<TmdbSearchResponse<TmdbMovieSearchResult>> {
+    return this.tmdbService.getPopularMovies(query.page);
+  }
+
+  @Get('popular/tv')
+  @ApiOperation({
+    summary: 'Get popular TV shows on TMDB',
+    description: 'Fetches current popular TV shows from TMDB with pagination.',
+  })
+  @ApiResponse({ status: 200, description: 'Paginated popular TV shows.' })
+  public async getPopularTvShows(
+    @Query() query: TmdbPaginationQueryDto,
+  ): Promise<TmdbSearchResponse<TmdbTvSearchResult>> {
+    return this.tmdbService.getPopularTvShows(query.page);
   }
 }

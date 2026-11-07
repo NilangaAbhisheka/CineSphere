@@ -1,6 +1,7 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import {
+  MediaGenre,
   MovieDetails,
   MovieListItem,
   PaginatedResult,
@@ -114,5 +115,18 @@ export class CatalogueController {
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ): Promise<TvShowDetails> {
     return this.catalogueService.getTvShowById(id);
+  }
+
+  @Get('genres')
+  @ApiOperation({
+    summary: 'List all available genres in local catalogue',
+    description: 'Returns all distinct genres stored in the CineSphere catalogue.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of genres.',
+  })
+  public async listGenres(): Promise<MediaGenre[]> {
+    return this.catalogueService.listGenres();
   }
 }

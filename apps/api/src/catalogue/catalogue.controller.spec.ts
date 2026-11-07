@@ -14,6 +14,7 @@ describe('CatalogueController', () => {
       getMovieById: jest.fn(),
       listTvShows: jest.fn(),
       getTvShowById: jest.fn(),
+      listGenres: jest.fn(),
     } as unknown as jest.Mocked<CatalogueService>;
 
     controller = new CatalogueController(catalogueService);
@@ -91,6 +92,18 @@ describe('CatalogueController', () => {
       const result = await controller.getTvShowById('uuid-tv-1');
 
       expect(catalogueService.getTvShowById).toHaveBeenCalledWith('uuid-tv-1');
+      expect(result).toBe(mockResult);
+    });
+  });
+
+  describe('listGenres', () => {
+    it('delegates to catalogueService.listGenres', async () => {
+      const mockResult = [{ id: 18, name: 'Drama' }];
+      catalogueService.listGenres.mockResolvedValueOnce(mockResult);
+
+      const result = await controller.listGenres();
+
+      expect(catalogueService.listGenres).toHaveBeenCalled();
       expect(result).toBe(mockResult);
     });
   });

@@ -106,3 +106,16 @@ export class TmdbTvSearchQueryDto {
   @IsBoolean({ message: 'includeAdult must be a boolean' })
   includeAdult: boolean = false;
 }
+
+export class TmdbPaginationQueryDto {
+  @ApiPropertyOptional({
+    description: 'Page number (minimum 1)',
+    example: 1,
+    default: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'page must be an integer' })
+  @Min(1, { message: 'page must be at least 1' })
+  page: number = 1;
+}

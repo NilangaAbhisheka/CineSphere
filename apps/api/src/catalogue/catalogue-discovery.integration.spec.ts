@@ -13,6 +13,22 @@ describe('Catalogue Discovery Integration Tests', () => {
     await prisma.$connect();
     catalogueRepo = new CatalogueRepository(prisma);
     catalogueService = new CatalogueService(catalogueRepo);
+
+    // Clean up test data from prior runs so counts and pagination match expectations exactly
+    await prisma.movie.deleteMany({
+      where: {
+        OR: [{ title: { contains: 'Inception' } }, { title: { contains: 'Interstellar' } }],
+      },
+    });
+    await prisma.tvShow.deleteMany({
+      where: {
+        OR: [
+          { name: { contains: 'Breaking Bad' } },
+          { name: { contains: 'Better Call Saul' } },
+          { name: { contains: 'Dark SciFi' } },
+        ],
+      },
+    });
   });
 
   afterAll(async () => {
@@ -219,23 +235,24 @@ describe('Catalogue Discovery Integration Tests', () => {
           title: 'Inception Null Popularity',
           popularity: null,
           voteAverage: null,
+          genres: { connect: [{ tmdbId: genreActionId }] },
         },
       });
 
       const descResult = await catalogueService.listMovies({
-        query: 'Inception',
+        genreId: genreActionId,
         sortBy: 'popularity',
         sortOrder: 'desc',
         page: 1,
-        limit: 10,
+        limit: 20,
       });
 
       const nullIndex = descResult.items.findIndex((m) => m.id === nullMovie.id);
       const m1Index = descResult.items.findIndex((m) => m.id === movie1Id);
-      const m2Index = descResult.items.findIndex((m) => m.id === movie2Id);
+      const m3Index = descResult.items.findIndex((m) => m.id === movie3Id);
 
       expect(nullIndex).toBeGreaterThan(m1Index);
-      expect(nullIndex).toBeGreaterThan(m2Index);
+      expect(nullIndex).toBeGreaterThan(m3Index);
     });
 
     it('returns empty results when no items match query', async () => {
@@ -484,6 +501,32 @@ describe('Catalogue Discovery Integration Tests', () => {
       await expect(
         catalogueService.getTvShowById('b0000000-0000-0000-0000-000000000000'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('Local Genres Retrieval', () => {
+    it('returns all distinct genres sorted alphabetically by name', async () => {
+      const gId1 = nextTmdbId();
+      const gId2 = nextTmdbId();
+
+      await prisma.genre.createMany({
+        data: [
+          { tmdbId: gId1, name: `ZetaGenre-${gId1}` },
+          { tmdbId: gId2, name: `AlphaGenre-${gId2}` },
+        ],
+      });
+
+      const genres = await catalogueService.listGenres();
+
+      expect(genres.length).toBeGreaterThanOrEqual(2);
+      const names = genres.map((g) => g.name);
+      expect(names).toContain(`ZetaGenre-${gId1}`);
+      expect(names).toContain(`AlphaGenre-${gId2}`);
+
+      // Verify sorting is alphabetical
+      for (let i = 0; i < genres.length - 1; i++) {
+        expect(genres[i].name.localeCompare(genres[i + 1].name)).toBeLessThanOrEqual(0);
+      }
     });
   });
 });

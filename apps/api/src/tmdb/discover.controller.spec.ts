@@ -10,6 +10,10 @@ describe('DiscoverController', () => {
     tmdbService = {
       searchMovies: jest.fn(),
       searchTvShows: jest.fn(),
+      getTrendingMovies: jest.fn(),
+      getTrendingTvShows: jest.fn(),
+      getPopularMovies: jest.fn(),
+      getPopularTvShows: jest.fn(),
     } as unknown as jest.Mocked<TmdbService>;
 
     controller = new DiscoverController(tmdbService);
@@ -60,6 +64,44 @@ describe('DiscoverController', () => {
       const result = await controller.searchTvShows(dto);
 
       expect(tmdbService.searchTvShows).toHaveBeenCalledWith('Game of Thrones', 1, false, 2011);
+      expect(result).toBe(mockResult);
+    });
+  });
+
+  describe('trending and popular endpoints', () => {
+    it('delegates getTrendingMovies to tmdbService', async () => {
+      const mockResult = { page: 1, totalPages: 1, totalResults: 5, results: [] };
+      tmdbService.getTrendingMovies.mockResolvedValueOnce(mockResult);
+
+      const result = await controller.getTrendingMovies({ page: 1 });
+      expect(tmdbService.getTrendingMovies).toHaveBeenCalledWith('day', 1);
+      expect(result).toBe(mockResult);
+    });
+
+    it('delegates getTrendingTvShows to tmdbService', async () => {
+      const mockResult = { page: 1, totalPages: 1, totalResults: 5, results: [] };
+      tmdbService.getTrendingTvShows.mockResolvedValueOnce(mockResult);
+
+      const result = await controller.getTrendingTvShows({ page: 2 });
+      expect(tmdbService.getTrendingTvShows).toHaveBeenCalledWith('day', 2);
+      expect(result).toBe(mockResult);
+    });
+
+    it('delegates getPopularMovies to tmdbService', async () => {
+      const mockResult = { page: 1, totalPages: 1, totalResults: 5, results: [] };
+      tmdbService.getPopularMovies.mockResolvedValueOnce(mockResult);
+
+      const result = await controller.getPopularMovies({ page: 1 });
+      expect(tmdbService.getPopularMovies).toHaveBeenCalledWith(1);
+      expect(result).toBe(mockResult);
+    });
+
+    it('delegates getPopularTvShows to tmdbService', async () => {
+      const mockResult = { page: 1, totalPages: 1, totalResults: 5, results: [] };
+      tmdbService.getPopularTvShows.mockResolvedValueOnce(mockResult);
+
+      const result = await controller.getPopularTvShows({ page: 1 });
+      expect(tmdbService.getPopularTvShows).toHaveBeenCalledWith(1);
       expect(result).toBe(mockResult);
     });
   });

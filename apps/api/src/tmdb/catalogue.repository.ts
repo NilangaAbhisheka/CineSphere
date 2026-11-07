@@ -694,4 +694,14 @@ export class CatalogueRepository {
       },
     });
   }
+
+  public async findGenres() {
+    return this.prisma.genre.findMany({
+      orderBy: { name: 'asc' },
+      select: {
+        tmdbId: true,
+        name: true,
+      },
+    });
+  }
 }

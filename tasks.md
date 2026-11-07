@@ -12,7 +12,7 @@
 | Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform |
 | Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package            |
 | Phase             | **Phase 2 — Catalogue and TMDB Integration**                                      |
-| Current Milestone | Phase 2C Complete — Catalogue Discovery & TMDB Search Endpoints Verified          |
+| Current Milestone | Phase 2 Complete (Catalogue, TMDB Ingestion & Discover UI Verified)               |
 | Last Updated      | 2026-11-07                                                                        |
 
 ---
@@ -21,7 +21,7 @@
 
 ```
 Phase 1  — Project Foundation                  ████████████████  95% (monorepo, docker, pgvector, prisma, tooling, CI workflow)
-Phase 2  — Catalogue and TMDB Integration      ████████████░░░░  75% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery verified)
+Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
 Phase 3  — Personal Library and Tracking       ░░░░░░░░░░░░░░░░  0%
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
@@ -221,14 +221,15 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] 404 response on non-existent records
 - [x] Unit and PostgreSQL integration tests for TMDB search, local catalogue filtering, pagination, ordering, nullable field sorting, and details endpoints (53 unit tests, 58 integration tests passing)
 
-### 2.5 Frontend Discover Page
+### 2.5 Frontend Discover Page (Phase 2.5 Complete)
 
-- [ ] Implement search input with debounce
-- [ ] Implement trending and popular content sections
-- [ ] Implement search results page with filter sidebar
-- [ ] Display movie/TV cards with poster, title, year, rating
-- [ ] Implement and verify required TMDB attribution badge and disclaimer ("This product uses the TMDB API but is not endorsed or certified by TMDB")
-- [ ] Handle empty states and loading states correctly
+- [x] Implement search input with debounce (400ms debounce hook, abort controller request cancellation)
+- [x] Implement trending and popular content sections (curated trending movies, trending TV, popular movies proxy endpoints)
+- [x] Implement search results page with filter sidebar (unified discovery UI with remote TMDB search and local catalogue browsing)
+- [x] Display movie/TV cards with poster, title, year, rating (`MediaCard` component with TMDB image generator and fallback SVG placeholder)
+- [x] Implement and verify required TMDB attribution badge and disclaimer ("This product uses the TMDB API but is not endorsed or certified by TMDB")
+- [x] Handle empty states and loading states correctly (`LoadingSkeletonGrid`, `EmptyState`, `ErrorState`)
+- [x] Resolved Next.js production build file locking issue; verified Next.js App Router production build (`pnpm --filter @cinesphere/web build`) with exit code 0
 
 ---
 

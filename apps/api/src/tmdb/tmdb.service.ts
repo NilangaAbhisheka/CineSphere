@@ -186,4 +186,78 @@ export class TmdbService {
       results: raw.results ?? [],
     };
   }
+
+  public async getTrendingMovies(
+    timeWindow: 'day' | 'week' = 'day',
+    page: number = 1,
+  ): Promise<TmdbSearchResponse<TmdbMovieSearchResult>> {
+    this.logger.log(`Fetching TMDB trending movies (${timeWindow}), page=${page}...`);
+
+    const raw = await this.httpClient.get<RawTmdbSearchResponse<TmdbMovieSearchResult>>(
+      `/trending/movie/${timeWindow}`,
+      { page },
+    );
+
+    return {
+      page: raw.page ?? page,
+      totalPages: raw.total_pages ?? 0,
+      totalResults: raw.total_results ?? 0,
+      results: raw.results ?? [],
+    };
+  }
+
+  public async getTrendingTvShows(
+    timeWindow: 'day' | 'week' = 'day',
+    page: number = 1,
+  ): Promise<TmdbSearchResponse<TmdbTvSearchResult>> {
+    this.logger.log(`Fetching TMDB trending TV shows (${timeWindow}), page=${page}...`);
+
+    const raw = await this.httpClient.get<RawTmdbSearchResponse<TmdbTvSearchResult>>(
+      `/trending/tv/${timeWindow}`,
+      { page },
+    );
+
+    return {
+      page: raw.page ?? page,
+      totalPages: raw.total_pages ?? 0,
+      totalResults: raw.total_results ?? 0,
+      results: raw.results ?? [],
+    };
+  }
+
+  public async getPopularMovies(
+    page: number = 1,
+  ): Promise<TmdbSearchResponse<TmdbMovieSearchResult>> {
+    this.logger.log(`Fetching TMDB popular movies, page=${page}...`);
+
+    const raw = await this.httpClient.get<RawTmdbSearchResponse<TmdbMovieSearchResult>>(
+      '/movie/popular',
+      { page },
+    );
+
+    return {
+      page: raw.page ?? page,
+      totalPages: raw.total_pages ?? 0,
+      totalResults: raw.total_results ?? 0,
+      results: raw.results ?? [],
+    };
+  }
+
+  public async getPopularTvShows(
+    page: number = 1,
+  ): Promise<TmdbSearchResponse<TmdbTvSearchResult>> {
+    this.logger.log(`Fetching TMDB popular TV shows, page=${page}...`);
+
+    const raw = await this.httpClient.get<RawTmdbSearchResponse<TmdbTvSearchResult>>(
+      '/tv/popular',
+      { page },
+    );
+
+    return {
+      page: raw.page ?? page,
+      totalPages: raw.total_pages ?? 0,
+      totalResults: raw.total_results ?? 0,
+      results: raw.results ?? [],
+    };
+  }
 }

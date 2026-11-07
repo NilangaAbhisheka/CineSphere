@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  MediaGenre,
   MovieDetails,
   MovieListItem,
   PaginatedResult,
@@ -202,5 +203,13 @@ export class CatalogueService {
         })),
       })),
     };
+  }
+
+  public async listGenres(): Promise<MediaGenre[]> {
+    const genres = await this.catalogueRepo.findGenres();
+    return genres.map((g) => ({
+      id: g.tmdbId,
+      name: g.name,
+    }));
   }
 }
