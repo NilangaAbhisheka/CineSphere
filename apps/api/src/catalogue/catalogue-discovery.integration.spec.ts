@@ -212,6 +212,32 @@ describe('Catalogue Discovery Integration Tests', () => {
       );
     });
 
+    it('places records with null sorting fields last when sorting descending', async () => {
+      const nullMovie = await prisma.movie.create({
+        data: {
+          tmdbId: nextTmdbId(),
+          title: 'Inception Null Popularity',
+          popularity: null,
+          voteAverage: null,
+        },
+      });
+
+      const descResult = await catalogueService.listMovies({
+        query: 'Inception',
+        sortBy: 'popularity',
+        sortOrder: 'desc',
+        page: 1,
+        limit: 10,
+      });
+
+      const nullIndex = descResult.items.findIndex((m) => m.id === nullMovie.id);
+      const m1Index = descResult.items.findIndex((m) => m.id === movie1Id);
+      const m2Index = descResult.items.findIndex((m) => m.id === movie2Id);
+
+      expect(nullIndex).toBeGreaterThan(m1Index);
+      expect(nullIndex).toBeGreaterThan(m2Index);
+    });
+
     it('returns empty results when no items match query', async () => {
       const result = await catalogueService.listMovies({
         query: 'NonExistentTitleX99Z123',

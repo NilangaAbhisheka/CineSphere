@@ -448,7 +448,9 @@ export class CatalogueRepository {
     }
 
     const orderBy: Prisma.MovieOrderByWithRelationInput[] = [
-      { [primaryField]: sortOrder },
+      primaryField === 'title'
+        ? { title: sortOrder }
+        : { [primaryField]: { sort: sortOrder, nulls: 'last' } },
       { id: 'asc' },
     ];
 
@@ -600,7 +602,9 @@ export class CatalogueRepository {
     }
 
     const orderBy: Prisma.TvShowOrderByWithRelationInput[] = [
-      { [primaryField]: sortOrder },
+      primaryField === 'name'
+        ? { name: sortOrder }
+        : { [primaryField]: { sort: sortOrder, nulls: 'last' } },
       { id: 'asc' },
     ];
 

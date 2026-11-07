@@ -83,7 +83,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] Create `docs/AI_DEVELOPMENT_GUIDE.md` — AI coding agent standards and workflow
 - [x] Create `.cursor/rules/cinesphere.mdc` — Cursor project-wide instructions
 - [x] Create `AGENTS.md` — Antigravity engineering guidelines & project instructions
-- [ ] Create `docs/api/` — API specification stubs (defer to Phase 2)
+- [x] API specification documentation — Superseded by live OpenAPI/Swagger documentation generated at `/api/docs`
 - [x] Cross-check all documentation for consistency
 
 ### 1.2 Repository Initialization
@@ -105,16 +105,16 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] Configure Prettier project-wide
 - [x] Configure TypeScript strict mode in all TypeScript packages
 - [x] Configure Python linting and formatting (Ruff)
-- [ ] Configure pre-commit hooks (Husky + lint-staged or pre-commit for Python)
+- [ ] Configure pre-commit hooks (Husky + lint-staged or pre-commit for Python) — Optional / Deferred (enforced via Turbo & CI)
 - [x] Confirm all tooling passes across packages (`build`, `typecheck`, `lint`, `format:check`, `test`)
 
 ### 1.4 Docker Compose and Infrastructure
 
 - [x] Create `docker-compose.yml` for local development
   - [x] PostgreSQL 16 with pgvector extension enabled (`pgvector/pgvector:pg16`)
-  - [ ] Next.js dev server container (run outside Docker for development)
-  - [ ] NestJS dev server container (run outside Docker for development)
-  - [ ] Optional Ollama container (disabled by default)
+  - [ ] Next.js dev server container (Optional / Deferred — run outside Docker on host for fast HMR)
+  - [ ] NestJS dev server container (Optional / Deferred — run outside Docker on host for fast HMR)
+  - [ ] Optional Ollama container (Deferred to Phase 7)
 - [x] Create `.env.example` with all required environment variables documented
 - [x] Create local `.env` with development defaults (git-ignored)
 - [x] Confirm `docker compose up` starts all core services without errors
@@ -163,7 +163,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] Implement a typed TMDB API client (`TmdbHttpClient`) with Bearer token authentication
 - [x] Implement configurable base URL, timeout handling, and exponential backoff retries (respecting `Retry-After`)
 - [x] Separate concerns cleanly: `TmdbHttpClient` (HTTP/retry), `TmdbMapper` (transform), `CatalogueRepository` (Prisma upsert/transactions), and `TmdbService` (orchestration)
-- [x] Store and validate TMDB credentials securely via backend environment variables (`TMDB_READ_ACCESS_TOKEN` / `TMDB_API_KEY`)
+- [x] Store and validate TMDB credentials securely via backend environment variable (`TMDB_READ_ACCESS_TOKEN` required; Bearer token auth; API-key query fallback removed during Phase 2B security audit)
 - [x] Unit test client retry logic, rate limit handling, authentication headers, and response mappings without external API calls
 
 ### 2.2 Catalogue Data Model (Phase 2A Complete & Verified)
@@ -219,7 +219,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Full metadata, genres, keywords, associated cast members, and hierarchical seasons and episodes
   - [x] Ordered seasons (`seasonNumber asc`, preserving season 0) and ordered episodes (`episodeNumber asc`)
   - [x] 404 response on non-existent records
-- [x] Unit and PostgreSQL integration tests for TMDB search, local catalogue filtering, pagination, ordering, and details endpoints (53 unit tests, 57 integration tests passing)
+- [x] Unit and PostgreSQL integration tests for TMDB search, local catalogue filtering, pagination, ordering, nullable field sorting, and details endpoints (53 unit tests, 58 integration tests passing)
 
 ### 2.5 Frontend Discover Page
 
@@ -227,6 +227,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [ ] Implement trending and popular content sections
 - [ ] Implement search results page with filter sidebar
 - [ ] Display movie/TV cards with poster, title, year, rating
+- [ ] Implement and verify required TMDB attribution badge and disclaimer ("This product uses the TMDB API but is not endorsed or certified by TMDB")
 - [ ] Handle empty states and loading states correctly
 
 ---
@@ -729,10 +730,10 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ## Deferred Items
 
-| Item                                | Deferred To           | Reason                                                           |
-| ----------------------------------- | --------------------- | ---------------------------------------------------------------- |
-| `docs/api/` API specification stubs | Phase 2               | No API endpoints exist yet. Document alongside implementation.   |
-| Redis / caching layer               | Deferred indefinitely | No demonstrated performance requirement yet. Revisit if needed.  |
-| Microservice extraction             | Deferred indefinitely | Monolith is appropriate until specific scaling needs are proven. |
-| Multi-user support                  | Deferred indefinitely | Out of scope. Single-user personal app.                          |
-| CI/CD pipeline                      | Phase 1 (optional)    | Useful but not blocking initial feature development.             |
+| Item                                | Deferred To           | Reason                                                                                                |
+| ----------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------- |
+| `docs/api/` API specification stubs | Resolved (Phase 2)    | Superseded by live OpenAPI/Swagger interactive documentation at `/api/docs` alongside implementation. |
+| Redis / caching layer               | Deferred indefinitely | No demonstrated performance requirement yet. Revisit if needed.                                       |
+| Microservice extraction             | Deferred indefinitely | Monolith is appropriate until specific scaling needs are proven.                                      |
+| Multi-user support                  | Deferred indefinitely | Out of scope. Single-user personal app.                                                               |
+| CI/CD pipeline                      | Phase 1 (optional)    | Useful but not blocking initial feature development.                                                  |
