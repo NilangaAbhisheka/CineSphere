@@ -11,9 +11,9 @@
 | Project           | CineSphere                                                                        |
 | Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform |
 | Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package            |
-| Phase             | **Phase 1 — Project Foundation**                                                  |
-| Current Milestone | Phase 2A Complete — Catalogue Database Foundation Verified                        |
-| Last Updated      | 2026-11-06                                                                        |
+| Phase             | **Phase 2 — Catalogue and TMDB Integration**                                      |
+| Current Milestone | Phase 2B Complete — TMDB Ingestion & Reliability Audit Verified                    |
+| Last Updated      | 2026-11-07                                                                        |
 
 ---
 
@@ -21,7 +21,7 @@
 
 ```
 Phase 1  — Project Foundation                  ████████████████  95% (monorepo, docker, pgvector, prisma, tooling, CI workflow)
-Phase 2  — Catalogue and TMDB Integration      ████░░░░░░░░░░░░  25% (Phase 2A schema, migrations, tests)
+Phase 2  — Catalogue and TMDB Integration      ████████░░░░░░░░  50% (Phase 2A schema & Phase 2B ingestion/audit verified)
 Phase 3  — Personal Library and Tracking       ░░░░░░░░░░░░░░░░  0%
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
@@ -188,7 +188,8 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Ingest individual seasons and episodes (supporting specials / season 0) with bounded per-season transactions
 - [x] Ensure 100% idempotent ingestion and relationship synchronization on repeated requests
 - [x] Document endpoints in Swagger/OpenAPI
-- [x] Automated PostgreSQL integration tests for movie and TV ingestion idempotency (41/41 passing)
+- [x] Automated PostgreSQL integration tests for movie and TV ingestion idempotency and concurrency (42/42 passing)
+- [x] Conduct Phase 2B reliability and security audit (secret sanitization in error messages, Bearer-only auth, concurrent transaction timeouts)
 - [ ] Implement background sync for trending and popular content (limited scope — see TD-07)
 - [ ] Implement deduplication of catalogue records across discovery sweeps
 
