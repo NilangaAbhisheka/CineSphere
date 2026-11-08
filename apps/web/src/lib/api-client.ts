@@ -1,8 +1,11 @@
 import {
+  ContinueWatchingItem,
   CreateEpisodeProgressRequest,
   CreateLibraryEntryRequest,
   CreateSeasonRatingRequest,
   CreateViewingEventRequest,
+  DashboardOverviewResponse,
+  DashboardStats,
   EpisodeProgressResponse,
   LibraryEntryListItem,
   LibraryEntryResponse,
@@ -12,6 +15,8 @@ import {
   MovieDetails,
   MovieListItem,
   PaginatedResult,
+  QuickPickItem,
+  RecentActivityItem,
   SeasonRatingResponse,
   TmdbMovieSearchResult,
   TmdbSearchResponse,
@@ -449,6 +454,49 @@ class ApiClient {
       `/library/${id}/season-ratings/${seasonId}`,
       'PATCH',
       { rating },
+      signal,
+    );
+  }
+
+  // ── Dashboard Endpoints ──────────────────────────────────────────────────────
+
+  public async getDashboardOverview(signal?: AbortSignal): Promise<DashboardOverviewResponse> {
+    return this.request<DashboardOverviewResponse>('/dashboard/overview', undefined, signal);
+  }
+
+  public async getDashboardStats(signal?: AbortSignal): Promise<DashboardStats> {
+    return this.request<DashboardStats>('/dashboard/stats', undefined, signal);
+  }
+
+  public async getDashboardContinueWatching(
+    limit?: number,
+    signal?: AbortSignal,
+  ): Promise<ContinueWatchingItem[]> {
+    return this.request<ContinueWatchingItem[]>(
+      '/dashboard/continue-watching',
+      limit !== undefined ? { limit } : undefined,
+      signal,
+    );
+  }
+
+  public async getDashboardRecentActivity(
+    limit?: number,
+    signal?: AbortSignal,
+  ): Promise<RecentActivityItem[]> {
+    return this.request<RecentActivityItem[]>(
+      '/dashboard/recent-activity',
+      limit !== undefined ? { limit } : undefined,
+      signal,
+    );
+  }
+
+  public async getDashboardQuickPicks(
+    limit?: number,
+    signal?: AbortSignal,
+  ): Promise<QuickPickItem[]> {
+    return this.request<QuickPickItem[]>(
+      '/dashboard/quick-picks',
+      limit !== undefined ? { limit } : undefined,
       signal,
     );
   }
