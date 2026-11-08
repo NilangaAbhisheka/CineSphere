@@ -138,7 +138,13 @@ export class LibraryRepository {
   public async findEntries(
     userId: string,
     query: ListLibraryQueryDto,
-  ): Promise<{ items: EntryWithRelations[]; totalResults: number; page: number; limit: number; totalPages: number }> {
+  ): Promise<{
+    items: EntryWithRelations[];
+    totalResults: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
     const where: Prisma.UserLibraryEntryWhereInput = {
       userId,
       ...(query.status ? { status: query.status } : {}),

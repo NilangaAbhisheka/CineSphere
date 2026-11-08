@@ -90,26 +90,23 @@ describe('Phase 3 — Database Integrity & Constraints', () => {
       tvHierarchy = await createTestTvHierarchy();
     });
 
-    it.each([
-      '1.00',
-      '1.50',
-      '7.00',
-      '7.50',
-      '10.00',
-    ])('accepts valid half-step rating %s on UserLibraryEntry', async (ratingStr) => {
-      const entry = await prisma.userLibraryEntry.create({
-        data: {
-          userId: user.id,
-          mediaType: MediaType.MOVIE,
-          movieId: movie.id,
-          status: LibraryStatus.PLAN_TO_WATCH,
-          personalRating: new Prisma.Decimal(ratingStr),
-        },
-      });
+    it.each(['1.00', '1.50', '7.00', '7.50', '10.00'])(
+      'accepts valid half-step rating %s on UserLibraryEntry',
+      async (ratingStr) => {
+        const entry = await prisma.userLibraryEntry.create({
+          data: {
+            userId: user.id,
+            mediaType: MediaType.MOVIE,
+            movieId: movie.id,
+            status: LibraryStatus.PLAN_TO_WATCH,
+            personalRating: new Prisma.Decimal(ratingStr),
+          },
+        });
 
-      expect(entry.personalRating).toBeDefined();
-      expect(entry.personalRating?.toFixed(2)).toBe(ratingStr);
-    });
+        expect(entry.personalRating).toBeDefined();
+        expect(entry.personalRating?.toFixed(2)).toBe(ratingStr);
+      },
+    );
 
     it('allows NULL personal_rating on UserLibraryEntry', async () => {
       const entry = await prisma.userLibraryEntry.create({
@@ -125,10 +122,10 @@ describe('Phase 3 — Database Integrity & Constraints', () => {
     });
 
     it.each([
-      '0.50',  // below minimum 1.00
-      '7.24',  // invalid half-step
-      '7.25',  // invalid half-step with decimal precision
-      '7.99',  // invalid half-step
+      '0.50', // below minimum 1.00
+      '7.24', // invalid half-step
+      '7.25', // invalid half-step with decimal precision
+      '7.99', // invalid half-step
       '10.50', // above maximum 10.00
       '11.00', // above maximum 10.00
     ])('rejects invalid rating %s on UserLibraryEntry', async (ratingStr) => {
@@ -790,9 +787,7 @@ describe('Phase 3 — Database Integrity & Constraints', () => {
         },
       });
 
-      await expect(
-        prisma.movie.delete({ where: { id: movie.id } }),
-      ).rejects.toThrow();
+      await expect(prisma.movie.delete({ where: { id: movie.id } })).rejects.toThrow();
     });
 
     it('restricts TvShow deletion when referenced by UserLibraryEntry', async () => {
@@ -805,9 +800,7 @@ describe('Phase 3 — Database Integrity & Constraints', () => {
         },
       });
 
-      await expect(
-        prisma.tvShow.delete({ where: { id: tvHierarchy.tvShowId } }),
-      ).rejects.toThrow();
+      await expect(prisma.tvShow.delete({ where: { id: tvHierarchy.tvShowId } })).rejects.toThrow();
     });
 
     it('restricts Episode deletion when referenced by EpisodeProgress', async () => {
@@ -850,9 +843,7 @@ describe('Phase 3 — Database Integrity & Constraints', () => {
         },
       });
 
-      await expect(
-        prisma.season.delete({ where: { id: tvHierarchy.seasonId } }),
-      ).rejects.toThrow();
+      await expect(prisma.season.delete({ where: { id: tvHierarchy.seasonId } })).rejects.toThrow();
     });
   });
 });

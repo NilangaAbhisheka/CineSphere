@@ -10,7 +10,8 @@ export class UpdateLibraryEntryDto {
   status?: LibraryStatus;
 
   @ApiPropertyOptional({
-    description: 'Updated personal rating between 1.00 and 10.00 (half-step increments), or null to clear',
+    description:
+      'Updated personal rating between 1.00 and 10.00 (half-step increments), or null to clear',
     nullable: true,
     example: 9.0,
   })

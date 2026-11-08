@@ -258,13 +258,7 @@ describe('LibraryDetailModal', () => {
     it('fetches and displays movie library entry details', async () => {
       mockGetLibraryEntry.mockResolvedValueOnce(makeMovieEntry());
 
-      render(
-        <LibraryDetailModal
-          entryId="entry-mov-1"
-          isOpen={true}
-          onClose={jest.fn()}
-        />,
-      );
+      render(<LibraryDetailModal entryId="entry-mov-1" isOpen={true} onClose={jest.fn()} />);
 
       // Loading state appears first
       expect(screen.getByText(/loading library details/i)).toBeInTheDocument();
@@ -284,13 +278,7 @@ describe('LibraryDetailModal', () => {
       mockGetLibraryEntry.mockResolvedValueOnce(makeTvEntry());
       mockGetCatalogueTvShowById.mockResolvedValueOnce(makeTvCatalogue());
 
-      render(
-        <LibraryDetailModal
-          entryId="entry-tv-1"
-          isOpen={true}
-          onClose={jest.fn()}
-        />,
-      );
+      render(<LibraryDetailModal entryId="entry-tv-1" isOpen={true} onClose={jest.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByRole('heading', { level: 2, name: 'Breaking Bad' })).toBeInTheDocument();
@@ -305,13 +293,7 @@ describe('LibraryDetailModal', () => {
     it('displays error message when getLibraryEntry rejects', async () => {
       mockGetLibraryEntry.mockRejectedValueOnce(new Error('Record not found'));
 
-      render(
-        <LibraryDetailModal
-          entryId="bad-id"
-          isOpen={true}
-          onClose={jest.fn()}
-        />,
-      );
+      render(<LibraryDetailModal entryId="bad-id" isOpen={true} onClose={jest.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText('Record not found')).toBeInTheDocument();
@@ -356,13 +338,7 @@ describe('LibraryDetailModal', () => {
       mockGetLibraryEntry.mockResolvedValueOnce(entry);
       mockUpdateLibraryEntry.mockRejectedValueOnce(new Error('Update failed'));
 
-      render(
-        <LibraryDetailModal
-          entryId="entry-mov-1"
-          isOpen={true}
-          onClose={jest.fn()}
-        />,
-      );
+      render(<LibraryDetailModal entryId="entry-mov-1" isOpen={true} onClose={jest.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: 'Completed' })).toBeInTheDocument();
@@ -489,7 +465,16 @@ describe('LibraryDetailModal', () => {
 
   describe('3. Movie Tracking (Viewing Events & Rewatch History)', () => {
     it('submits a new viewing event with correct ID and payload', async () => {
-      const entry = makeMovieEntry({ watchStats: { totalWatchCount: 1, firstWatchedAt: null, lastWatchedAt: null, episodesWatched: 0, totalEpisodes: 0, completionPercentage: 0 } });
+      const entry = makeMovieEntry({
+        watchStats: {
+          totalWatchCount: 1,
+          firstWatchedAt: null,
+          lastWatchedAt: null,
+          episodesWatched: 0,
+          totalEpisodes: 0,
+          completionPercentage: 0,
+        },
+      });
       const createdEvent: ViewingEventResponse = {
         id: 'evt-2',
         libraryEntryId: 'entry-mov-1',
@@ -558,13 +543,7 @@ describe('LibraryDetailModal', () => {
       });
       mockGetLibraryEntry.mockResolvedValueOnce(entry);
 
-      render(
-        <LibraryDetailModal
-          entryId="entry-mov-1"
-          isOpen={true}
-          onClose={jest.fn()}
-        />,
-      );
+      render(<LibraryDetailModal entryId="entry-mov-1" isOpen={true} onClose={jest.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText(/viewing history \(1\)/i)).toBeInTheDocument();
@@ -580,13 +559,7 @@ describe('LibraryDetailModal', () => {
       mockGetLibraryEntry.mockResolvedValueOnce(entry);
       mockCreateViewingEvent.mockRejectedValueOnce(new Error('Database lock error'));
 
-      render(
-        <LibraryDetailModal
-          entryId="entry-mov-1"
-          isOpen={true}
-          onClose={jest.fn()}
-        />,
-      );
+      render(<LibraryDetailModal entryId="entry-mov-1" isOpen={true} onClose={jest.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByText(/record a viewing event/i)).toBeInTheDocument();
@@ -691,17 +664,22 @@ describe('LibraryDetailModal', () => {
       const cat = makeTvCatalogue();
       mockGetLibraryEntry
         .mockResolvedValueOnce(entry) // initial load
-        .mockResolvedValueOnce(makeTvEntry({ watchStats: { totalWatchCount: 0, firstWatchedAt: null, lastWatchedAt: null, episodesWatched: 3, totalEpisodes: 3, completionPercentage: 100 } })); // after mark all
+        .mockResolvedValueOnce(
+          makeTvEntry({
+            watchStats: {
+              totalWatchCount: 0,
+              firstWatchedAt: null,
+              lastWatchedAt: null,
+              episodesWatched: 3,
+              totalEpisodes: 3,
+              completionPercentage: 100,
+            },
+          }),
+        ); // after mark all
       mockGetCatalogueTvShowById.mockResolvedValueOnce(cat);
       mockMarkAllWatched.mockResolvedValueOnce({ addedCount: 2 });
 
-      render(
-        <LibraryDetailModal
-          entryId="entry-tv-1"
-          isOpen={true}
-          onClose={jest.fn()}
-        />,
-      );
+      render(<LibraryDetailModal entryId="entry-tv-1" isOpen={true} onClose={jest.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /mark all watched/i })).toBeInTheDocument();
@@ -719,19 +697,11 @@ describe('LibraryDetailModal', () => {
     it('mark all watched sends includeSpecials: true when checkbox is explicitly checked', async () => {
       const entry = makeTvEntry();
       const cat = makeTvCatalogue();
-      mockGetLibraryEntry
-        .mockResolvedValueOnce(entry)
-        .mockResolvedValueOnce(makeTvEntry());
+      mockGetLibraryEntry.mockResolvedValueOnce(entry).mockResolvedValueOnce(makeTvEntry());
       mockGetCatalogueTvShowById.mockResolvedValueOnce(cat);
       mockMarkAllWatched.mockResolvedValueOnce({ addedCount: 3 });
 
-      render(
-        <LibraryDetailModal
-          entryId="entry-tv-1"
-          isOpen={true}
-          onClose={jest.fn()}
-        />,
-      );
+      render(<LibraryDetailModal entryId="entry-tv-1" isOpen={true} onClose={jest.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByLabelText(/include specials/i)).toBeInTheDocument();
@@ -761,13 +731,7 @@ describe('LibraryDetailModal', () => {
         }),
       );
 
-      render(
-        <LibraryDetailModal
-          entryId="entry-tv-1"
-          isOpen={true}
-          onClose={jest.fn()}
-        />,
-      );
+      render(<LibraryDetailModal entryId="entry-tv-1" isOpen={true} onClose={jest.fn()} />);
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /mark all watched/i })).toBeInTheDocument();

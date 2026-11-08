@@ -10,7 +10,11 @@ import {
   ViewingEventResponse,
 } from '@cinesphere/shared';
 import { apiClient, ApiClientError } from '@/lib/api-client';
-import { getBackdropPlaceholderUrl, getPosterPlaceholderUrl, getTmdbImageUrl } from '@/lib/tmdb-image';
+import {
+  getBackdropPlaceholderUrl,
+  getPosterPlaceholderUrl,
+  getTmdbImageUrl,
+} from '@/lib/tmdb-image';
 
 const RATING_OPTIONS: { label: string; value: string }[] = [
   { label: 'Unrated', value: '' },
@@ -285,7 +289,9 @@ export function LibraryDetailModal({
 
     try {
       const res = await apiClient.markAllWatched(entry.id, includeSpecials);
-      setTvFeedback(`Marked ${res.addedCount} new episode${res.addedCount === 1 ? '' : 's'} as watched!`);
+      setTvFeedback(
+        `Marked ${res.addedCount} new episode${res.addedCount === 1 ? '' : 's'} as watched!`,
+      );
 
       // Refresh entry to obtain the updated episode progress list & stats
       const fresh = await apiClient.getLibraryEntry(entry.id);
@@ -376,9 +382,7 @@ export function LibraryDetailModal({
     entry?.mediaType === 'MOVIE' ? entry.movie?.releaseDate : entry?.tvShow?.firstAirDate;
 
   // Episode progress set for fast lookup
-  const watchedEpisodeIds = new Set(
-    (entry?.episodeProgresses || []).map((ep) => ep.episodeId),
-  );
+  const watchedEpisodeIds = new Set((entry?.episodeProgresses || []).map((ep) => ep.episodeId));
 
   return (
     <div
@@ -394,11 +398,7 @@ export function LibraryDetailModal({
         {/* Modal Hero / Backdrop */}
         <div className="relative h-44 sm:h-52 w-full overflow-hidden bg-slate-950 shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={backdropUrl}
-            alt={title}
-            className="w-full h-full object-cover opacity-35"
-          />
+          <img src={backdropUrl} alt={title} className="w-full h-full object-cover opacity-35" />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" />
 
           {/* Close button */}
@@ -409,7 +409,12 @@ export function LibraryDetailModal({
             aria-label="Close modal"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
 
@@ -448,7 +453,10 @@ export function LibraryDetailModal({
                   </span>
                 )}
               </div>
-              <h2 id="detail-modal-title" className="text-xl sm:text-2xl font-bold text-white truncate">
+              <h2
+                id="detail-modal-title"
+                className="text-xl sm:text-2xl font-bold text-white truncate"
+              >
                 {title}
               </h2>
             </div>
@@ -501,7 +509,10 @@ export function LibraryDetailModal({
 
                   {/* Personal Rating Dropdown */}
                   <div className="w-full sm:w-48">
-                    <label htmlFor="detail-rating-select" className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    <label
+                      htmlFor="detail-rating-select"
+                      className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5"
+                    >
                       Personal Rating
                     </label>
                     <select
@@ -522,11 +533,16 @@ export function LibraryDetailModal({
                 {/* Personal Notes */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label htmlFor="detail-notes-input" className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    <label
+                      htmlFor="detail-notes-input"
+                      className="text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                    >
                       Personal Notes
                     </label>
                     {notesFeedback && (
-                      <span className="text-xs text-emerald-400 animate-fadeIn">{notesFeedback}</span>
+                      <span className="text-xs text-emerald-400 animate-fadeIn">
+                        {notesFeedback}
+                      </span>
                     )}
                   </div>
                   <div className="flex gap-2">
@@ -597,9 +613,15 @@ export function LibraryDetailModal({
                       </p>
                     )}
 
-                    <form onSubmit={handleLogView} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <form
+                      onSubmit={handleLogView}
+                      className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+                    >
                       <div>
-                        <label htmlFor="log-watched-date" className="block text-[11px] text-slate-400 mb-1">
+                        <label
+                          htmlFor="log-watched-date"
+                          className="block text-[11px] text-slate-400 mb-1"
+                        >
                           Watched Date
                         </label>
                         <input
@@ -612,7 +634,10 @@ export function LibraryDetailModal({
                       </div>
 
                       <div>
-                        <label htmlFor="log-session-rating" className="block text-[11px] text-slate-400 mb-1">
+                        <label
+                          htmlFor="log-session-rating"
+                          className="block text-[11px] text-slate-400 mb-1"
+                        >
                           Session Rating (optional)
                         </label>
                         <select
@@ -630,7 +655,10 @@ export function LibraryDetailModal({
                       </div>
 
                       <div>
-                        <label htmlFor="log-session-notes" className="block text-[11px] text-slate-400 mb-1">
+                        <label
+                          htmlFor="log-session-notes"
+                          className="block text-[11px] text-slate-400 mb-1"
+                        >
                           Notes (optional)
                         </label>
                         <input
@@ -676,7 +704,9 @@ export function LibraryDetailModal({
                                   day: 'numeric',
                                 })}
                               </span>
-                              {evt.notes && <span className="text-slate-300">&ldquo;{evt.notes}&rdquo;</span>}
+                              {evt.notes && (
+                                <span className="text-slate-300">&ldquo;{evt.notes}&rdquo;</span>
+                              )}
                             </div>
                             {evt.rating && (
                               <span className="font-semibold text-amber-400">
@@ -708,7 +738,8 @@ export function LibraryDetailModal({
                         <div className="text-lg font-bold text-white flex items-center gap-2">
                           <span>
                             {entry.watchStats?.episodesWatched || 0} of{' '}
-                            {entry.watchStats?.totalEpisodes ?? entry.tvShow?.numberOfEpisodes ?? 0} Episodes
+                            {entry.watchStats?.totalEpisodes ?? entry.tvShow?.numberOfEpisodes ?? 0}{' '}
+                            Episodes
                           </span>
                           <span className="text-sky-400 text-sm font-semibold">
                             ({entry.watchStats?.completionPercentage || 0}%)
@@ -750,7 +781,9 @@ export function LibraryDetailModal({
                     </div>
 
                     {tvFeedback && (
-                      <p className="text-xs font-semibold text-emerald-400 animate-fadeIn">{tvFeedback}</p>
+                      <p className="text-xs font-semibold text-emerald-400 animate-fadeIn">
+                        {tvFeedback}
+                      </p>
                     )}
                   </div>
 
@@ -776,11 +809,16 @@ export function LibraryDetailModal({
                               <div className="p-3.5 bg-slate-900/60 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                 <div className="flex items-center gap-2">
                                   <span className="font-bold text-sm text-slate-100">
-                                    {season.seasonNumber === 0 ? 'Specials' : `Season ${season.seasonNumber}`}
+                                    {season.seasonNumber === 0
+                                      ? 'Specials'
+                                      : `Season ${season.seasonNumber}`}
                                   </span>
-                                  {season.name && season.name !== `Season ${season.seasonNumber}` && (
-                                    <span className="text-xs text-slate-400">&bull; {season.name}</span>
-                                  )}
+                                  {season.name &&
+                                    season.name !== `Season ${season.seasonNumber}` && (
+                                      <span className="text-xs text-slate-400">
+                                        &bull; {season.name}
+                                      </span>
+                                    )}
                                   <span className="text-xs text-slate-500">
                                     ({season.episodes?.length || 0} episodes)
                                   </span>
@@ -788,7 +826,9 @@ export function LibraryDetailModal({
 
                                 {/* Season Rating Widget */}
                                 <div className="flex items-center gap-2">
-                                  <label className="text-[11px] text-slate-400">Season Rating:</label>
+                                  <label className="text-[11px] text-slate-400">
+                                    Season Rating:
+                                  </label>
                                   <select
                                     value={
                                       existingSeasonRating
@@ -833,7 +873,9 @@ export function LibraryDetailModal({
                                           <div className="truncate">
                                             <span
                                               className={`font-medium ${
-                                                isWatched ? 'text-slate-200 line-through text-slate-400' : 'text-slate-100'
+                                                isWatched
+                                                  ? 'text-slate-200 line-through text-slate-400'
+                                                  : 'text-slate-100'
                                               }`}
                                             >
                                               {ep.name || `Episode ${ep.episodeNumber}`}
@@ -871,7 +913,9 @@ export function LibraryDetailModal({
                                     );
                                   })
                                 ) : (
-                                  <p className="p-3 text-xs text-slate-500 italic">No episodes found for this season.</p>
+                                  <p className="p-3 text-xs text-slate-500 italic">
+                                    No episodes found for this season.
+                                  </p>
                                 )}
                               </div>
                             </div>
@@ -892,8 +936,8 @@ export function LibraryDetailModal({
                 {showDeleteConfirm ? (
                   <div className="w-full p-4 rounded-xl border border-rose-900/60 bg-rose-950/20 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fadeIn">
                     <div className="text-xs text-rose-300 text-center sm:text-left">
-                      <strong>Are you sure?</strong> This will permanently remove this title and all associated
-                      watch history, episode progress, and season ratings.
+                      <strong>Are you sure?</strong> This will permanently remove this title and all
+                      associated watch history, episode progress, and season ratings.
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
@@ -920,7 +964,12 @@ export function LibraryDetailModal({
                     onClick={() => setShowDeleteConfirm(true)}
                     className="text-xs font-medium text-rose-400 hover:text-rose-300 flex items-center gap-1.5 hover:underline focus:outline-none"
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg
+                      className="w-3.5 h-3.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"

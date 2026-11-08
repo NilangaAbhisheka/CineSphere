@@ -138,7 +138,10 @@ export function AddLibraryModal({ item, isOpen, onClose, onSuccess }: AddLibrary
                   </span>
                 )}
               </div>
-              <h3 id="add-modal-title" className="text-base font-semibold text-slate-100 line-clamp-1 mt-0.5">
+              <h3
+                id="add-modal-title"
+                className="text-base font-semibold text-slate-100 line-clamp-1 mt-0.5"
+              >
                 {item.title}
               </h3>
             </div>
@@ -152,7 +155,12 @@ export function AddLibraryModal({ item, isOpen, onClose, onSuccess }: AddLibrary
             aria-label="Close dialog"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -161,7 +169,11 @@ export function AddLibraryModal({ item, isOpen, onClose, onSuccess }: AddLibrary
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {error && (
             <div className="p-3 text-sm rounded-lg bg-rose-950/40 border border-rose-800/60 text-rose-300 flex items-center gap-2">
-              <svg className="w-4 h-4 shrink-0 text-rose-400" viewBox="0 0 20 20" fill="currentColor">
+              <svg
+                className="w-4 h-4 shrink-0 text-rose-400"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
                 <path
                   fillRule="evenodd"
                   d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
@@ -174,7 +186,11 @@ export function AddLibraryModal({ item, isOpen, onClose, onSuccess }: AddLibrary
 
           {successMessage && (
             <div className="p-3 text-sm rounded-lg bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 flex items-center gap-2">
-              <svg className="w-4 h-4 shrink-0 text-emerald-400" viewBox="0 0 20 20" fill="currentColor">
+              <svg
+                className="w-4 h-4 shrink-0 text-emerald-400"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
                 <path
                   fillRule="evenodd"
                   d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
@@ -216,8 +232,12 @@ export function AddLibraryModal({ item, isOpen, onClose, onSuccess }: AddLibrary
 
           {/* Optional Personal Rating */}
           <div>
-            <label htmlFor="library-rating-select" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-              Personal Rating <span className="text-slate-500 font-normal lowercase">(optional)</span>
+            <label
+              htmlFor="library-rating-select"
+              className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5"
+            >
+              Personal Rating{' '}
+              <span className="text-slate-500 font-normal lowercase">(optional)</span>
             </label>
             <select
               id="library-rating-select"
@@ -236,8 +256,12 @@ export function AddLibraryModal({ item, isOpen, onClose, onSuccess }: AddLibrary
 
           {/* Optional Notes */}
           <div>
-            <label htmlFor="library-notes-input" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-              Personal Notes <span className="text-slate-500 font-normal lowercase">(optional)</span>
+            <label
+              htmlFor="library-notes-input"
+              className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5"
+            >
+              Personal Notes{' '}
+              <span className="text-slate-500 font-normal lowercase">(optional)</span>
             </label>
             <textarea
               id="library-notes-input"
@@ -267,8 +291,19 @@ export function AddLibraryModal({ item, isOpen, onClose, onSuccess }: AddLibrary
             >
               {loading ? (
                 <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
                     <path
                       className="opacity-75"
                       fill="currentColor"

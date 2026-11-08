@@ -102,7 +102,9 @@ describe('DatabaseErrorMapper', () => {
       );
       const result = DatabaseErrorMapper.translate(error);
       expect(result).toBeInstanceOf(BadRequestException);
-      expect(result.message).toContain('Rating must be between 1.00 and 10.00 in half-step increments');
+      expect(result.message).toContain(
+        'Rating must be between 1.00 and 10.00 in half-step increments',
+      );
     });
 
     it('maps XOR media_type CHECK constraint error to BadRequestException', () => {

@@ -129,7 +129,12 @@ describe('AddLibraryModal', () => {
     });
 
     it('shows TV type badge for TV items', () => {
-      render(<AddLibraryModal {...defaultProps} item={makeItem({ mediaType: 'tv', title: 'The Wire' })} />);
+      render(
+        <AddLibraryModal
+          {...defaultProps}
+          item={makeItem({ mediaType: 'tv', title: 'The Wire' })}
+        />,
+      );
       expect(screen.getByText('TV')).toBeInTheDocument();
     });
   });
@@ -159,7 +164,11 @@ describe('AddLibraryModal', () => {
 
   describe('successful submission', () => {
     it('calls createLibraryEntry with correct payload and shows success message', async () => {
-      mockCreateLibraryEntry.mockResolvedValueOnce({ id: 'lib-new', mediaType: 'MOVIE', status: 'PLAN_TO_WATCH' });
+      mockCreateLibraryEntry.mockResolvedValueOnce({
+        id: 'lib-new',
+        mediaType: 'MOVIE',
+        status: 'PLAN_TO_WATCH',
+      });
       render(<AddLibraryModal {...defaultProps} />);
 
       fireEvent.click(screen.getByRole('button', { name: /add to library/i }));
@@ -195,7 +204,9 @@ describe('AddLibraryModal', () => {
 
   describe('error handling', () => {
     it('shows "already in your library" error message on 409 conflict', async () => {
-      const { ApiClientError: MockApiClientError } = jest.requireMock('@/lib/api-client') as { ApiClientError: typeof ApiClientError };
+      const { ApiClientError: MockApiClientError } = jest.requireMock('@/lib/api-client') as {
+        ApiClientError: typeof ApiClientError;
+      };
       mockCreateLibraryEntry.mockRejectedValueOnce(new MockApiClientError(409, 'Conflict'));
 
       render(<AddLibraryModal {...defaultProps} />);
@@ -207,8 +218,12 @@ describe('AddLibraryModal', () => {
     });
 
     it('shows the API error message for non-409 errors', async () => {
-      const { ApiClientError: MockApiClientError } = jest.requireMock('@/lib/api-client') as { ApiClientError: typeof ApiClientError };
-      mockCreateLibraryEntry.mockRejectedValueOnce(new MockApiClientError(500, 'Internal server error'));
+      const { ApiClientError: MockApiClientError } = jest.requireMock('@/lib/api-client') as {
+        ApiClientError: typeof ApiClientError;
+      };
+      mockCreateLibraryEntry.mockRejectedValueOnce(
+        new MockApiClientError(500, 'Internal server error'),
+      );
 
       render(<AddLibraryModal {...defaultProps} />);
       fireEvent.click(screen.getByRole('button', { name: /add to library/i }));

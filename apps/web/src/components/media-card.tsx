@@ -126,7 +126,12 @@ export function MediaCard({
               className="w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 border border-sky-500/30 flex items-center justify-center gap-1.5 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-400"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4.5v15m7.5-7.5h-15"
+                />
               </svg>
               Add to Library
             </button>

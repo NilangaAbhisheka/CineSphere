@@ -15,7 +15,9 @@
 import { PrismaClient, Prisma, MediaType, LibraryStatus } from '@prisma/client';
 import { Client } from 'pg';
 
-const DB_URL = process.env.DATABASE_URL || 'postgresql://cinesphere_user:cinesphere_dev_password@localhost:5432/cinesphere?schema=public';
+const DB_URL =
+  process.env.DATABASE_URL ||
+  'postgresql://cinesphere_user:cinesphere_dev_password@localhost:5432/cinesphere?schema=public';
 
 const prisma = new PrismaClient({
   datasources: { db: { url: DB_URL } },
@@ -60,7 +62,9 @@ describe('Stage 3.3.D — Prisma 6.19.3 Error Structure Experiments', () => {
   it('E-1: Inspects Prisma error on Unique Constraint Violation (23505)', async () => {
     const user = await prisma.user.create({ data: { displayName: 'E-1 User' } });
     const show = await prisma.tvShow.create({ data: { tmdbId: uniqueTmdbId(), name: 'E-1 Show' } });
-    const season = await prisma.season.create({ data: { tmdbId: uniqueTmdbId(), seasonNumber: 1, tvShowId: show.id } });
+    const season = await prisma.season.create({
+      data: { tmdbId: uniqueTmdbId(), seasonNumber: 1, tvShowId: show.id },
+    });
     const ule = await prisma.userLibraryEntry.create({
       data: {
         userId: user.id,
@@ -122,10 +126,18 @@ describe('Stage 3.3.D — Prisma 6.19.3 Error Structure Experiments', () => {
   // ────────────────────────────────────────────────────────────────────────────
   it('E-2: Inspects Prisma error on Trigger-Raised Exception (P0001)', async () => {
     const user = await prisma.user.create({ data: { displayName: 'E-2 User' } });
-    const show1 = await prisma.tvShow.create({ data: { tmdbId: uniqueTmdbId(), name: 'E-2 Show 1' } });
-    const show2 = await prisma.tvShow.create({ data: { tmdbId: uniqueTmdbId(), name: 'E-2 Show 2' } });
-    const season2 = await prisma.season.create({ data: { tmdbId: uniqueTmdbId(), seasonNumber: 1, tvShowId: show2.id } });
-    const episode2 = await prisma.episode.create({ data: { tmdbId: uniqueTmdbId(), episodeNumber: 1, seasonId: season2.id } });
+    const show1 = await prisma.tvShow.create({
+      data: { tmdbId: uniqueTmdbId(), name: 'E-2 Show 1' },
+    });
+    const show2 = await prisma.tvShow.create({
+      data: { tmdbId: uniqueTmdbId(), name: 'E-2 Show 2' },
+    });
+    const season2 = await prisma.season.create({
+      data: { tmdbId: uniqueTmdbId(), seasonNumber: 1, tvShowId: show2.id },
+    });
+    const episode2 = await prisma.episode.create({
+      data: { tmdbId: uniqueTmdbId(), episodeNumber: 1, seasonId: season2.id },
+    });
 
     // ULE is for show1
     const ule = await prisma.userLibraryEntry.create({
@@ -179,10 +191,18 @@ describe('Stage 3.3.D — Prisma 6.19.3 Error Structure Experiments', () => {
   // ────────────────────────────────────────────────────────────────────────────
   it('E-2b: Inspects Prisma error on Trigger-Raised Exception via $executeRaw', async () => {
     const user = await prisma.user.create({ data: { displayName: 'E-2b User' } });
-    const show1 = await prisma.tvShow.create({ data: { tmdbId: uniqueTmdbId(), name: 'E-2b Show 1' } });
-    const show2 = await prisma.tvShow.create({ data: { tmdbId: uniqueTmdbId(), name: 'E-2b Show 2' } });
-    const season2 = await prisma.season.create({ data: { tmdbId: uniqueTmdbId(), seasonNumber: 1, tvShowId: show2.id } });
-    const episode2 = await prisma.episode.create({ data: { tmdbId: uniqueTmdbId(), episodeNumber: 1, seasonId: season2.id } });
+    const show1 = await prisma.tvShow.create({
+      data: { tmdbId: uniqueTmdbId(), name: 'E-2b Show 1' },
+    });
+    const show2 = await prisma.tvShow.create({
+      data: { tmdbId: uniqueTmdbId(), name: 'E-2b Show 2' },
+    });
+    const season2 = await prisma.season.create({
+      data: { tmdbId: uniqueTmdbId(), seasonNumber: 1, tvShowId: show2.id },
+    });
+    const episode2 = await prisma.episode.create({
+      data: { tmdbId: uniqueTmdbId(), episodeNumber: 1, seasonId: season2.id },
+    });
 
     const ule = await prisma.userLibraryEntry.create({
       data: {
@@ -218,7 +238,9 @@ describe('Stage 3.3.D — Prisma 6.19.3 Error Structure Experiments', () => {
   // ────────────────────────────────────────────────────────────────────────────
   it('E-3: Inspects Prisma error on CHECK Constraint Violation (23514)', async () => {
     const user = await prisma.user.create({ data: { displayName: 'E-3 User' } });
-    const movie = await prisma.movie.create({ data: { tmdbId: uniqueTmdbId(), title: 'E-3 Movie' } });
+    const movie = await prisma.movie.create({
+      data: { tmdbId: uniqueTmdbId(), title: 'E-3 Movie' },
+    });
 
     let caughtError: unknown;
     try {
@@ -346,8 +368,16 @@ describe('Stage 3.3.D — Prisma 6.19.3 Error Structure Experiments', () => {
         deadlockError = rejected.reason;
       }
     } finally {
-      try { await clientA.query('ROLLBACK'); } catch { /* ignore */ }
-      try { await clientB.query('ROLLBACK'); } catch { /* ignore */ }
+      try {
+        await clientA.query('ROLLBACK');
+      } catch {
+        /* ignore */
+      }
+      try {
+        await clientB.query('ROLLBACK');
+      } catch {
+        /* ignore */
+      }
       await clientA.end();
       await clientB.end();
     }

@@ -13,7 +13,9 @@
 
 import { Client } from 'pg';
 
-const DB_URL = process.env.DATABASE_URL || 'postgresql://cinesphere_user:cinesphere_dev_password@localhost:5432/cinesphere?schema=public';
+const DB_URL =
+  process.env.DATABASE_URL ||
+  'postgresql://cinesphere_user:cinesphere_dev_password@localhost:5432/cinesphere?schema=public';
 
 let _counter = 700_000_000 + Math.floor(Math.random() * 50_000_000);
 function uniqueTmdbId(): number {
@@ -46,8 +48,16 @@ describe('Phase 3 — PostgreSQL Concurrency & Lock-Order Invariants', () => {
 
   afterEach(async () => {
     // Ensure clean transaction states after each test
-    try { await conn1.query('ROLLBACK'); } catch { /* ignore */ }
-    try { await conn2.query('ROLLBACK'); } catch { /* ignore */ }
+    try {
+      await conn1.query('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
+    try {
+      await conn2.query('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
   });
 
   async function waitForBlocked(
@@ -57,10 +67,7 @@ describe('Phase 3 — PostgreSQL Concurrency & Lock-Order Invariants', () => {
   ): Promise<void> {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-      const res = await monConn.query(
-        'SELECT pg_blocking_pids($1) AS blockers',
-        [blockedPid],
-      );
+      const res = await monConn.query('SELECT pg_blocking_pids($1) AS blockers', [blockedPid]);
       const blockers: number[] = res.rows[0].blockers;
       if (blockers && blockers.includes(blockerPid)) {
         return;
@@ -194,10 +201,10 @@ describe('Phase 3 — PostgreSQL Concurrency & Lock-Order Invariants', () => {
     // 2. Connection 2 attempts Season tvShowId update
     await conn2.query('BEGIN ISOLATION LEVEL READ COMMITTED');
     await conn2.query('SET statement_timeout = 5000');
-    const updatePromise = conn2.query(
-      `UPDATE "seasons" SET "tvShowId" = $1 WHERE "id" = $2`,
-      [showBId, seasonAId],
-    );
+    const updatePromise = conn2.query(`UPDATE "seasons" SET "tvShowId" = $1 WHERE "id" = $2`, [
+      showBId,
+      seasonAId,
+    ]);
 
     // 3. Confirm Connection 2 blocked by Connection 1 on Season row
     await waitForBlocked(pid2, pid1);
@@ -216,10 +223,9 @@ describe('Phase 3 — PostgreSQL Concurrency & Lock-Order Invariants', () => {
     );
     expect(srCheck.rowCount).toBe(1);
 
-    const seasonCheck = await monConn.query(
-      `SELECT "tvShowId" FROM "seasons" WHERE "id" = $1`,
-      [seasonAId],
-    );
+    const seasonCheck = await monConn.query(`SELECT "tvShowId" FROM "seasons" WHERE "id" = $1`, [
+      seasonAId,
+    ]);
     expect(seasonCheck.rows[0].tvShowId).toBe(showAId);
   });
 
@@ -246,10 +252,10 @@ describe('Phase 3 — PostgreSQL Concurrency & Lock-Order Invariants', () => {
     // 2. Connection 2 attempts Episode seasonId update
     await conn2.query('BEGIN ISOLATION LEVEL READ COMMITTED');
     await conn2.query('SET statement_timeout = 5000');
-    const updatePromise = conn2.query(
-      `UPDATE "episodes" SET "seasonId" = $1 WHERE "id" = $2`,
-      [seasonBId, episodeAId],
-    );
+    const updatePromise = conn2.query(`UPDATE "episodes" SET "seasonId" = $1 WHERE "id" = $2`, [
+      seasonBId,
+      episodeAId,
+    ]);
 
     // 3. Confirm Connection 2 blocked by Connection 1 on Episode row
     await waitForBlocked(pid2, pid1);
@@ -292,10 +298,10 @@ describe('Phase 3 — PostgreSQL Concurrency & Lock-Order Invariants', () => {
     // 2. Connection 2 attempts Season.tvShowId update
     await conn2.query('BEGIN ISOLATION LEVEL READ COMMITTED');
     await conn2.query('SET statement_timeout = 5000');
-    const updatePromise = conn2.query(
-      `UPDATE "seasons" SET "tvShowId" = $1 WHERE "id" = $2`,
-      [showBId, seasonAId],
-    );
+    const updatePromise = conn2.query(`UPDATE "seasons" SET "tvShowId" = $1 WHERE "id" = $2`, [
+      showBId,
+      seasonAId,
+    ]);
 
     // 3. Confirm Connection 2 blocked by Connection 1 on SeasonA row
     await waitForBlocked(pid2, pid1);
@@ -308,10 +314,9 @@ describe('Phase 3 — PostgreSQL Concurrency & Lock-Order Invariants', () => {
     await conn2.query('ROLLBACK');
 
     // 6. Verify final state
-    const seasonCheck = await monConn.query(
-      `SELECT "tvShowId" FROM "seasons" WHERE "id" = $1`,
-      [seasonAId],
-    );
+    const seasonCheck = await monConn.query(`SELECT "tvShowId" FROM "seasons" WHERE "id" = $1`, [
+      seasonAId,
+    ]);
     expect(seasonCheck.rows[0].tvShowId).toBe(showAId);
   });
 

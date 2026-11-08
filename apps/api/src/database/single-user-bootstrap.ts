@@ -52,7 +52,9 @@ export class SingleUserBootstrap implements OnModuleInit {
       if (rawId && isUUID(rawId, '4')) {
         this.singleUserId = rawId;
       } else {
-        throw new Error('Single-user bootstrap has not been initialized or configuration is invalid.');
+        throw new Error(
+          'Single-user bootstrap has not been initialized or configuration is invalid.',
+        );
       }
     }
     return this.singleUserId;

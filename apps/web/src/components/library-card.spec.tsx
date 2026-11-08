@@ -110,7 +110,16 @@ describe('LibraryCard', () => {
     });
 
     it('shows "Not watched yet" for movies with 0 views', () => {
-      const entry = makeMovieEntry({ watchStats: { totalWatchCount: 0, firstWatchedAt: null, lastWatchedAt: null, episodesWatched: 0, totalEpisodes: 0, completionPercentage: 0 } } as never);
+      const entry = makeMovieEntry({
+        watchStats: {
+          totalWatchCount: 0,
+          firstWatchedAt: null,
+          lastWatchedAt: null,
+          episodesWatched: 0,
+          totalEpisodes: 0,
+          completionPercentage: 0,
+        },
+      } as never);
       render(<LibraryCard entry={entry} onManage={jest.fn()} />);
       expect(screen.getByText('Not watched yet')).toBeInTheDocument();
     });

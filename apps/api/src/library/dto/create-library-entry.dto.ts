@@ -4,7 +4,11 @@ import { MediaType, LibraryStatus } from '@prisma/client';
 import { IsHalfStepRating } from './rating-validator.js';
 
 export class CreateLibraryEntryDto {
-  @ApiProperty({ enum: MediaType, description: 'Media type (MOVIE or TV)', example: MediaType.MOVIE })
+  @ApiProperty({
+    enum: MediaType,
+    description: 'Media type (MOVIE or TV)',
+    example: MediaType.MOVIE,
+  })
   @IsEnum(MediaType)
   mediaType!: MediaType;
 
@@ -19,7 +23,11 @@ export class CreateLibraryEntryDto {
   @IsUUID('4')
   mediaId?: string;
 
-  @ApiProperty({ enum: LibraryStatus, description: 'Watch tracking status', example: LibraryStatus.PLAN_TO_WATCH })
+  @ApiProperty({
+    enum: LibraryStatus,
+    description: 'Watch tracking status',
+    example: LibraryStatus.PLAN_TO_WATCH,
+  })
   @IsEnum(LibraryStatus)
   status!: LibraryStatus;
 

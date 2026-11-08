@@ -12,7 +12,8 @@ export class CreateViewingEventDto {
   watchedAt?: string;
 
   @ApiPropertyOptional({
-    description: 'Specific rating for this viewing session between 1.00 and 10.00 (half-step increments)',
+    description:
+      'Specific rating for this viewing session between 1.00 and 10.00 (half-step increments)',
     example: 8.0,
   })
   @IsOptional()

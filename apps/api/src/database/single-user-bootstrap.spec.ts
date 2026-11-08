@@ -29,10 +29,7 @@ describe('SingleUserBootstrap', () => {
       },
     };
 
-    bootstrap = new SingleUserBootstrap(
-      configService,
-      prismaService as unknown as PrismaService,
-    );
+    bootstrap = new SingleUserBootstrap(configService, prismaService as unknown as PrismaService);
   });
 
   it('fails application bootstrap when CINESPHERE_SINGLE_USER_ID is missing', async () => {
@@ -93,8 +90,6 @@ describe('SingleUserBootstrap', () => {
 
   it('throws in getUserId if bootstrap was never run and environment is missing', () => {
     configService.get.mockReturnValue(undefined);
-    expect(() => bootstrap.getUserId()).toThrow(
-      /Single-user bootstrap has not been initialized/,
-    );
+    expect(() => bootstrap.getUserId()).toThrow(/Single-user bootstrap has not been initialized/);
   });
 });

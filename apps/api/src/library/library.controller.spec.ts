@@ -40,7 +40,9 @@ describe('LibraryController', () => {
 
   it('delegates createLibraryEntry to service', async () => {
     const dto = { mediaType: MediaType.MOVIE, tmdbId: 550, status: LibraryStatus.PLAN_TO_WATCH };
-    libraryService.createLibraryEntry.mockResolvedValueOnce({ id: MOCK_ID } as unknown as LibraryEntryResponse);
+    libraryService.createLibraryEntry.mockResolvedValueOnce({
+      id: MOCK_ID,
+    } as unknown as LibraryEntryResponse);
 
     const res = await controller.createLibraryEntry(dto);
     expect(res.id).toBe(MOCK_ID);
@@ -48,13 +50,26 @@ describe('LibraryController', () => {
   });
 
   it('delegates listLibrary to service', async () => {
-    libraryService.listLibrary.mockResolvedValueOnce({ items: [], totalResults: 0, page: 1, limit: 20, totalPages: 1 });
-    const res = await controller.listLibrary({ page: 1, limit: 20, sortBy: 'updatedAt', sortOrder: 'desc' });
+    libraryService.listLibrary.mockResolvedValueOnce({
+      items: [],
+      totalResults: 0,
+      page: 1,
+      limit: 20,
+      totalPages: 1,
+    });
+    const res = await controller.listLibrary({
+      page: 1,
+      limit: 20,
+      sortBy: 'updatedAt',
+      sortOrder: 'desc',
+    });
     expect(res.totalResults).toBe(0);
   });
 
   it('delegates getLibraryEntry to service', async () => {
-    libraryService.getLibraryEntry.mockResolvedValueOnce({ id: MOCK_ID } as unknown as LibraryEntryResponse);
+    libraryService.getLibraryEntry.mockResolvedValueOnce({
+      id: MOCK_ID,
+    } as unknown as LibraryEntryResponse);
     const res = await controller.getLibraryEntry(MOCK_ID);
     expect(res.id).toBe(MOCK_ID);
     expect(libraryService.getLibraryEntry).toHaveBeenCalledWith(MOCK_ID);
@@ -126,4 +141,3 @@ describe('LibraryController', () => {
     expect(res.rating).toBe(9.5);
   });
 });
-

@@ -69,9 +69,23 @@ function makeMovieEntry(id: string, title: string): LibraryEntryListItem {
     notes: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
-    movie: { id: `mov-${id}`, tmdbId: 1, title, posterPath: null, releaseDate: '2020-01-01', voteAverage: 7.5 },
+    movie: {
+      id: `mov-${id}`,
+      tmdbId: 1,
+      title,
+      posterPath: null,
+      releaseDate: '2020-01-01',
+      voteAverage: 7.5,
+    },
     tvShow: null,
-    watchStats: { totalWatchCount: 1, firstWatchedAt: null, lastWatchedAt: null, episodesWatched: 0, totalEpisodes: 0, completionPercentage: 0 },
+    watchStats: {
+      totalWatchCount: 1,
+      firstWatchedAt: null,
+      lastWatchedAt: null,
+      episodesWatched: 0,
+      totalEpisodes: 0,
+      completionPercentage: 0,
+    },
   } as unknown as LibraryEntryListItem;
 }
 
@@ -139,7 +153,9 @@ describe('LibraryPage', () => {
     });
 
     it('shows the total result count', async () => {
-      mockListLibrary.mockResolvedValueOnce(makePaginatedResult([makeMovieEntry('1', 'Inception')], 42));
+      mockListLibrary.mockResolvedValueOnce(
+        makePaginatedResult([makeMovieEntry('1', 'Inception')], 42),
+      );
       render(<LibraryPage />);
       await waitFor(() => {
         expect(screen.getByText(/42/)).toBeInTheDocument();
@@ -218,7 +234,9 @@ describe('LibraryPage', () => {
     });
 
     it('does not show pagination controls when there is only one page', async () => {
-      mockListLibrary.mockResolvedValueOnce(makePaginatedResult([makeMovieEntry('1', 'Inception')]));
+      mockListLibrary.mockResolvedValueOnce(
+        makePaginatedResult([makeMovieEntry('1', 'Inception')]),
+      );
       render(<LibraryPage />);
       await waitFor(() => {
         expect(screen.queryByRole('button', { name: /next/i })).not.toBeInTheDocument();

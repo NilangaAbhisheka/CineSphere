@@ -50,10 +50,14 @@ export class DatabaseErrorMapper {
     }
 
     DatabaseErrorMapper.logger.error('Unhandled database error:', error);
-    return new InternalServerErrorException(fallbackMessage || 'An unexpected database error occurred.');
+    return new InternalServerErrorException(
+      fallbackMessage || 'An unexpected database error occurred.',
+    );
   }
 
-  private static handleKnownRequestError(error: Prisma.PrismaClientKnownRequestError): HttpException {
+  private static handleKnownRequestError(
+    error: Prisma.PrismaClientKnownRequestError,
+  ): HttpException {
     switch (error.code) {
       case 'P2002': {
         // Unique constraint violation (23505)
@@ -119,7 +123,9 @@ export class DatabaseErrorMapper {
     }
   }
 
-  private static handleUnknownRequestError(error: Prisma.PrismaClientUnknownRequestError): HttpException {
+  private static handleUnknownRequestError(
+    error: Prisma.PrismaClientUnknownRequestError,
+  ): HttpException {
     const msg = error.message;
 
     // Check for trigger-raised exception (P0001)
@@ -166,11 +172,15 @@ export class DatabaseErrorMapper {
       message.includes('chk_viewing_events_rating_half_step') ||
       message.includes('chk_season_ratings_rating_half_step')
     ) {
-      return new BadRequestException('Rating must be between 1.00 and 10.00 in half-step increments (e.g., 7.0, 7.5).');
+      return new BadRequestException(
+        'Rating must be between 1.00 and 10.00 in half-step increments (e.g., 7.0, 7.5).',
+      );
     }
 
     if (message.includes('chk_user_library_entries_media_type_xor')) {
-      return new BadRequestException('Library entry must reference either a movie or a TV show, consistent with mediaType.');
+      return new BadRequestException(
+        'Library entry must reference either a movie or a TV show, consistent with mediaType.',
+      );
     }
 
     return new BadRequestException('Value violates database validation constraints.');

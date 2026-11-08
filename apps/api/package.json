@@ -10,8 +10,8 @@
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "jest --testPathIgnorePatterns=integration",
-    "test:integration": "dotenv -e ../../.env -- jest --testPathPatterns=integration --testTimeout=30000",
-    "prisma:generate": "dotenv -e ../../.env -- prisma generate",
+    "test:integration": "dotenv -e ../../.env -- jest --testPathPatterns=integration --runInBand --testTimeout=30000",
+    "prisma:generate": "prisma generate",
     "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "prisma:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "prisma:studio": "dotenv -e ../../.env -- prisma studio"

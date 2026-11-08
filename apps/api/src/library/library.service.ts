@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   EpisodeProgressResponse,
   LibraryEntryListItem,
@@ -44,7 +39,8 @@ export class LibraryService {
 
     // Verify identifier constraint: exactly one of tmdbId or mediaId must be present
     const hasTmdbId = dto.tmdbId !== undefined && dto.tmdbId !== null;
-    const hasMediaId = dto.mediaId !== undefined && dto.mediaId !== null && dto.mediaId.trim() !== '';
+    const hasMediaId =
+      dto.mediaId !== undefined && dto.mediaId !== null && dto.mediaId.trim() !== '';
 
     if ((!hasTmdbId && !hasMediaId) || (hasTmdbId && hasMediaId)) {
       throw new BadRequestException('Either tmdbId or mediaId must be provided, but not both.');

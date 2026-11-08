@@ -151,7 +151,12 @@ export default function LibraryPage() {
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-lg shadow-sky-600/20 hover:shadow-sky-500/30 transition-all self-start sm:self-center"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4.5v15m7.5-7.5h-15"
+                />
               </svg>
               Discover &amp; Add Titles
             </Link>
@@ -261,7 +266,9 @@ export default function LibraryPage() {
           <ErrorState message={error} onRetry={fetchLibrary} />
         ) : items.length === 0 ? (
           <EmptyState
-            title={selectedStatus === 'ALL' ? 'Your library is empty' : 'No titles found in this view'}
+            title={
+              selectedStatus === 'ALL' ? 'Your library is empty' : 'No titles found in this view'
+            }
             description={
               selectedStatus === 'ALL'
                 ? 'Start building your personal collection by discovering movies and TV shows from TMDB or the local catalogue.'

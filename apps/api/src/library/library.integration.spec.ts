@@ -617,7 +617,9 @@ describe('Library API Integration Tests', () => {
 
       // Verify all child rows are removed from database
       const eventsCount = await prisma.viewingEvent.count({ where: { libraryEntryId: entry.id } });
-      const progressCount = await prisma.episodeProgress.count({ where: { libraryEntryId: entry.id } });
+      const progressCount = await prisma.episodeProgress.count({
+        where: { libraryEntryId: entry.id },
+      });
       const ratingsCount = await prisma.seasonRating.count({ where: { libraryEntryId: entry.id } });
 
       expect(eventsCount).toBe(0);

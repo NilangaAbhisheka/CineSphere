@@ -11,13 +11,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import {
-  ApiConflictResponse,
-  ApiOperation,
-  ApiParam,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiConflictResponse, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import {
   EpisodeProgressResponse,
   LibraryEntryListItem,
@@ -89,7 +83,8 @@ export class LibraryController {
   @Patch(':id')
   @ApiOperation({
     summary: 'Update library entry status, rating, or notes',
-    description: 'Updates tracking status, personal rating (half-step 1.0-10.0), and personal notes.',
+    description:
+      'Updates tracking status, personal rating (half-step 1.0-10.0), and personal notes.',
   })
   @ApiParam({ name: 'id', description: 'Internal library entry UUID (v4)' })
   @ApiResponse({ status: 200, description: 'Updated library entry.' })
@@ -184,7 +179,10 @@ export class LibraryController {
       'Atomically inserts episode progress records for all episodes belonging to the TV show, with optional special seasons exclusion.',
   })
   @ApiParam({ name: 'id', description: 'Internal library entry UUID (v4)' })
-  @ApiResponse({ status: 200, description: 'Batch update complete with count of newly added episodes.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Batch update complete with count of newly added episodes.',
+  })
   @ApiResponse({ status: 400, description: 'Not a TV show.' })
   @ApiResponse({ status: 404, description: 'Library entry not found.' })
   public async markAllWatched(

@@ -41,9 +41,23 @@ function makeListItem(overrides: Partial<LibraryEntryListItem> = {}): LibraryEnt
     notes: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
-    movie: { id: 'mov-1', tmdbId: 100, title: 'Test Movie', posterPath: null, releaseDate: '2020-01-01', voteAverage: 7.5 },
+    movie: {
+      id: 'mov-1',
+      tmdbId: 100,
+      title: 'Test Movie',
+      posterPath: null,
+      releaseDate: '2020-01-01',
+      voteAverage: 7.5,
+    },
     tvShow: null,
-    watchStats: { totalWatchCount: 0, firstWatchedAt: null, lastWatchedAt: null, episodesWatched: 0, totalEpisodes: 0, completionPercentage: 0 },
+    watchStats: {
+      totalWatchCount: 0,
+      firstWatchedAt: null,
+      lastWatchedAt: null,
+      episodesWatched: 0,
+      totalEpisodes: 0,
+      completionPercentage: 0,
+    },
     ...overrides,
   } as unknown as LibraryEntryListItem;
 }
@@ -86,7 +100,13 @@ describe('ApiClient — library methods', () => {
     });
 
     it('passes status and mediaType query params', async () => {
-      globalThis.fetch = makeFetchOk({ items: [], totalResults: 0, page: 1, limit: 20, totalPages: 0 });
+      globalThis.fetch = makeFetchOk({
+        items: [],
+        totalResults: 0,
+        page: 1,
+        limit: 20,
+        totalPages: 0,
+      });
       const client = await getClient();
       await client.listLibrary({ status: 'COMPLETED', mediaType: 'MOVIE', page: 2 });
       const url: string = (globalThis.fetch as jest.Mock).mock.calls[0][0];
@@ -122,7 +142,14 @@ describe('ApiClient — library methods', () => {
       globalThis.fetch = makeFetchError(409, { message: 'Conflict' });
       const client = await getClient();
       await expect(
-        client.createLibraryEntry({ mediaType: 'MOVIE', tmdbId: 1, mediaId: 'm1', status: 'WATCHING', personalRating: null, notes: null }),
+        client.createLibraryEntry({
+          mediaType: 'MOVIE',
+          tmdbId: 1,
+          mediaId: 'm1',
+          status: 'WATCHING',
+          personalRating: null,
+          notes: null,
+        }),
       ).rejects.toMatchObject({ status: 409 });
     });
   });

@@ -201,7 +201,12 @@ describe('LibraryService', () => {
         totalPages: 1,
       });
 
-      const res = await service.listLibrary({ page: 1, limit: 20, sortBy: 'updatedAt', sortOrder: 'desc' });
+      const res = await service.listLibrary({
+        page: 1,
+        limit: 20,
+        sortBy: 'updatedAt',
+        sortOrder: 'desc',
+      });
       expect(res.totalResults).toBe(1);
       expect(res.items[0].watchStats.totalWatchCount).toBe(1);
       expect(res.items[0].watchStats.firstWatchedAt).toBe('2026-01-01T00:00:00.000Z');
@@ -375,7 +380,9 @@ describe('LibraryService', () => {
         watchedAt: watchedDate,
       });
 
-      const res = await service.createEpisodeProgress(MOCK_ENTRY_ID, { episodeId: MOCK_EPISODE_ID });
+      const res = await service.createEpisodeProgress(MOCK_ENTRY_ID, {
+        episodeId: MOCK_EPISODE_ID,
+      });
       expect(res.alreadyWatched).toBe(true);
       expect(mockLibraryRepo.createEpisodeProgress).not.toHaveBeenCalled();
     });
@@ -398,9 +405,9 @@ describe('LibraryService', () => {
         tvShow: null,
       });
 
-      await expect(service.markAllWatched(MOCK_ENTRY_ID, { includeSpecials: false })).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.markAllWatched(MOCK_ENTRY_ID, { includeSpecials: false }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('calls repository markAllWatched and returns addedCount', async () => {
