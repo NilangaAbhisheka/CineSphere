@@ -4,6 +4,8 @@
   "private": true,
   "packageManager": "pnpm@10.11.1",
   "scripts": {
+    "test:e2e": "pnpm --filter @cinesphere/web test:e2e",
+    "test:e2e:report": "pnpm --filter @cinesphere/web test:e2e:report",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
