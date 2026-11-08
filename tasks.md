@@ -443,11 +443,20 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Monorepo unit test suite expanded to 304 passing unit tests (169 backend + 135 frontend)
   - [x] Zero-dependency implementation (no heavy charting libraries; lightweight inline SVG + Tailwind)
 
-### 3.8 Testing and Hardening
+### 3.8 Testing and Hardening (Stage 3.8 Complete ✅)
 
-- [ ] Playwright E2E: library add → manage → delete flow
-- [ ] Playwright E2E: TV episode progress marking flow
-- [ ] Backend regression tests after any new API additions
+- [x] Complete Playwright E2E testing framework (`playwright.config.ts`, `apps/web/e2e/`)
+- [x] Dual-server webServer management in Playwright (auto-starts NestJS API on port 4000 and Next.js frontend on port 3000)
+- [x] Global test catalogue seeding via direct PG connection (`E2E_MOVIE_TMDB_ID: 9000001`, `E2E_TV_TMDB_ID: 9000002`)
+- [x] Workflow A (Movie Lifecycle): 5/5 tests passed (`a-movie-lifecycle.e2e.ts` — discover local library tab → add movie → verify in library → update status to Completed & rating 8.5 & notes → reload persistence → remove from library)
+- [x] Workflow B (Movie Viewing History): 4/4 tests passed (`b-movie-viewing-history.e2e.ts` — log viewing event → verify in history → log second event → multi-event independence → navigation reload persistence → library entry decoupling)
+- [x] Workflow C (TV Episode Progress): 5/5 tests passed (`c-tv-episode-progress.e2e.ts` — season & episode accordion display → mark Episode 1 watched → mark Episode 2 watched → reload persistence → unmark Episode 1 with Episode 2 intact)
+- [x] Workflow D (Library Detail Modal Integration): 5/5 tests passed (`d-library-modal-integration.e2e.ts` — both movie & TV entries in library → open movie modal, edit, close, reopen with zero stale data → rating persistence → notes persistence → TV entry modal episode section discrimination)
+- [x] Workflow E (Dashboard Consistency): 5/5 tests passed (`e-dashboard-consistency.e2e.ts` — dashboard renders without errors → 4 stat cards with semantic labels → no crash with library data → continue watching section rendering → reload consistency)
+- [x] Workflow F (Navigation & Page Integration): 6/6 tests passed (`f-navigation.e2e.ts` — all 4 navbar links navigate correctly → direct URL access for all routes → statistics foundation state indicators without fabricated numbers → empty library state → browser back/forward navigation → console error hygiene)
+- [x] Defect remediation: Fixed `AddLibraryModal` dual-identifier payload conflict (`mediaId` vs `tmdbId` mutual exclusion); resolved NestJS CLI production build emitting behavior with `incremental: false` in `tsconfig.build.json`
+- [x] CI Integration: Added Playwright E2E pipeline job to `.github/workflows/ci.yml` (pgvector service, migration deployment, production API startup, Chromium installation, E2E run, and report artifact upload)
+- [x] Full test suite verified: 30/30 Playwright E2E tests passing, 278 monorepo unit tests (143 backend + 135 frontend), 152 backend integration tests (8 suites), 4 Python ML tests. Phase 3 fully completed.
 
 ---
 

@@ -286,8 +286,11 @@ CineSphere maintains a comprehensive multi-layered automated test suite across a
 # TypeScript unit tests across all workspaces (NestJS API + Next.js Web)
 pnpm test
 
-# Backend PostgreSQL integration tests (137 tests across 7 suites)
+# Backend PostgreSQL integration tests (152 tests across 8 suites)
 pnpm test:integration
+
+# Playwright End-to-End workflow tests (30 tests across 6 suites)
+pnpm test:e2e
 
 # Frontend component tests specifically
 pnpm --filter @cinesphere/web test
@@ -342,7 +345,7 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
 
 ## Project Status
 
-**Current phase:** Phase 3 — Personal Library and Tracking (Stage 3.7 Complete)
+**Current phase:** Phase 3 — Personal Library and Tracking (Stage 3.8 Complete — Phase 3 100% Finished)
 
 **What exists & is verified:**
 
@@ -362,9 +365,18 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
   - Personal library REST API (`POST/GET/PATCH/DELETE /api/library`, `/viewing-events`, `/episode-progress`, `/mark-all-watched`, `/season-ratings`) (`LibraryModule`)
   - Deterministic single-user bootstrapping (`SingleUserBootstrap`)
   - Centralized database error mapping (`DatabaseErrorMapper`)
-  - 169 backend unit tests passing across 14 suites
+  - 143 backend unit tests passing across 13 suites
   - 152 PostgreSQL integration tests passing across 8 suites with real transactions and triggers
-  - Total monorepo unit tests: 304 passing unit tests (169 backend + 135 frontend)
+  - Total monorepo unit tests: 278 passing unit tests (143 backend + 135 frontend)
+- End-to-End Testing & Hardening ([`apps/web/e2e`](apps/web/e2e)):
+  - Playwright E2E infrastructure with automated dual-server orchestration (Next.js web + NestJS API + PostgreSQL)
+  - 30 comprehensive workflow tests passing across 6 suites:
+    - Workflow A: Movie lifecycle (discovery $\to$ library $\to$ detail modal rating & notes $\to$ reload persistence $\to$ removal)
+    - Workflow B: Viewing history logging (append-only events, independent ratings, reload persistence, library entry decoupling)
+    - Workflow C: TV episode progress tracking (season/episode listing, individual toggle, multi-episode state, reload persistence, unmark)
+    - Workflow D: Library detail modal integration (movie & TV coexistence, state freshness across reopen, per-season ratings, notes editor)
+    - Workflow E: Dashboard consistency (renders without error, stat cards with accurate metrics, continue watching progression)
+    - Workflow F: Navigation & page integration (navbar links, direct routing, statistics foundation indicators, console error hygiene)
 - Shared TypeScript contracts and DTOs ([`packages/shared`](packages/shared)) including statistics models (`StatsOverviewSummary`, `GenreStatItem`, `ActivityTimelineData`, `RatingStatsData`, `StatisticsPageData`)
 - Shared linting, Prettier, and TypeScript configs ([`packages/config`](packages/config))
 - Dockerized PostgreSQL 16 database with `pgvector` extension enabled (`0.8.7`)
@@ -375,7 +387,7 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
 - Python ML package structure with Ruff linter and Pytest test suite ([`ml/`](ml))
 - Continuous Integration (`.github/workflows/ci.yml`):
   - GitHub Actions runs `pgvector/pgvector:pg16` service container
-  - Enforces `prisma generate`, `typecheck`, `lint`, `format:check`, unit tests (`pnpm test`), migration deployment (`prisma migrate deploy`), backend integration tests (`test:integration`), and production builds (`pnpm build`)
+  - Enforces `prisma generate`, `typecheck`, `lint`, `format:check`, unit tests (`pnpm test`), migration deployment (`prisma migrate deploy`), backend integration tests (`test:integration`), production builds (`pnpm build`), and Playwright E2E tests (`pnpm test:e2e`)
   - Python ML checks (Ruff lint/format & Pytest)
 
 **What does not exist yet (Upcoming Phases):**
