@@ -6,23 +6,23 @@
 
 ## Project Overview
 
-| Field             | Value                                                                             |
-| ----------------- | --------------------------------------------------------------------------------- |
-| Project           | CineSphere                                                                        |
-| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform |
-| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package            |
-| Phase             | **Phase 3 — Personal Library and Tracking**                                       |
+| Field             | Value                                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Project           | CineSphere                                                                                                                                                               |
+| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                        |
+| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                   |
+| Phase             | **Phase 3 — Personal Library and Tracking**                                                                                                                              |
 | Current Milestone | Phase 3 Stage 3.5 Complete (Frontend Personal Library — My Library page, LibraryCard, AddLibraryModal, LibraryDetailModal, Discover integration, 63 frontend unit tests) |
-| Last Updated      | 2026-11-08                                                                        |
+| Last Updated      | 2026-11-08                                                                                                                                                               |
 
 ---
 
 ## Overall Progress
 
 ```
-Phase 1  — Project Foundation                  ████████████████  95% (monorepo, docker, pgvector, prisma, tooling, CI workflow)
+Phase 1  — Project Foundation                  ████████████████  100% (monorepo, docker, pgvector, prisma, tooling, CI workflow stabilized)
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
-Phase 3  — Personal Library and Tracking       █████████████░░░  75% (Stages 3.0–3.5: DB foundation, bootstrap, integrity, Library REST API, and Frontend Personal Library complete)
+Phase 3  — Personal Library and Tracking       █████████████░░░  75% (Stages 3.0–3.5: DB foundation, bootstrap, integrity, Library REST API, Frontend Personal Library & Baseline Stabilization complete)
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
@@ -131,14 +131,18 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] Confirm Prisma client generates successfully (`prisma generate`)
 - [x] Verify VectorRepository parameterized vector queries and health status diagnostic endpoint
 
-### 1.6 CI Baseline (Optional for Early Phase)
+### 1.6 CI Baseline (Complete & Stabilized)
 
 - [x] Set up GitHub Actions workflow (`.github/workflows/ci.yml`)
-  - [x] Lint and type-check (Turborepo + pnpm)
-  - [x] Run unit tests (Jest across packages)
-  - [x] Build check (Next.js & NestJS compilation)
-  - [x] Python ML checks (Ruff lint/format & Pytest)
-- [ ] Confirm CI passes on main branch (pending initial remote push)
+  - [x] Containerized PostgreSQL 16 service with `pgvector/pgvector:pg16` and healthcheck
+  - [x] Prisma Client code generation (`pnpm prisma:generate`) prior to typecheck
+  - [x] Type-check across monorepo packages (`pnpm typecheck`)
+  - [x] Lint (`pnpm lint`) and code formatting check (`pnpm format:check`)
+  - [x] Unit tests across monorepo packages (`pnpm test` — 189 tests passing)
+  - [x] Database migration deployment (`prisma migrate deploy`)
+  - [x] Backend PostgreSQL integration tests (`pnpm test:integration` — 137 tests passing across 7 suites)
+  - [x] Production build compilation (`pnpm build` — Next.js static pages + NestJS build)
+  - [x] Python ML checks (Ruff lint/format & Pytest — 4/4 passing)
 
 ---
 
@@ -190,8 +194,8 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] Document endpoints in Swagger/OpenAPI
 - [x] Automated PostgreSQL integration tests for movie and TV ingestion idempotency and concurrency (42/42 passing)
 - [x] Conduct Phase 2B reliability and security audit (secret sanitization in error messages, Bearer-only auth, concurrent transaction timeouts)
-- [ ] Implement background sync for trending and popular content (limited scope — see TD-07)
-- [ ] Implement deduplication of catalogue records across discovery sweeps
+- [ ] Implement background sync for trending and popular content — Deferred to Phase 5 / TD-07 (TMDB data seeding scope)
+- [ ] Implement deduplication of catalogue records across discovery sweeps — Deferred to TD-07
 
 ### 2.4 Discover API Endpoints (Phase 2C Complete)
 
@@ -338,6 +342,33 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] TypeScript `tsc --noEmit`: 0 errors
 - [x] ESLint `next lint`: 0 warnings, 0 errors
 - [x] Next.js production build `next build`: exit 0, all pages generated (`/library` 9.23 kB, `/discover` 8.2 kB)
+
+### 3.5B Baseline Stabilization (Complete ✅)
+
+- [x] **CI Pipeline Root-Cause Resolution:**
+  - Added PostgreSQL 16 + pgvector container service (`pgvector/pgvector:pg16`) with healthcheck to `.github/workflows/ci.yml`
+  - Added explicit Prisma Client generation (`pnpm prisma:generate`) step preceding typecheck
+  - Removed unnecessary `dotenv` dependency from `apps/api/package.json` `prisma:generate`
+  - Added migration deployment (`prisma migrate deploy`) and backend integration test run (`pnpm test:integration`) to CI workflow
+- [x] **Monorepo Package Scripts:**
+  - Added `"prisma:generate": "pnpm --filter @cinesphere/api prisma:generate"` to root `package.json`
+  - Added `"test:integration": "pnpm --filter @cinesphere/api test:integration"` to root `package.json`
+  - Added `--runInBand` to `test:integration` in `apps/api/package.json` for deterministic sequential test execution
+- [x] **Automated Test Suite Verification (Clean Local Run):**
+  - Monorepo unit tests: **189/189 passing** across 17 suites (108 backend across 12 suites + 81 frontend across 5 suites)
+  - Backend integration tests: **137/137 passing** across 7 suites against PostgreSQL 16 + pgvector with committed migrations
+  - Python ML checks: **4/4 passing** Pytest, 100% clean Ruff lint and format check
+  - Typecheck: 0 errors across 3 workspaces (`pnpm typecheck`)
+  - Linter: 0 warnings, 0 errors across 3 workspaces (`pnpm lint`)
+  - Formatter: 100% clean across all repository files (`pnpm format:check`)
+  - Production build: exit 0 (`pnpm build` Next.js + NestJS)
+- [x] **Documentation Overhaul & Synchronization:**
+  - `README.md`: Aligned project status (Phase 3 Stage 3.5 complete), corrected TMDB authentication documentation to `TMDB_READ_ACCESS_TOKEN` Bearer token auth, documented `CINESPHERE_SINGLE_USER_ID`, updated setup and testing commands
+  - `docs/ARCHITECTURE.md`: Changed status from "Proposed / Pre-Implementation" to "Active / Implemented Baseline (Phases 1, 2, 3.0–3.5 Verified)", documented implemented routes, components, and backend modules
+  - `docs/DATABASE_DESIGN.md`: Replaced superseded conceptual models (`WatchProgress`, `PersonalRating`, `Review`, `RewatchRecord`, `Media`) with implemented Phase 3 four-model architecture (`UserLibraryEntry`, `ViewingEvent`, `EpisodeProgress`, `SeasonRating`), documented XOR CHECK, rating CHECKs, partial unique indexes, locking order, `VOLATILE` triggers, and READ COMMITTED requirement
+  - `docs/PROJECT_PLAN.md`: Synchronized implementation progress across phases and milestones
+  - `docs/AI_DEVELOPMENT_GUIDE.md`: Aligned test commands and validation steps
+  - `AGENTS.md`: Synchronized test commands and CI standards
 
 ### 3.6 Dashboard
 
@@ -787,12 +818,12 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ## Completed Milestones
 
-| Milestone                                                         | Completed  | Notes                                                                             |
-| ----------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------- |
-| Documentation and architecture initialization                     | 2026-11-05 | All foundation docs created. No implementation yet.                               |
-| Antigravity setup, Git initialization & environment configuration | 2026-11-05 | AGENTS.md, Git init (main), .gitignore, .env.example, .env, root configs created. |
-| Monorepo initialization & PostgreSQL + pgvector foundation        | 2026-11-06 | TD-02/TD-04 resolved. Turborepo+pnpm, Next.js, NestJS, Prisma, pgvector verified. |
-| Phase 2 complete (Catalogue, TMDB Ingestion & Discover UI)        | 2026-11-07 | TMDB client, ingestion, discover API, frontend Discover page, 100+ tests passing.  |
+| Milestone                                                         | Completed  | Notes                                                                                                                                                                 |
+| ----------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Documentation and architecture initialization                     | 2026-11-05 | All foundation docs created. No implementation yet.                                                                                                                   |
+| Antigravity setup, Git initialization & environment configuration | 2026-11-05 | AGENTS.md, Git init (main), .gitignore, .env.example, .env, root configs created.                                                                                     |
+| Monorepo initialization & PostgreSQL + pgvector foundation        | 2026-11-06 | TD-02/TD-04 resolved. Turborepo+pnpm, Next.js, NestJS, Prisma, pgvector verified.                                                                                     |
+| Phase 2 complete (Catalogue, TMDB Ingestion & Discover UI)        | 2026-11-07 | TMDB client, ingestion, discover API, frontend Discover page, 100+ tests passing.                                                                                     |
 | Phase 3 Stages 3.0–3.3 complete (Database Foundation)             | 2026-11-07 | SingleUserBootstrap, 4-model schema + integrity migration, 112 integration tests + 69 unit tests all passing. READ COMMITTED + VOLATILE trigger concurrency verified. |
 
 ---

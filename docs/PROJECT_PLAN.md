@@ -1,8 +1,8 @@
 # CineSphere — Project Plan
 
-**Status:** Planning and Documentation  
-**Last Updated:** 2026-11-05  
-**Version:** 1.0
+**Status:** Active Implementation — Phase 3 (Stages 3.0–3.5 Complete & Baseline Stabilized)  
+**Last Updated:** 2026-11-08  
+**Version:** 1.2
 
 ---
 
@@ -269,18 +269,18 @@ The following are explicitly outside the scope of this project and should not be
 
 ## 7. Implementation Phases
 
-| Phase | Title                            | Key Deliverables                                                                     |
-| ----- | -------------------------------- | ------------------------------------------------------------------------------------ |
-| 1     | Project Foundation               | Monorepo, tooling, Docker, database baseline, documentation                          |
-| 2     | Catalogue and TMDB Integration   | TMDB client, catalogue schema, search and discover API and UI                        |
-| 3     | Personal Library and Tracking    | Library schema, CRUD API, dashboard, library UI                                      |
-| 4     | Statistics and Import/Export     | Statistics API and UI, JSON/CSV import/export                                        |
-| 5     | Recommendation Engine Foundation | Embeddings, similarity, preference signals, baseline scoring, recommendation storage |
-| 6     | Recommendation Intelligence      | Diversity modes, feedback, evaluation, Taste Profile, Taste Evolution                |
-| 7     | Local LLM Integration            | Ollama client, conversational discovery, LLM-enhanced taste profile                  |
-| 8     | Movie Universe                   | HDBSCAN clustering, UMAP coordinates, PixiJS visualization                           |
-| 9     | Testing, Security and QA         | Full test coverage, security audit, performance validation                           |
-| 10    | Deployment and Portfolio Prep    | Anonymization, hosted deployment, portfolio documentation                            |
+| Phase | Title                            | Key Deliverables                                                                     | Status                 |
+| ----- | -------------------------------- | ------------------------------------------------------------------------------------ | ---------------------- |
+| 1     | Project Foundation               | Monorepo, tooling, Docker, database baseline, documentation, CI with pgvector        | **Complete**           |
+| 2     | Catalogue and TMDB Integration   | TMDB client, catalogue schema, search and discover API and UI                        | **Complete**           |
+| 3     | Personal Library and Tracking    | Library schema, CRUD API, frontend My Library & detail modal (Dashboard next)        | **In Progress (3.5✓)** |
+| 4     | Statistics and Import/Export     | Statistics API and UI, JSON/CSV import/export                                        | Planned                |
+| 5     | Recommendation Engine Foundation | Embeddings, similarity, preference signals, baseline scoring, recommendation storage | Planned                |
+| 6     | Recommendation Intelligence      | Diversity modes, feedback, evaluation, Taste Profile, Taste Evolution                | Planned                |
+| 7     | Local LLM Integration            | Ollama client, conversational discovery, LLM-enhanced taste profile                  | Planned                |
+| 8     | Movie Universe                   | HDBSCAN clustering, UMAP coordinates, PixiJS visualization                           | Planned                |
+| 9     | Testing, Security and QA         | Full test coverage, security audit, performance validation                           | Planned                |
+| 10    | Deployment and Portfolio Prep    | Anonymization, hosted deployment, portfolio documentation                            | Planned                |
 
 > See [`tasks.md`](../tasks.md) for detailed per-phase task lists with completion status.
 
@@ -305,16 +305,16 @@ Phase 10 (Deployment) ← depends on Phase 9
 
 ## 9. Milestones and Deliverables
 
-| Milestone | Description                                      | Phase |
-| --------- | ------------------------------------------------ | ----- |
-| M1        | Documentation initialization complete            | 1     |
-| M2        | Local development environment running end-to-end | 1     |
-| M3        | TMDB search and catalogue browsing working       | 2     |
-| M4        | Library tracking working for movies and TV       | 3     |
-| M5        | First recommendation results generated           | 5     |
-| M6        | Movie Universe renders with real embedding data  | 8     |
-| M7        | Full test suite passing                          | 9     |
-| M8        | Hosted portfolio deployment live                 | 10    |
+| Milestone | Description                                      | Phase | Status       |
+| --------- | ------------------------------------------------ | ----- | ------------ |
+| M1        | Documentation initialization complete            | 1     | **Complete** |
+| M2        | Local development environment running end-to-end | 1     | **Complete** |
+| M3        | TMDB search and catalogue browsing working       | 2     | **Complete** |
+| M4        | Library tracking working for movies and TV       | 3     | **Complete** |
+| M5        | First recommendation results generated           | 5     | Planned      |
+| M6        | Movie Universe renders with real embedding data  | 8     | Planned      |
+| M7        | Full test suite passing                          | 9     | In Progress  |
+| M8        | Hosted portfolio deployment live                 | 10    | Planned      |
 
 ---
 

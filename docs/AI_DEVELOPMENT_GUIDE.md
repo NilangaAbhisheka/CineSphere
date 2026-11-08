@@ -216,11 +216,14 @@ Follow this 10-step cycle for every non-trivial task:
 
 ### Step 7 — Run Relevant Tests and Validation
 
-- Run the TypeScript type-checker (`tsc --noEmit`).
-- Run the linter (`eslint`).
-- Run existing tests to confirm nothing is broken.
-- Run any new tests written for this task (`jest`, `playwright`, `pytest`).
-- For Python, run Ruff/Flake8 and Pytest.
+- Generate Prisma client if schema or types changed (`pnpm prisma:generate`).
+- Run the TypeScript type-checker (`pnpm typecheck`).
+- Run the linter (`pnpm lint`).
+- Check formatting (`pnpm format:check`).
+- Run existing unit tests across monorepo packages (`pnpm test`).
+- Run backend PostgreSQL integration tests with Docker service running (`pnpm test:integration`).
+- Run frontend component tests specifically (`pnpm --filter @cinesphere/web test`).
+- For Python, run Ruff (`python -m ruff check ml/` & `python -m ruff format --check ml/`) and Pytest (`python -m pytest ml/tests -v`).
 
 ### Step 8 — Review the Resulting Changes
 

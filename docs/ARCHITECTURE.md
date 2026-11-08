@@ -1,10 +1,10 @@
 # CineSphere — System Architecture
 
-**Status:** Proposed / Pre-Implementation  
-**Last Updated:** 2026-11-05  
-**Version:** 1.0
+**Status:** Active / Implemented Baseline (Phases 1, 2, 3.0–3.5 Verified)  
+**Last Updated:** 2026-11-08  
+**Version:** 1.2
 
-> This document describes the intended architecture. No application code exists yet. Sections marked **[Proposed]** describe design decisions that have not been implemented.
+> This document describes the CineSphere system architecture. The foundation (Phase 1), catalogue and TMDB integration (Phase 2), and personal library & tracking system (Phase 3 Stages 3.0–3.5) are fully implemented and verified with automated test suites. Future domains (recommendation engine, ML pipeline, Movie Universe) remain design specifications.
 
 ---
 
@@ -65,17 +65,34 @@ flowchart TD
 
 ## 2. Component Responsibilities
 
-### 2.1 Frontend — `apps/web/` [Proposed]
+### 2.1 Frontend — `apps/web/` [Implemented & Active]
 
-**Technology:** Next.js 14+ with TypeScript, Tailwind CSS, PixiJS
+**Technology:** Next.js 14+ (App Router) with TypeScript, Tailwind CSS
 
-**Responsibilities:**
+**Implemented Routes & Pages:**
 
-- Render all user interface pages and components.
-- Manage client-side state (library status, filters, UI state).
-- Consume the NestJS REST API exclusively — the frontend never connects directly to the database.
-- Render the Movie Universe interactive map using PixiJS.
-- Handle all user input, form validation on the client side, and display error states.
+- `/` — Landing page with navigation and quick access CTAs.
+- `/discover` — TMDB search, curated popular/trending content, genre/year filters, and catalogue browsing with debounced search input.
+- `/library` — My Library page with 5 status tabs (All, Watching, Plan to Watch, Completed, Dropped), media type filtering, sorting, pagination, and empty/error states.
+
+**Implemented Components:**
+
+- `Navbar` — Responsive navigation header with active page indicators.
+- `LibraryCard` — Visual card displaying poster, title, status badge, media type badge, personal rating badge, watch counts (movies) or episode progress bar (TV), and "Manage Tracking" trigger.
+- `AddLibraryModal` — Dialog for adding any movie or TV show to the personal library with status selection, optional 1.0–10.0 rating, notes, and 409 conflict handling.
+- `LibraryDetailModal` — Comprehensive tracking modal:
+  - Status pill selection and personal rating dropdown.
+  - Personal notes editor with save feedback.
+  - Movie tracking: viewing event logging form (date, rating, notes) and chronological viewing history timeline.
+  - TV tracking: overall progress bar, "Mark All Watched" batch action (with specials toggle), season-by-season accordion, per-episode watched toggles, and per-season ratings.
+  - Delete entry action with confirmation modal.
+- `MediaCard` — Reusable catalogue card with image generator, TMDB attribution, and "Add to Library" integration.
+- `EmptyState`, `ErrorState`, `LoadingSpinner`, `TmdbAttribution`.
+
+**State Management & Data Fetching:**
+
+- Typed `ApiClient` class (`apps/web/src/lib/api-client.ts`) with custom fetch wrapper, typed error handling, and abort controller support.
+- React state with custom hooks (`useDebounce`) and modal lifecycle state.
 
 **Does not:**
 
@@ -83,77 +100,76 @@ flowchart TD
 - Connect to TMDB, PostgreSQL, or Ollama directly.
 - Perform embedding or ML operations.
 
-**State management:** To be decided (TD-05). Candidates: Zustand, Jotai, or React Context. The choice should reflect actual complexity — do not introduce a state management library until its need is clear.
-
-**Data fetching:** React Query (TanStack Query) or SWR for server state. Standard React state for local UI state.
-
 ---
 
-### 2.2 Backend — `apps/api/` [Proposed]
+### 2.2 Backend — `apps/api/` [Implemented & Active]
 
 **Technology:** NestJS with TypeScript
 
-**Responsibilities:**
+**Implemented Modules & Services:**
 
-- Expose all REST API endpoints consumed by the frontend.
-- Implement business logic for library management, statistics, recommendations, and import/export.
-- Integrate with the TMDB API and cache responses in PostgreSQL.
-- Coordinate ML pipeline execution when triggered (via child process or HTTP call to a local ML script).
-- Integrate optionally with Ollama for LLM-dependent features.
-- Own all database access through Prisma.
-- Validate and sanitize all incoming API request data.
-- Handle authentication (approach: TD-10).
+- `DatabaseModule`: Global database access via `PrismaService`, `VectorRepository` (pgvector raw SQL operations), `SingleUserBootstrap` (validates and seeds deterministic user anchor), and `DatabaseErrorMapper` (maps Prisma/Postgres/trigger errors to HTTP exceptions).
+- `HealthModule`: System health checks and pgvector status diagnostics (`GET /api/health`).
+- `TmdbModule`: TMDB integration with `TmdbHttpClient` (Bearer token auth, exponential retry, rate limiting), `TmdbMapper`, `CatalogueRepository`, `TmdbService`, `DiscoverController`, and `TmdbController`.
+- `CatalogueModule`: Local database catalogue browsing, filtering, search, and details endpoints (`GET /api/catalogue/movies`, `/tv`, `/movies/:id`, `/tv/:id`).
+- `LibraryModule`: Personal library management (`POST/GET/PATCH/DELETE /api/library`, viewing events, episode progress, mark-all-watched, season ratings).
+- Swagger / OpenAPI documentation automatically generated and served at `/api/docs`.
 
 **Does not:**
 
 - Contain ML logic (embedding generation, clustering, UMAP). Those live in the Python `ml/` package.
 - Render the UI.
 
-**Module structure:** Feature-based NestJS modules:
+---
 
-- `DatabaseModule`: Global database access via `PrismaService` and `VectorRepository`.
-- `HealthModule`: System health checks, DB connectivity, and pgvector diagnostics.
-- `TmdbModule`: TMDB metadata integration and catalogue ingestion (`TmdbHttpClient`, `TmdbMapper`, `CatalogueRepository`, `TmdbService`, `TmdbController`).
-- Future domains (library, recommendations, statistics) follow the same feature-module architecture.
+### 2.3 Shared Packages — `packages/` [Implemented & Active]
+
+**`packages/shared/`:** Shared TypeScript types, interfaces, DTOs, and utility functions used by both `apps/web` and `apps/api`:
+
+- Library types: `LibraryMediaType`, `LibraryStatus`, `LibraryEntryResponse`, `ViewingEventResponse`, `EpisodeProgressResponse`, `SeasonRatingResponse`, `LibraryEntryStats`.
+- Media types: `MovieDetails`, `TvShowDetails`, `SeasonDetails`, `EpisodeDetails`, `Genre`, `PersonCredit`.
+- TMDB types: search results, trending/popular responses, pagination contracts.
+- Health and vector diagnostic types.
+
+**`packages/config/`:** Shared ESLint, Prettier, and TypeScript configurations ensuring strict type checking and consistent formatting across the monorepo.
 
 ---
 
-### 2.3 Shared Packages — `packages/` [Proposed]
+### 2.4 Python ML Package — `ml/` [Scaffolding Implemented, Algorithms Planned for Phase 5+]
 
-**`packages/shared/`:** Shared TypeScript types, interfaces, and utility functions used by both `apps/web` and `apps/api`. No business logic. Types for API request/response shapes, library entry structures, recommendation types, etc.
+**Technology:** Python 3.12, Pytest, Ruff (active); Sentence Transformers, scikit-learn, HDBSCAN, UMAP-learn (planned)
 
-**`packages/config/`:** Shared ESLint, Prettier, and TypeScript configuration. Ensures consistent formatting and type-checking rules across all TypeScript packages.
+**Active Baseline:**
 
----
+- Python virtual environment with `pyproject.toml` packaging.
+- Ruff linting and formatting configured and clean.
+- Pytest suite configured with baseline test suite (4/4 passing).
 
-### 2.4 Python ML Package — `ml/` [Proposed]
-
-**Technology:** Python 3.11+, Sentence Transformers, scikit-learn, HDBSCAN, UMAP-learn, numpy, pandas, psycopg2 or asyncpg
-
-**Responsibilities:**
+**Planned ML Responsibilities (Phase 5+):**
 
 - Generate semantic embeddings for catalogue items using Sentence Transformers.
 - Compute cosine similarity and precompute nearest-neighbour relationships.
 - Run HDBSCAN clustering on high-dimensional embedding space.
 - Run UMAP to generate 2D coordinates for visualization only.
-- Compute recommendation scores.
-- Generate taste profile snapshots.
+- Compute recommendation scores and taste profile snapshots.
 - Write results directly back to PostgreSQL.
 
-**Operating model:** Scripts run on-demand — triggered manually, by the backend, or on a schedule. There is no permanently running ML service. This is the correct choice at this scale; a persistent service would add operational complexity without benefit.
-
-**Database access:** Direct PostgreSQL connection via psycopg2 or similar. The Python layer does not use Prisma. It reads catalogue and library data, runs computations, and writes embeddings and precomputed results back to the database.
+**Operating model:** Scripts run on-demand — triggered manually, by the backend, or on a schedule. There is no permanently running ML service.
 
 ---
 
-### 2.5 Infrastructure — `infrastructure/` [Proposed]
+### 2.5 Infrastructure & CI — `infrastructure/` & `.github/` [Implemented & Active]
 
-**Docker Compose** provides the local development environment:
+**Local Development Environment:**
 
-- PostgreSQL 16 with pgvector extension.
-- NestJS API (or runs outside Docker during active development — to be decided).
-- Next.js frontend (or runs outside Docker — same decision).
-- Optional Ollama container (disabled by default via Docker Compose profiles).
+- PostgreSQL 16 with pgvector extension (`pgvector/pgvector:pg16`) via `docker-compose.yml`.
+- Next.js and NestJS run on the host system with fast HMR.
+
+**Continuous Integration (`.github/workflows/ci.yml`):**
+
+- Two parallel jobs: `typescript` and `python`.
+- `typescript` job utilizes a containerized PostgreSQL 16 + pgvector service, executes `prisma generate`, `typecheck`, `lint`, `format:check`, `pnpm test` (unit tests), applies migrations via `prisma migrate deploy`, runs 137 backend integration tests (`test:integration`), and performs production builds (`pnpm build`).
+- `python` job runs Ruff lint, Ruff format check, and Pytest on Python 3.12.
 
 ---
 

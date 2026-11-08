@@ -155,13 +155,19 @@ cinesphere/
 - **Migration Workflow:**
   - Tracked migration `<timestamp>_phase3_models`: defines Prisma tables, enums, and foreign-key constraints.
   - Tracked migration `<timestamp>_phase3_integrity`: defines XOR CHECK, rating CHECKs, partial unique indexes, locking helper functions, and VOLATILE triggers.
-- **Test Commands:**
-  - Unit tests: `pnpm --filter @cinesphere/api test`
-  - Integration tests (all): `pnpm --filter @cinesphere/api exec jest --testPathPatterns="integration" --runInBand`
+- **Test & Validation Commands:**
+  - Full monorepo unit tests: `pnpm test`
+  - Backend unit tests: `pnpm --filter @cinesphere/api test`
+  - Frontend unit tests: `pnpm --filter @cinesphere/web test`
+  - Integration tests (all 7 suites, 137 tests): `pnpm test:integration`
   - Concurrency tests: `pnpm --filter @cinesphere/api exec jest --runInBand src/database/phase3-concurrency.integration.spec.ts`
   - Constraints & triggers: `pnpm --filter @cinesphere/api exec jest --runInBand src/database/phase3-constraints.integration.spec.ts`
   - Prisma error experiments: `pnpm --filter @cinesphere/api exec jest --runInBand src/database/phase3-prisma-errors.integration.spec.ts`
-
+  - Python tests: `python -m pytest ml/tests -v`
+  - Python lint & format: `python -m ruff check ml/` and `python -m ruff format --check ml/`
+- **CI / Pipeline Standards:**
+  - `pnpm prisma:generate` must precede typecheck so Prisma Client types exist in clean runners.
+  - Integration tests run in CI against a real `pgvector/pgvector:pg16` service container with committed migrations applied via `prisma migrate deploy`.
 
 ---
 

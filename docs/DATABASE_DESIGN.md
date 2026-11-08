@@ -1,88 +1,58 @@
 # CineSphere — Database Design
 
-**Status:** Phase 2A Catalogue Foundation Implemented & Aligned
+**Status:** Phase 1, Phase 2, and Phase 3 (Stages 3.0–3.5) Implemented & Verified
 
-**Last Updated:** 2026-11-06
+**Last Updated:** 2026-11-08
 
-**Version:** 1.1
+**Version:** 1.3
 
-> This document defines the CineSphere database architecture. Phase 1 foundation tables and Phase 2A catalogue tables have been implemented and verified with PostgreSQL/Prisma migrations. Higher-phase tables remain design specifications.
+> This document defines the CineSphere database architecture. Phase 1 foundation tables, Phase 2 catalogue tables, and Phase 3 personal library tables and integrity triggers are fully implemented and verified with PostgreSQL/Prisma migrations. Higher-phase tables remain design specifications.
 
 ---
 
 ## 1. Design Principles
 
-1. **Separate catalogue data from personal data.** The catalogue (movies, TV shows, seasons, episodes, genres, etc.) is shared reference data fetched from TMDB. Personal data (library entries, ratings, reviews, recommendation history) belongs exclusively to the user. This separation makes hosted demo anonymization straightforward.
+1. **Separate catalogue data from personal data.** The catalogue (movies, TV shows, seasons, episodes, genres, etc.) is shared reference data fetched from TMDB. Personal data (library entries, viewing events, episode progress, season ratings, recommendation history) belongs exclusively to the user. This separation makes hosted demo anonymization straightforward.
 
-2. **Never overwrite personal history.** Ratings, library entries, recommendation records, and feedback are append-friendly. Historical records must survive algorithm changes or re-imports.
+2. **Never overwrite personal history.** Viewing events, ratings, library entries, recommendation records, and feedback are append-friendly. Historical records survive algorithm changes or re-imports.
 
-3. **Vector columns are isolated.** pgvector `vector` columns are stored in a dedicated table (`MediaEmbedding`) rather than embedded in the main media table. This keeps the schema clean and allows Prisma to manage non-vector columns while raw SQL handles vector operations.
+3. **Vector columns are isolated.** pgvector `vector` columns are stored in a dedicated table (`MediaEmbedding`) rather than embedded in the main media tables. This keeps the schema clean and allows Prisma to manage non-vector columns while raw SQL handles vector operations.
 
-4. **Avoid premature normalization.** Tables exist to serve documented use cases. Do not create a table unless there is a clear reason for it.
+4. **Database-enforced integrity over application assumptions.** Multi-table invariants, XOR media exclusivity, and rating bounds are strictly enforced via PostgreSQL CHECK constraints, partial unique indexes, locking helper functions, and `VOLATILE` triggers.
 
-5. **Indexing is planned at design time.** Performance-relevant columns are identified here and implemented when the schema is migrated.
+5. **Avoid premature normalization.** Tables exist to serve documented use cases. Do not create a table unless there is a clear reason for it.
+
+6. **Indexing is planned at design time.** Performance-relevant columns and partial unique constraints are implemented directly in tracked database migrations.
 
 ---
 
 ## 2. Entity Overview
 
-| Entity | Purpose |
-
-| -------------------------- | -------------------------------------------------------------------- |
-
-| `User` | Single application user. Single row for local mode. |
-
-| `Media` | Polymorphic base for movies and TV shows. Shared catalogue metadata. |
-
-| `Movie` | Movie-specific metadata (runtime, release date, etc.). |
-
-| `TvShow` | TV-show-specific metadata (network, number of seasons, etc.). |
-
-| `Season` | A season within a TV show. |
-
-| `Episode` | A single episode within a season. |
-
-| `Genre` | Reference table for TMDB genres. |
-
-| `Keyword` | Reference table for TMDB keywords. |
-
-| `Person` | Cast and crew members. |
-
-| `MediaGenre` | Join: media ↔ genre. |
-
-| `MediaKeyword` | Join: media ↔ keyword. |
-
-| `MediaCast` | Join: media ↔ person with role/character. |
-
-| `UserLibraryEntry` | A user's relationship with a media item (status, dates). |
-
-| `WatchProgress` | TV episode tracking for a library entry. |
-
-| `PersonalRating` | A user's numeric rating for a media item or season. |
-
-| `Review` | Optional text review or notes for a library entry. |
-
-| `RewatchRecord` | Tracks individual rewatch events for movies. |
-
-| `MediaEmbedding` | Semantic embedding vector for a media item (pgvector). |
-
-| `MediaSimilarity` | Precomputed cosine similarity neighbours. |
-
-| `ClusterAssignment` | HDBSCAN cluster assignment and UMAP 2D coordinates. |
-
-| `Cluster` | Cluster metadata (label, description, colour). |
-
-| `RecommendationRecord` | A single recommendation shown to the user. |
-
-| `RecommendationImpression` | Record that a recommendation was displayed. |
-
-| `RecommendationFeedback` | User feedback on a recommendation. |
-
-| `TasteProfile` | Current structured taste profile. |
-
-| `TasteProfileSnapshot` | Historical snapshots of the taste profile. |
-
-| `UserPreference` | Application and recommendation settings. |
+| Entity                     | Purpose                                                                                 | Status                  |
+| -------------------------- | --------------------------------------------------------------------------------------- | ----------------------- |
+| `User`                     | Single application user. Anchored by deterministic UUID (`CINESPHERE_SINGLE_USER_ID`).  | Implemented (Phase 1/3) |
+| `Movie`                    | Movie-specific catalogue metadata (runtime, release date, TMDB ID, budget, etc.).       | Implemented (Phase 2)   |
+| `TvShow`                   | TV-show-specific catalogue metadata (first/last air date, status, seasons count, etc.). | Implemented (Phase 2)   |
+| `Season`                   | A season within a TV show (supporting season 0 specials).                               | Implemented (Phase 2)   |
+| `Episode`                  | A single episode within a season.                                                       | Implemented (Phase 2)   |
+| `Genre`                    | Reference table for TMDB genres. Implicit M2M with Movie and TvShow.                    | Implemented (Phase 2)   |
+| `Keyword`                  | Reference table for TMDB keywords. Implicit M2M with Movie and TvShow.                  | Implemented (Phase 2)   |
+| `Person`                   | Cast and crew members from TMDB.                                                        | Implemented (Phase 2)   |
+| `PersonCredit`             | Combined junction: person ↔ movie / TV show with role, character, and XOR check.        | Implemented (Phase 2)   |
+| `UserLibraryEntry`         | Core tracking record: status, personal rating (1.0–10.0 half-step), notes, XOR check.   | Implemented (Phase 3)   |
+| `ViewingEvent`             | Append-only watch history: watchedAt timestamp, rating, notes.                          | Implemented (Phase 3)   |
+| `EpisodeProgress`          | Composite PK (libraryEntryId, episodeId): existence denotes watched status.             | Implemented (Phase 3)   |
+| `SeasonRating`             | Per-season rating: unique (libraryEntryId, seasonId), rating (1.0–10.0 half-step).      | Implemented (Phase 3)   |
+| `MediaEmbedding`           | Semantic embedding vector for a media item (pgvector).                                  | Planned (Phase 5)       |
+| `MediaSimilarity`          | Precomputed cosine similarity neighbours.                                               | Planned (Phase 5)       |
+| `ClusterAssignment`        | HDBSCAN cluster assignment and UMAP 2D coordinates.                                     | Planned (Phase 8)       |
+| `Cluster`                  | Cluster metadata (label, description, colour).                                          | Planned (Phase 8)       |
+| `RecommendationRecord`     | A single recommendation shown to the user.                                              | Planned (Phase 5)       |
+| `RecommendationImpression` | Record that a recommendation was displayed.                                             | Planned (Phase 6)       |
+| `RecommendationFeedback`   | User feedback on a recommendation.                                                      | Planned (Phase 6)       |
+| `TasteProfile`             | Current structured taste profile.                                                       | Planned (Phase 6)       |
+| `TasteProfileSnapshot`     | Historical snapshots of the taste profile.                                              | Planned (Phase 6)       |
+| `UserPreference`           | Application and recommendation settings.                                                | Planned (Phase 6)       |
 
 ---
 
@@ -406,129 +376,133 @@ To prevent duplicate person-to-movie or person-to-TV-show credits without confli
 
 ### 3.11 UserLibraryEntry
 
-**Purpose:** The user's relationship with a specific media item. The core personal data record.
+**Purpose:** Core tracking record representing the user's relationship with a movie or TV show.
 
-| Field | Type | Notes |
+| Field            | Type                                                        | Notes                                               |
+| ---------------- | ----------------------------------------------------------- | --------------------------------------------------- |
+| `id`             | `UUID` PK                                                   | Primary key generated via `gen_random_uuid()`       |
+| `userId`         | `UUID` FK → `users.id`                                      | Single user anchor (`onDelete: Cascade`)            |
+| `mediaType`      | `ENUM('MOVIE', 'TV')`                                       | Denotes whether the entry tracks a movie or TV show |
+| `movieId`        | `UUID` FK → `movies.id` (nullable)                          | Referenced movie (`onDelete: Restrict`)             |
+| `tvShowId`       | `UUID` FK → `tv_shows.id` (nullable)                        | Referenced TV show (`onDelete: Restrict`)           |
+| `status`         | `ENUM('PLAN_TO_WATCH', 'WATCHING', 'COMPLETED', 'DROPPED')` | Current tracking status                             |
+| `personalRating` | `DECIMAL(4,2)` (nullable)                                   | Rating 1.00–10.00 in 0.5 increments                 |
+| `notes`          | `TEXT` (nullable)                                           | Personal notes / review text                        |
+| `createdAt`      | `TIMESTAMPTZ(6)`                                            | Record creation timestamp                           |
+| `updatedAt`      | `TIMESTAMPTZ(6)`                                            | Record update timestamp                             |
 
-| ------------- | ----------------------------------------------------------- | -------------------------------------------- |
+**Integrity Constraints & Partial Unique Indexes:**
 
-| `id` | `UUID` PK | |
+- **Media XOR Constraint:**
+  ```sql
+  CONSTRAINT "chk_library_entry_media_xor" CHECK (
+    ("mediaType" = 'MOVIE' AND "movieId" IS NOT NULL AND "tvShowId" IS NULL) OR
+    ("mediaType" = 'TV' AND "movieId" IS NULL AND "tvShowId" IS NOT NULL)
+  )
+  ```
+- **Rating Check Constraint:**
+  ```sql
+  CONSTRAINT "chk_library_entry_rating_valid" CHECK (
+    "personalRating" IS NULL OR (
+      "personalRating" >= 1.00 AND "personalRating" <= 10.00 AND
+      ("personalRating" * 2) = ROUND("personalRating" * 2)
+    )
+  )
+  ```
+- **Partial Unique Indexes:**
+  ```sql
+  CREATE UNIQUE INDEX "idx_user_library_entry_user_movie_unique"
+    ON "user_library_entries" ("userId", "movieId") WHERE "movieId" IS NOT NULL;
 
-| `userId` | `UUID` FK → `User.id` | |
-
-| `mediaId` | `UUID` FK → `Media.id` | |
-
-| `status` | `ENUM('watching', 'completed', 'plan_to_watch', 'dropped')` | |
-
-| `addedAt` | `TIMESTAMPTZ` | When the entry was added to the library |
-
-| `startedAt` | `TIMESTAMPTZ` | When the user started watching (nullable) |
-
-| `completedAt` | `TIMESTAMPTZ` | When the user marked as completed (nullable) |
-
-| `updatedAt` | `TIMESTAMPTZ` | |
-
-**Constraints:** `UNIQUE(userId, mediaId)` — one entry per user per media item.
-
-**Indexes:**
-
-- `(userId, status)` — library list filtering.
-
-- `(userId, updatedAt DESC)` — recently updated items.
-
-- `mediaId` — reverse lookup.
-
----
-
-### 3.12 WatchProgress
-
-**Purpose:** Tracks TV show episode progress for a library entry. Updated as the user advances through episodes.
-
-| Field | Type | Notes |
-
-| ---------------------- | --------------------------------- | ----- |
-
-| `id` | `UUID` PK | |
-
-| `libraryEntryId` | `UUID` FK → `UserLibraryEntry.id` | |
-
-| `currentSeasonNumber` | `INTEGER` | |
-
-| `currentEpisodeNumber` | `INTEGER` | |
-
-| `lastWatchedAt` | `TIMESTAMPTZ` | |
-
-| `updatedAt` | `TIMESTAMPTZ` | |
-
-**Relationship:** One-to-one with `UserLibraryEntry` (only for TV shows).
+  CREATE UNIQUE INDEX "idx_user_library_entry_user_tv_unique"
+    ON "user_library_entries" ("userId", "tvShowId") WHERE "tvShowId" IS NOT NULL;
+  ```
 
 ---
 
-### 3.13 PersonalRating
+### 3.12 ViewingEvent
 
-**Purpose:** The user's numeric rating for a media item or for a specific season.
+**Purpose:** Immutable, append-only watch history log for movies and rewatch tracking.
 
-| Field | Type | Notes |
+| Field            | Type                                  | Notes                                                         |
+| ---------------- | ------------------------------------- | ------------------------------------------------------------- |
+| `id`             | `UUID` PK                             | Primary key generated via `gen_random_uuid()`                 |
+| `libraryEntryId` | `UUID` FK → `user_library_entries.id` | Parent library entry (`onDelete: Cascade`)                    |
+| `watchedAt`      | `TIMESTAMPTZ(6)`                      | Date and time the title was watched (defaults to `now()`)     |
+| `rating`         | `DECIMAL(4,2)` (nullable)             | Specific rating for this viewing (1.00–10.00, 0.5 increments) |
+| `notes`          | `TEXT` (nullable)                     | Optional notes for this viewing event                         |
+| `createdAt`      | `TIMESTAMPTZ(6)`                      | Log entry creation timestamp                                  |
 
-| ----------- | ----------------------- | ------------------------------------------------------ |
+**Rating Check Constraint:**
 
-| `id` | `UUID` PK | |
-
-| `userId` | `UUID` FK → `User.id` | |
-
-| `mediaId` | `UUID` FK → `Media.id` | Nullable if rating is for a season |
-
-| `seasonId` | `UUID` FK → `Season.id` | Nullable if rating is for the full media item |
-
-| `rating` | `DECIMAL(3,1)` | Range: 1.0–10.0 (to be confirmed per TD-05 equivalent) |
-
-| `ratedAt` | `TIMESTAMPTZ` | |
-
-| `updatedAt` | `TIMESTAMPTZ` | |
-
-**Constraints:** `UNIQUE(userId, mediaId)` for overall ratings; `UNIQUE(userId, seasonId)` for season ratings.
-
-> **Open decision:** Rating scale (1–10 with 0.5 steps vs. 1–10 integer). Decide before implementing. Document in `tasks.md`.
+```sql
+CONSTRAINT "chk_viewing_event_rating_valid" CHECK (
+  "rating" IS NULL OR (
+    "rating" >= 1.00 AND "rating" <= 10.00 AND
+    ("rating" * 2) = ROUND("rating" * 2)
+  )
+)
+```
 
 ---
 
-### 3.14 Review
+### 3.13 EpisodeProgress
 
-**Purpose:** Optional text review or private notes for a library entry.
+**Purpose:** Episode-level tracking for TV shows. Record existence denotes "watched"; record deletion denotes "unwatched".
 
-| Field | Type | Notes |
+| Field            | Type                                  | Notes                                               |
+| ---------------- | ------------------------------------- | --------------------------------------------------- |
+| `libraryEntryId` | `UUID` FK → `user_library_entries.id` | Parent library entry (`onDelete: Cascade`)          |
+| `episodeId`      | `UUID` FK → `episodes.id`             | Target episode (`onDelete: Restrict`)               |
+| `watchedAt`      | `TIMESTAMPTZ(6)`                      | Timestamp when marked watched (defaults to `now()`) |
 
-| ------------------ | ---------------------------------------- | -------------------- |
-
-| `id` | `UUID` PK | |
-
-| `libraryEntryId` | `UUID` FK → `UserLibraryEntry.id` UNIQUE | One review per entry |
-
-| `content` | `TEXT` | Freeform text |
-
-| `containsSpoilers` | `BOOLEAN` | User-flagged |
-
-| `createdAt` | `TIMESTAMPTZ` | |
-
-| `updatedAt` | `TIMESTAMPTZ` | |
+**Primary Key:** Composite `(libraryEntryId, episodeId)`.
 
 ---
 
-### 3.15 RewatchRecord
+### 3.14 SeasonRating
 
-**Purpose:** Tracks individual rewatch events for a movie (not a rewatch counter).
+**Purpose:** Stores season-level user ratings for TV shows.
 
-| Field | Type | Notes |
+| Field            | Type                                  | Notes                                         |
+| ---------------- | ------------------------------------- | --------------------------------------------- |
+| `id`             | `UUID` PK                             | Primary key generated via `gen_random_uuid()` |
+| `libraryEntryId` | `UUID` FK → `user_library_entries.id` | Parent library entry (`onDelete: Cascade`)    |
+| `seasonId`       | `UUID` FK → `seasons.id`              | Target season (`onDelete: Restrict`)          |
+| `rating`         | `DECIMAL(4,2)`                        | Season rating (1.00–10.00, 0.5 increments)    |
+| `createdAt`      | `TIMESTAMPTZ(6)`                      | Timestamp when rated                          |
+| `updatedAt`      | `TIMESTAMPTZ(6)`                      | Timestamp when updated                        |
 
-| ---------------- | --------------------------------- | ------------------------------- |
+**Constraints:**
 
-| `id` | `UUID` PK | |
+- `UNIQUE(libraryEntryId, seasonId)` — at most one rating per season per library entry.
+- **Rating Check Constraint:**
+  ```sql
+  CONSTRAINT "chk_season_rating_valid" CHECK (
+    "rating" >= 1.00 AND "rating" <= 10.00 AND
+    ("rating" * 2) = ROUND("rating" * 2)
+  )
+  ```
 
-| `libraryEntryId` | `UUID` FK → `UserLibraryEntry.id` | |
+---
 
-| `watchedAt` | `DATE` | Date of the rewatch |
+### 3.15 Database Integrity Invariants, Locks & Triggers
 
-| `notes` | `TEXT` | Optional notes for this rewatch |
+To prevent race conditions, orphan child records, and invalid cross-show episode/season associations:
+
+1. **Transaction Isolation Level Requirement:**
+   - **READ COMMITTED is mandatory** for all transactions creating or modifying library entries, episode progress, and season ratings.
+   - REPEATABLE READ and SERIALIZABLE must not be used for parent updates, as snapshot isolation predates unblocking concurrent inserts.
+
+2. **Deadlock-Free Locking Order:**
+   - `EpisodeProgress` validation trigger: Locks `UserLibraryEntry` (`FOR SHARE`) $\to$ `Episode` (`FOR SHARE`) $\to$ `Season` (`FOR SHARE`). Locks are acquired before checking ownership to prevent stale-read races.
+   - `SeasonRating` validation trigger: Locks `UserLibraryEntry` (`FOR SHARE`) $\to$ `Season` (`FOR SHARE`).
+
+3. **Parent Protection Triggers (`VOLATILE`):**
+   - `trg_protect_ule_tv_show_id`: Prevents updating `tvShowId` on a library entry if episode progress or season ratings exist.
+   - `trg_protect_episode_season_id`: Prevents updating `seasonId` on an episode if episode progress exists.
+   - `trg_protect_season_tv_show_id`: Prevents updating `tvShowId` on a season if season ratings or episode progress exist.
+   - All trigger functions are declared `VOLATILE` so `SELECT EXISTS` evaluates against fresh committed data.
 
 ---
 
