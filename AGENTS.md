@@ -159,7 +159,7 @@ cinesphere/
   - Full monorepo unit tests: `pnpm test`
   - Backend unit tests: `pnpm --filter @cinesphere/api test`
   - Frontend unit tests: `pnpm --filter @cinesphere/web test`
-  - Integration tests (all 7 suites, 137 tests): `pnpm test:integration`
+  - Integration tests (all 8 suites, 152 tests): `pnpm test:integration`
   - Concurrency tests: `pnpm --filter @cinesphere/api exec jest --runInBand src/database/phase3-concurrency.integration.spec.ts`
   - Constraints & triggers: `pnpm --filter @cinesphere/api exec jest --runInBand src/database/phase3-constraints.integration.spec.ts`
   - Prisma error experiments: `pnpm --filter @cinesphere/api exec jest --runInBand src/database/phase3-prisma-errors.integration.spec.ts`

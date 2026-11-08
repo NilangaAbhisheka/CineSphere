@@ -71,13 +71,14 @@ flowchart TD
 
 **Implemented Routes & Pages:**
 
-- `/` — Landing page with navigation and quick access CTAs.
+- `/` — Personal Dashboard with Viewing Summary cards, Continue Watching section (progress bars, next-episode calculations), Recent Activity feed, and Quick Picks catalogue recommendations.
 - `/discover` — TMDB search, curated popular/trending content, genre/year filters, and catalogue browsing with debounced search input.
 - `/library` — My Library page with 5 status tabs (All, Watching, Plan to Watch, Completed, Dropped), media type filtering, sorting, pagination, and empty/error states.
 
 **Implemented Components:**
 
-- `Navbar` — Responsive navigation header with active page indicators.
+- `Navbar` — Responsive navigation header with active page indicators (Dashboard, Discover, My Library).
+- `StatCard` / `ContinueWatchingCard` / `RecentActivityRow` / `QuickPickCard` — Dashboard widget components with loading skeletons and empty states.
 - `LibraryCard` — Visual card displaying poster, title, status badge, media type badge, personal rating badge, watch counts (movies) or episode progress bar (TV), and "Manage Tracking" trigger.
 - `AddLibraryModal` — Dialog for adding any movie or TV show to the personal library with status selection, optional 1.0–10.0 rating, notes, and 409 conflict handling.
 - `LibraryDetailModal` — Comprehensive tracking modal:
@@ -113,6 +114,7 @@ flowchart TD
 - `TmdbModule`: TMDB integration with `TmdbHttpClient` (Bearer token auth, exponential retry, rate limiting), `TmdbMapper`, `CatalogueRepository`, `TmdbService`, `DiscoverController`, and `TmdbController`.
 - `CatalogueModule`: Local database catalogue browsing, filtering, search, and details endpoints (`GET /api/catalogue/movies`, `/tv`, `/movies/:id`, `/tv/:id`).
 - `LibraryModule`: Personal library management (`POST/GET/PATCH/DELETE /api/library`, viewing events, episode progress, mark-all-watched, season ratings).
+- `DashboardModule`: Consolidated dashboard data aggregation (`GET /api/dashboard/overview`, `/stats`, `/continue-watching`, `/recent-activity`, `/quick-picks`).
 - Swagger / OpenAPI documentation automatically generated and served at `/api/docs`.
 
 **Does not:**
@@ -126,6 +128,7 @@ flowchart TD
 
 **`packages/shared/`:** Shared TypeScript types, interfaces, DTOs, and utility functions used by both `apps/web` and `apps/api`:
 
+- Dashboard types: `DashboardOverviewResponse`, `DashboardStats`, `ContinueWatchingItem`, `RecentActivityItem`, `QuickPickItem`, `NextEpisodeInfo`.
 - Library types: `LibraryMediaType`, `LibraryStatus`, `LibraryEntryResponse`, `ViewingEventResponse`, `EpisodeProgressResponse`, `SeasonRatingResponse`, `LibraryEntryStats`.
 - Media types: `MovieDetails`, `TvShowDetails`, `SeasonDetails`, `EpisodeDetails`, `Genre`, `PersonCredit`.
 - TMDB types: search results, trending/popular responses, pagination contracts.

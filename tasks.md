@@ -6,14 +6,14 @@
 
 ## Project Overview
 
-| Field             | Value                                                                                                                                                                    |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Project           | CineSphere                                                                                                                                                               |
-| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                        |
-| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                   |
-| Phase             | **Phase 3 — Personal Library and Tracking**                                                                                                                              |
-| Current Milestone | Phase 3 Stage 3.5 Complete (Frontend Personal Library — My Library page, LibraryCard, AddLibraryModal, LibraryDetailModal, Discover integration, 63 frontend unit tests) |
-| Last Updated      | 2026-11-08                                                                                                                                                               |
+| Field             | Value                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project           | CineSphere                                                                                                                                                                |
+| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                         |
+| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                    |
+| Phase             | **Phase 3 — Personal Library and Tracking**                                                                                                                               |
+| Current Milestone | Phase 3 Stage 3.6 Complete (Dashboard Implementation — Overview, Continue Watching, Recent Activity, Quick Picks, Viewing Summary, 250 unit tests, 152 integration tests) |
+| Last Updated      | 2026-11-09                                                                                                                                                                |
 
 ---
 
@@ -22,7 +22,7 @@
 ```
 Phase 1  — Project Foundation                  ████████████████  100% (monorepo, docker, pgvector, prisma, tooling, CI workflow stabilized)
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
-Phase 3  — Personal Library and Tracking       █████████████░░░  75% (Stages 3.0–3.5: DB foundation, bootstrap, integrity, Library REST API, Frontend Personal Library & Baseline Stabilization complete)
+Phase 3  — Personal Library and Tracking       ██████████████░░  90% (Stages 3.0–3.6: DB foundation, bootstrap, integrity, Library REST API, Frontend Personal Library, Baseline Stabilization & Dashboard complete)
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
@@ -370,12 +370,42 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - `docs/AI_DEVELOPMENT_GUIDE.md`: Aligned test commands and validation steps
   - `AGENTS.md`: Synchronized test commands and CI standards
 
-### 3.6 Dashboard
+### 3.6 Dashboard (Stage 3.6 Complete ✅)
 
-- [ ] Recently watched titles
-- [ ] Continue watching section
-- [ ] Quick recommendation strip
-- [ ] Basic viewing stats summary (counts, recent activity)
+- [x] Aggregated viewing statistics summary (`GET /api/dashboard/stats` and overview)
+  - [x] Total movies tracked and completed
+  - [x] Shows currently watching and completed
+  - [x] Total episodes watched and viewing events recorded
+  - [x] 30-day recent activity metric combining movie `ViewingEvent` records and TV `EpisodeProgress` records (each counted once)
+- [x] Continue watching section (`GET /api/dashboard/continue-watching`)
+  - [x] Queries TV library entries with status `WATCHING`
+  - [x] Calculates progression using canonical regular episode rule (`seasonNumber > 0`, specials excluded)
+  - [x] Determines exact `nextEpisode` (SxxExx · Name)
+  - [x] Progress bar with percentage and episode ratio (e.g. 50/73)
+  - [x] Automatically excludes fully-watched series from continuation list without mutating status
+  - [x] Sorts by most recently watched (`lastWatchedAt` desc, nulls last)
+  - [x] "Manage" trigger opens `LibraryDetailModal` with live refresh
+- [x] Recently watched activity timeline (`GET /api/dashboard/recent-activity`)
+  - [x] Merges movie `ViewingEvent` records and TV `EpisodeProgress` records
+  - [x] Chronological descending sort with relative timestamps ("just now", "Xh ago", "Xd ago", or formatted date)
+  - [x] Displays movie ratings (half-step decimal) or TV season/episode numbers and names
+- [x] Quick picks recommendation strip (`GET /api/dashboard/quick-picks`)
+  - [x] Serves balanced popular content from existing locally ingested catalogue
+  - [x] Zero external TMDB requests triggered on dashboard page loads
+  - [x] Efficiently filters out titles already present in the user's library
+  - [x] Inline "+ Add" button triggers `QuickAddModal` with pre-filled metadata and status selector
+- [x] Consolidated overview endpoint (`GET /api/dashboard/overview`)
+  - [x] Fetches stats, continue watching, recent activity, and quick picks in a single initial payload
+- [x] Frontend Dashboard page (`/` route)
+  - [x] Replaces landing page with fully responsive, polished Dashboard
+  - [x] Responsive layout with side-by-side Continue Watching and Recent Activity on desktop
+  - [x] Loading skeletons for each section and graceful error state with Retry button
+  - [x] Empty state messaging for each section
+  - [x] Updated Navbar label from "Home" to "Dashboard"
+- [x] Test coverage & verification:
+  - [x] Backend unit tests: 35 tests passing across `dashboard.service.spec.ts` (20) and `dashboard.controller.spec.ts` (15)
+  - [x] Backend integration tests: 15 tests passing in `dashboard.integration.spec.ts` against PostgreSQL 16 + pgvector
+  - [x] Frontend unit tests: 26 tests passing in `page.spec.tsx` covering all sections, modal workflows, loading/error states, and navigation
 
 ### 3.7 Statistics Frontend
 

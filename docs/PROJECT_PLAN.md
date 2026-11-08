@@ -273,7 +273,7 @@ The following are explicitly outside the scope of this project and should not be
 | ----- | -------------------------------- | ------------------------------------------------------------------------------------ | ---------------------- |
 | 1     | Project Foundation               | Monorepo, tooling, Docker, database baseline, documentation, CI with pgvector        | **Complete**           |
 | 2     | Catalogue and TMDB Integration   | TMDB client, catalogue schema, search and discover API and UI                        | **Complete**           |
-| 3     | Personal Library and Tracking    | Library schema, CRUD API, frontend My Library & detail modal (Dashboard next)        | **In Progress (3.5✓)** |
+| 3     | Personal Library and Tracking    | Library schema, CRUD API, frontend My Library & detail modal, Dashboard (/ route)    | **In Progress (3.6✓)** |
 | 4     | Statistics and Import/Export     | Statistics API and UI, JSON/CSV import/export                                        | Planned                |
 | 5     | Recommendation Engine Foundation | Embeddings, similarity, preference signals, baseline scoring, recommendation storage | Planned                |
 | 6     | Recommendation Intelligence      | Diversity modes, feedback, evaluation, Taste Profile, Taste Evolution                | Planned                |
