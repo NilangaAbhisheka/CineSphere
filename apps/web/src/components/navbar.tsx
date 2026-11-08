@@ -12,6 +12,7 @@ export function Navbar() {
     { label: 'Dashboard', href: '/' },
     { label: 'Discover', href: '/discover' },
     { label: 'My Library', href: '/library' },
+    { label: 'Statistics', href: '/statistics' },
   ];
 
   return (
