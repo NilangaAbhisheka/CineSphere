@@ -74,10 +74,16 @@ flowchart TD
 - `/` — Personal Dashboard with Viewing Summary cards, Continue Watching section (progress bars, next-episode calculations), Recent Activity feed, and Quick Picks catalogue recommendations.
 - `/discover` — TMDB search, curated popular/trending content, genre/year filters, and catalogue browsing with debounced search input.
 - `/library` — My Library page with 5 status tabs (All, Watching, Plan to Watch, Completed, Dropped), media type filtering, sorting, pagination, and empty/error states.
+- `/statistics` — Personal viewing analytics and tracking intelligence: Summary cards, Genre distribution, Viewing activity timeline, and Personal rating distribution (Phase 3.7 frontend foundation; Phase 4 connects live backend aggregation endpoints).
 
 **Implemented Components:**
 
-- `Navbar` — Responsive navigation header with active page indicators (Dashboard, Discover, My Library).
+- `Navbar` — Responsive navigation header with active page indicators (Dashboard, Discover, My Library, Statistics).
+- `StatisticsView` — Container component rendering summary cards, charts, and foundation state notice.
+- `StatsSummaryCards` — Primary metric cards (Movies Completed, Episodes Watched, Shows Completed, Average Personal Rating) with secondary metrics and unavailable placeholders (`—`).
+- `GenreDistributionChart` — Pure SVG + Tailwind horizontal bar chart displaying top 8 genres (with expansion toggle), multi-genre safe calculations, and hidden accessible table.
+- `ActivityTimelineChart` — Pure SVG + Tailwind stacked column chart for monthly movie and episode viewing volume with accessible table.
+- `RatingDistributionChart` — Pure SVG + Tailwind 19-bucket histogram for 1.0–10.0 ratings with average guideline marker and accessible table.
 - `StatCard` / `ContinueWatchingCard` / `RecentActivityRow` / `QuickPickCard` — Dashboard widget components with loading skeletons and empty states.
 - `LibraryCard` — Visual card displaying poster, title, status badge, media type badge, personal rating badge, watch counts (movies) or episode progress bar (TV), and "Manage Tracking" trigger.
 - `AddLibraryModal` — Dialog for adding any movie or TV show to the personal library with status selection, optional 1.0–10.0 rating, notes, and 409 conflict handling.
@@ -129,6 +135,7 @@ flowchart TD
 **`packages/shared/`:** Shared TypeScript types, interfaces, DTOs, and utility functions used by both `apps/web` and `apps/api`:
 
 - Dashboard types: `DashboardOverviewResponse`, `DashboardStats`, `ContinueWatchingItem`, `RecentActivityItem`, `QuickPickItem`, `NextEpisodeInfo`.
+- Statistics types: `StatsOverviewSummary`, `GenreStatItem`, `ActivityTimelineItem`, `ActivityTimelineData`, `RatingDistributionBucket`, `RatingStatsData`, `StatisticsPageData`.
 - Library types: `LibraryMediaType`, `LibraryStatus`, `LibraryEntryResponse`, `ViewingEventResponse`, `EpisodeProgressResponse`, `SeasonRatingResponse`, `LibraryEntryStats`.
 - Media types: `MovieDetails`, `TvShowDetails`, `SeasonDetails`, `EpisodeDetails`, `Genre`, `PersonCredit`.
 - TMDB types: search results, trending/popular responses, pagination contracts.

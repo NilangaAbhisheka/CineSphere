@@ -6,14 +6,14 @@
 
 ## Project Overview
 
-| Field             | Value                                                                                                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project           | CineSphere                                                                                                                                                                |
-| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                         |
-| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                    |
-| Phase             | **Phase 3 — Personal Library and Tracking**                                                                                                                               |
-| Current Milestone | Phase 3 Stage 3.6 Complete (Dashboard Implementation — Overview, Continue Watching, Recent Activity, Quick Picks, Viewing Summary, 250 unit tests, 152 integration tests) |
-| Last Updated      | 2026-11-09                                                                                                                                                                |
+| Field             | Value                                                                                                                                                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project           | CineSphere                                                                                                                                                                                                        |
+| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                 |
+| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                            |
+| Phase             | **Phase 3 — Personal Library and Tracking**                                                                                                                                                                       |
+| Current Milestone | Phase 3 Stage 3.7 Complete (Statistics Frontend Foundation — Shared Contracts, Summary Cards, Pure SVG Visualizations, Responsive `/statistics` Route, Navbar Integration, 304 unit tests, 152 integration tests) |
+| Last Updated      | 2026-11-09                                                                                                                                                                                                        |
 
 ---
 
@@ -22,7 +22,7 @@
 ```
 Phase 1  — Project Foundation                  ████████████████  100% (monorepo, docker, pgvector, prisma, tooling, CI workflow stabilized)
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
-Phase 3  — Personal Library and Tracking       ██████████████░░  90% (Stages 3.0–3.6: DB foundation, bootstrap, integrity, Library REST API, Frontend Personal Library, Baseline Stabilization & Dashboard complete)
+Phase 3  — Personal Library and Tracking       ███████████████░  95% (Stages 3.0–3.7: DB foundation, bootstrap, integrity, Library REST API, Frontend Personal Library, Baseline Stabilization, Dashboard & Statistics Frontend Foundation complete)
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
@@ -407,13 +407,41 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Backend integration tests: 15 tests passing in `dashboard.integration.spec.ts` against PostgreSQL 16 + pgvector
   - [x] Frontend unit tests: 26 tests passing in `page.spec.tsx` covering all sections, modal workflows, loading/error states, and navigation
 
-### 3.7 Statistics Frontend
+### 3.7 Statistics Frontend Foundation (Stage 3.7 Complete ✅)
 
-- [ ] Statistics page with charts
-- [ ] Genre distribution chart
-- [ ] Activity timeline chart
-- [ ] Rating distribution chart
-- [ ] Summary cards (totals, averages)
+- [x] Shared TypeScript statistics data contracts in `@cinesphere/shared` (`StatsOverviewSummary`, `GenreStatItem`, `ActivityTimelineItem`, `ActivityTimelineData`, `RatingDistributionBucket`, `RatingStatsData`, `StatisticsPageData`)
+- [x] Summary cards presentation component (`StatsSummaryCards`)
+  - [x] Movies Completed, TV Episodes Watched, TV Shows Completed, Average Personal Rating
+  - [x] Secondary metrics bar (Movie Viewings count, Phase 4 connection indicator)
+  - [x] Authentic unavailable indicator (`—`) in foundation state without fabricated zeros
+- [x] Genre distribution chart (`GenreDistributionChart`)
+  - [x] Top 8 genres rendered by default (sorted descending by count) with "View all" / "Show top 8" expansion toggle
+  - [x] No "Other" catch-all bucket to prevent double-counting across multi-genre items
+  - [x] Accessible hidden data table with full screen reader semantics
+  - [x] Authentic foundation placeholder ("Analytics not yet connected")
+- [x] Viewing activity timeline chart (`ActivityTimelineChart`)
+  - [x] Pure Tailwind + SVG stacked column visualization (Sky-400 for movies, Violet-400 for episodes)
+  - [x] Preserves baseline for zero-activity months without frontend date synthesis
+  - [x] Accessible hidden data table with headers and data rows
+  - [x] Authentic foundation placeholder ("Analytics not yet connected")
+- [x] Personal rating distribution chart (`RatingDistributionChart`)
+  - [x] 19-bucket histogram for 1.0 to 10.0 scale in 0.5 increments
+  - [x] Vertical dashed guideline marking average personal rating
+  - [x] Footnote displaying unrated library entries count
+  - [x] Accessible hidden data table
+  - [x] Authentic foundation placeholder ("Analytics not yet connected")
+- [x] Dedicated Statistics route at `/statistics`
+  - [x] Page header and descriptive subtitle
+  - [x] Notice banner explaining Phase 3.7 foundation state and Phase 4 backend integration
+  - [x] Accessible landmarks and semantic HTML (`<main>`, `<section>`, `role="region"`)
+- [x] Navigation bar integration
+  - [x] Added "Statistics" link to desktop and mobile navigation menus (`/statistics`)
+  - [x] Active route highlighting when viewing `/statistics`
+- [x] Test coverage & verification:
+  - [x] 28 new unit tests across 6 test suites (`stats-summary-cards.spec.tsx`, `genre-distribution-chart.spec.tsx`, `activity-timeline-chart.spec.tsx`, `rating-distribution-chart.spec.tsx`, `page.spec.tsx`, `navbar.spec.tsx`)
+  - [x] Frontend test suite expanded to 135 passing unit tests across 12 suites (from 81)
+  - [x] Monorepo unit test suite expanded to 304 passing unit tests (169 backend + 135 frontend)
+  - [x] Zero-dependency implementation (no heavy charting libraries; lightweight inline SVG + Tailwind)
 
 ### 3.8 Testing and Hardening
 
@@ -455,13 +483,12 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [ ] `GET /api/stats/activity` — activity over time
 - [ ] `GET /api/stats/ratings` — rating distribution
 
-### 4.3 Statistics Frontend
+### 4.3 Statistics Live Integration
 
-- [ ] Statistics page with charts
-- [ ] Genre distribution chart
-- [ ] Activity timeline chart
-- [ ] Rating distribution chart
-- [ ] Summary cards (totals, averages)
+- [ ] Connect `/statistics` page and components to Phase 4 statistics API endpoints
+- [ ] Implement live data fetching via `ApiClient` (`getStatsOverview`, `getStatsGenres`, `getStatsActivity`, `getStatsRatings`)
+- [ ] Real network loading skeletons and API error handling with retry trigger
+- [ ] Verify live rendering of summary cards, genre chart, activity timeline, and rating distribution
 
 ### 4.4 Data Import
 

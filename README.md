@@ -41,18 +41,18 @@ CineSphere addresses these problems for a single user who wants to own their ent
 
 ## Core Features
 
-| Feature              | Description                                                            | Status                  |
-| -------------------- | ---------------------------------------------------------------------- | ----------------------- |
-| **Dashboard**        | Activity overview, continue watching, recent activity, and quick picks | Implemented (Phase 3.6) |
-| **My Library**       | Track movies and TV shows with status, ratings, progress, and notes    | Implemented (Phase 3.5) |
-| **Discover**         | Search, browse trending content, apply mood and genre filters          | Implemented (Phase 2)   |
-| **For You**          | Hybrid recommendation engine with diversity controls and explanations  | Planned (Phase 5–6)     |
-| **AI Taste Profile** | Structured model of personal viewing preferences                       | Planned (Phase 6)       |
-| **Taste Evolution**  | Snapshots of preference changes over time                              | Planned (Phase 6)       |
-| **Movie Universe**   | Interactive 2D semantic map of movies powered by embeddings and PixiJS | Planned (Phase 8)       |
-| **Statistics**       | Personal viewing analytics and history                                 | Planned (Phase 4)       |
-| **Import / Export**  | JSON and CSV data portability                                          | Planned (Phase 4)       |
-| **Local LLM**        | Optional conversational discovery via Ollama (local only)              | Planned (Phase 7)       |
+| Feature              | Description                                                            | Status                          |
+| -------------------- | ---------------------------------------------------------------------- | ------------------------------- |
+| **Dashboard**        | Activity overview, continue watching, recent activity, and quick picks | Implemented (Phase 3.6)         |
+| **My Library**       | Track movies and TV shows with status, ratings, progress, and notes    | Implemented (Phase 3.5)         |
+| **Discover**         | Search, browse trending content, apply mood and genre filters          | Implemented (Phase 2)           |
+| **For You**          | Hybrid recommendation engine with diversity controls and explanations  | Planned (Phase 5–6)             |
+| **AI Taste Profile** | Structured model of personal viewing preferences                       | Planned (Phase 6)               |
+| **Taste Evolution**  | Snapshots of preference changes over time                              | Planned (Phase 6)               |
+| **Movie Universe**   | Interactive 2D semantic map of movies powered by embeddings and PixiJS | Planned (Phase 8)               |
+| **Statistics**       | Personal viewing analytics, summary cards, and SVG charts              | Frontend Foundation (Phase 3.7) |
+| **Import / Export**  | JSON and CSV data portability                                          | Planned (Phase 4)               |
+| **Local LLM**        | Optional conversational discovery via Ollama (local only)              | Planned (Phase 7)               |
 
 ---
 
@@ -342,7 +342,7 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
 
 ## Project Status
 
-**Current phase:** Phase 3 — Personal Library and Tracking (Stage 3.6 Complete)
+**Current phase:** Phase 3 — Personal Library and Tracking (Stage 3.7 Complete)
 
 **What exists & is verified:**
 
@@ -351,9 +351,10 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
   - Personal Dashboard (`/`) with 5 aggregated sections: Viewing Summary stat cards, Continue Watching cards with next-episode calculations and progress bars, Recent Activity timeline, and Quick Picks catalogue recommendations
   - Discover experience with TMDB search, curated popular/trending sections, debounce, pagination, and `MediaCard` components
   - My Library experience (`/library`) with 5 status tabs, media type toggle, sorting, pagination, and `LibraryCard` components
+  - Statistics Foundation (`/statistics`) with 4 primary summary cards (Movies Completed, Episodes Watched, Shows Completed, Average Personal Rating), secondary metrics bar, top 8 genres breakdown with "View all" toggle, monthly stacked viewing activity timeline, 19-bucket personal rating histogram, accessible data tables, and authentic foundation state
   - `AddLibraryModal` with status selection, 1.0–10.0 half-step ratings, notes, and duplicate prevention
   - `LibraryDetailModal` with movie viewing event logging, viewing history, TV episode toggle progress, batch "Mark All Watched" (with specials inclusion toggle), per-season ratings, notes editor, and deletion with confirmation
-  - 107 frontend component unit tests passing across 6 suites
+  - 135 frontend component unit tests passing across 12 suites
 - NestJS REST API backend ([`apps/api`](apps/api)):
   - Consolidated Dashboard API (`DashboardModule` with `GET /api/dashboard/overview`, `/stats`, `/continue-watching`, `/recent-activity`, `/quick-picks`)
   - TMDB proxy, client retry logic with exponential backoff, Bearer authentication, and catalogue ingestion layer (`TmdbModule`)
@@ -361,9 +362,10 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
   - Personal library REST API (`POST/GET/PATCH/DELETE /api/library`, `/viewing-events`, `/episode-progress`, `/mark-all-watched`, `/season-ratings`) (`LibraryModule`)
   - Deterministic single-user bootstrapping (`SingleUserBootstrap`)
   - Centralized database error mapping (`DatabaseErrorMapper`)
-  - 143 backend unit tests passing across 14 suites
+  - 169 backend unit tests passing across 14 suites
   - 152 PostgreSQL integration tests passing across 8 suites with real transactions and triggers
-- Shared TypeScript contracts and DTOs ([`packages/shared`](packages/shared))
+  - Total monorepo unit tests: 304 passing unit tests (169 backend + 135 frontend)
+- Shared TypeScript contracts and DTOs ([`packages/shared`](packages/shared)) including statistics models (`StatsOverviewSummary`, `GenreStatItem`, `ActivityTimelineData`, `RatingStatsData`, `StatisticsPageData`)
 - Shared linting, Prettier, and TypeScript configs ([`packages/config`](packages/config))
 - Dockerized PostgreSQL 16 database with `pgvector` extension enabled (`0.8.7`)
 - Prisma 6 ORM integration with dedicated SQL migrations:
