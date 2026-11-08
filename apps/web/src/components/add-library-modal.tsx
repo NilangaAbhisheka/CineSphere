@@ -72,7 +72,6 @@ export function AddLibraryModal({ item, isOpen, onClose, onSuccess }: AddLibrary
       const entry = await apiClient.createLibraryEntry({
         mediaType,
         tmdbId: item.tmdbId,
-        mediaId: item.id,
         status,
         personalRating: personalRating ?? null,
         notes: notes.trim() || null,
