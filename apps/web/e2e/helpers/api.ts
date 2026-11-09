@@ -67,13 +67,21 @@ export async function deleteLibraryEntry(id: string): Promise<void> {
 }
 
 /**
- * Deletes ALL library entries.  Call this in a global afterAll only when
- * individual test cleanup has not been possible.
+ * Deletes test-owned library entries (identified by the [E2E] title prefix).
+ * Strictly preserves any existing user or development data.
  */
-export async function cleanupAllLibraryEntries(): Promise<void> {
+export async function cleanupTestLibraryEntries(): Promise<void> {
   const entries = await listLibraryEntries();
-  await Promise.all(entries.map((e) => deleteLibraryEntry(e.id)));
+  const testEntries = entries.filter((e) => e.title.includes('[E2E]'));
+  await Promise.all(testEntries.map((e) => deleteLibraryEntry(e.id)));
 }
+
+/**
+ * Backward compatibility alias for cleanupTestLibraryEntries.
+ * Strictly constrained to test-owned data to prevent accidental deletion
+ * of local development library entries.
+ */
+export const cleanupAllLibraryEntries = cleanupTestLibraryEntries;
 
 /**
  * Creates a library entry via the REST API (bypasses UI for setup).

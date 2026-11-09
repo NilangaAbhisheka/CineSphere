@@ -47,13 +47,13 @@ export default defineConfig({
     {
       command: 'pnpm --filter @cinesphere/api dev',
       url: 'http://localhost:4000/api/health',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true,
       timeout: 120_000,
     },
     {
       command: 'pnpm --filter @cinesphere/web dev',
       url: 'http://localhost:3000',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true,
       timeout: 120_000,
       env: {
         NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api',
