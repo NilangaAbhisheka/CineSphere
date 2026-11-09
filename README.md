@@ -289,7 +289,12 @@ pnpm test
 # Backend PostgreSQL integration tests (152 tests across 8 suites)
 pnpm test:integration
 
-# Playwright End-to-End workflow tests (30 tests across 6 suites)
+# Playwright End-to-End workflow tests (requires CINESPHERE_E2E_DATABASE_URL targeting a dedicated test database)
+# 1. Create test DB & deploy migrations (one-time setup):
+#    docker exec -it cinesphere-postgres psql -U cinesphere_user -c "CREATE DATABASE cinesphere_test;"
+#    DATABASE_URL="postgresql://cinesphere_user:cinesphere_dev_password@localhost:5432/cinesphere_test?schema=public" pnpm --filter @cinesphere/api exec prisma migrate deploy
+# 2. Run E2E tests:
+export CINESPHERE_E2E_DATABASE_URL="postgresql://cinesphere_user:cinesphere_dev_password@localhost:5432/cinesphere_test?schema=public"
 pnpm test:e2e
 
 # Frontend component tests specifically
@@ -367,9 +372,9 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
   - Centralized database error mapping (`DatabaseErrorMapper`)
   - 143 backend unit tests passing across 13 suites
   - 152 PostgreSQL integration tests passing across 8 suites with real transactions and triggers
-  - Total monorepo unit tests: 278 passing unit tests (143 backend + 135 frontend)
+  - Total monorepo unit tests: 297 passing unit tests (143 backend + 154 frontend)
 - End-to-End Testing & Hardening ([`apps/web/e2e`](apps/web/e2e)):
-  - Playwright E2E infrastructure with automated dual-server orchestration (Next.js web + NestJS API + PostgreSQL)
+  - Playwright E2E infrastructure with dedicated test database isolation (`CINESPHERE_E2E_DATABASE_URL`), fail-closed validation, and server isolation
   - 30 comprehensive workflow tests passing across 6 suites:
     - Workflow A: Movie lifecycle (discovery $\to$ library $\to$ detail modal rating & notes $\to$ reload persistence $\to$ removal)
     - Workflow B: Viewing history logging (append-only events, independent ratings, reload persistence, library entry decoupling)

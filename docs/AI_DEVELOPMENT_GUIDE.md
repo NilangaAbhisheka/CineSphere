@@ -146,6 +146,16 @@ Write tests for meaningful functionality. Do not treat a successful TypeScript c
 
 **Write tests before or alongside the implementation** for complex business logic, especially the recommendation engine.
 
+### 6.1 E2E Database Safety & Isolation Rules
+
+To protect the developer's local watch history and personal library data:
+
+- **Dedicated Database Required:** E2E tests must never run against or connect to the development database (`cinesphere`). They require a dedicated test database (e.g., `cinesphere_test`).
+- **Explicit Configuration (`CINESPHERE_E2E_DATABASE_URL`):** E2E setup, teardown, and API orchestration must resolve the database URL exclusively from `CINESPHERE_E2E_DATABASE_URL`. Fallbacks to `DATABASE_URL` or `.env` are prohibited.
+- **Fail-Closed Validation:** Missing, malformed, or development-database URLs must abort execution immediately before any network or database connection is established.
+- **Server Isolation:** Playwright must never silently reuse an ordinary development API server (`reuseExistingServer: false` in local development). Both setup and the API process must target the same dedicated test database.
+- **Narrowly Scoped Cleanup:** Test cleanup must target only test-owned records (e.g., `[E2E]`-prefixed titles). Global teardown and per-test cleanup must never perform broad user-data deletion.
+
 ---
 
 ## 7. Error Handling
