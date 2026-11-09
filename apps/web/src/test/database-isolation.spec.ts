@@ -12,7 +12,8 @@
  * on the developer's personal .env file.
  */
 
-import { getE2eDatabaseUrl } from '../../e2e/config/database-config';
+import { APPROVED_DB_TOKEN_PATTERN, getE2eDatabaseUrl } from '../../e2e/config/database-config';
+import { deleteLibraryEntriesByIds } from '../../e2e/helpers/api';
 
 /** Saves and restores process.env around each test. */
 function withEnv(overrides: Record<string, string | undefined>, fn: () => void): void {
@@ -120,6 +121,78 @@ describe('E2E Database Configuration — getE2eDatabaseUrl()', () => {
     );
   });
 
+  // ── Token precision rejections (substring loopholes) ──────────────────────
+
+  it('throws when database name is "contest" (contains "test" substring without delimiter boundary)', () => {
+    withEnv(
+      {
+        CINESPHERE_E2E_DATABASE_URL:
+          'postgresql://cinesphere_user:pw@localhost:5432/contest?schema=public',
+      },
+      () => {
+        expect(() => getE2eDatabaseUrl()).toThrow(/must contain "test" or "e2e"/i);
+      },
+    );
+  });
+
+  it('throws when database name is "mycontestdb"', () => {
+    withEnv(
+      {
+        CINESPHERE_E2E_DATABASE_URL:
+          'postgresql://cinesphere_user:pw@localhost:5432/mycontestdb?schema=public',
+      },
+      () => {
+        expect(() => getE2eDatabaseUrl()).toThrow(/must contain "test" or "e2e"/i);
+      },
+    );
+  });
+
+  it('throws when database name is "cinesphere_testing" (requires exact "test" token, not "testing")', () => {
+    withEnv(
+      {
+        CINESPHERE_E2E_DATABASE_URL:
+          'postgresql://cinesphere_user:pw@localhost:5432/cinesphere_testing?schema=public',
+      },
+      () => {
+        expect(() => getE2eDatabaseUrl()).toThrow(/must contain "test" or "e2e"/i);
+      },
+    );
+  });
+
+  it('throws when database name is "cinesphere_latest"', () => {
+    withEnv(
+      {
+        CINESPHERE_E2E_DATABASE_URL:
+          'postgresql://cinesphere_user:pw@localhost:5432/cinesphere_latest?schema=public',
+      },
+      () => {
+        expect(() => getE2eDatabaseUrl()).toThrow(/must contain "test" or "e2e"/i);
+      },
+    );
+  });
+
+  it('throws when database name lacks delimiter boundary ("testdb" or "e2edb")', () => {
+    withEnv(
+      {
+        CINESPHERE_E2E_DATABASE_URL:
+          'postgresql://cinesphere_user:pw@localhost:5432/testdb?schema=public',
+      },
+      () => {
+        expect(() => getE2eDatabaseUrl()).toThrow(/must contain "test" or "e2e"/i);
+      },
+    );
+
+    withEnv(
+      {
+        CINESPHERE_E2E_DATABASE_URL:
+          'postgresql://cinesphere_user:pw@localhost:5432/e2edb?schema=public',
+      },
+      () => {
+        expect(() => getE2eDatabaseUrl()).toThrow(/must contain "test" or "e2e"/i);
+      },
+    );
+  });
+
   // ── Approved test database URLs ───────────────────────────────────────────
 
   it('accepts a URL targeting "cinesphere_test"', () => {
@@ -130,11 +203,71 @@ describe('E2E Database Configuration — getE2eDatabaseUrl()', () => {
     });
   });
 
-  it('accepts a URL targeting a database named with "e2e"', () => {
+  it('accepts a URL targeting "cinesphere-test"', () => {
+    const url = 'postgresql://cinesphere_user:pw@localhost:5432/cinesphere-test?schema=public';
+    withEnv({ CINESPHERE_E2E_DATABASE_URL: url }, () => {
+      expect(() => getE2eDatabaseUrl()).not.toThrow();
+      expect(getE2eDatabaseUrl()).toBe(url);
+    });
+  });
+
+  it('accepts a URL targeting "cinesphere_e2e"', () => {
     const url = 'postgresql://user:pw@localhost:5432/cinesphere_e2e?schema=public';
     withEnv({ CINESPHERE_E2E_DATABASE_URL: url }, () => {
       expect(() => getE2eDatabaseUrl()).not.toThrow();
       expect(getE2eDatabaseUrl()).toBe(url);
+    });
+  });
+
+  it('accepts a URL targeting "cinesphere-e2e"', () => {
+    const url = 'postgresql://user:pw@localhost:5432/cinesphere-e2e?schema=public';
+    withEnv({ CINESPHERE_E2E_DATABASE_URL: url }, () => {
+      expect(() => getE2eDatabaseUrl()).not.toThrow();
+      expect(getE2eDatabaseUrl()).toBe(url);
+    });
+  });
+
+  it('accepts a URL targeting "test_cinesphere"', () => {
+    const url = 'postgresql://user:pw@localhost:5432/test_cinesphere?schema=public';
+    withEnv({ CINESPHERE_E2E_DATABASE_URL: url }, () => {
+      expect(() => getE2eDatabaseUrl()).not.toThrow();
+      expect(getE2eDatabaseUrl()).toBe(url);
+    });
+  });
+
+  it('accepts a URL targeting "e2e_cinesphere"', () => {
+    const url = 'postgresql://user:pw@localhost:5432/e2e_cinesphere?schema=public';
+    withEnv({ CINESPHERE_E2E_DATABASE_URL: url }, () => {
+      expect(() => getE2eDatabaseUrl()).not.toThrow();
+      expect(getE2eDatabaseUrl()).toBe(url);
+    });
+  });
+
+  it('accepts uppercase and mixed-case test tokens ("CINESPHERE_TEST", "cinesphere_E2E")', () => {
+    const url1 = 'postgresql://user:pw@localhost:5432/CINESPHERE_TEST?schema=public';
+    withEnv({ CINESPHERE_E2E_DATABASE_URL: url1 }, () => {
+      expect(() => getE2eDatabaseUrl()).not.toThrow();
+      expect(getE2eDatabaseUrl()).toBe(url1);
+    });
+
+    const url2 = 'postgresql://user:pw@localhost:5432/cinesphere_E2E?schema=public';
+    withEnv({ CINESPHERE_E2E_DATABASE_URL: url2 }, () => {
+      expect(() => getE2eDatabaseUrl()).not.toThrow();
+      expect(getE2eDatabaseUrl()).toBe(url2);
+    });
+  });
+
+  it('accepts exact bare names "test" and "e2e"', () => {
+    const url1 = 'postgresql://user:pw@localhost:5432/test?schema=public';
+    withEnv({ CINESPHERE_E2E_DATABASE_URL: url1 }, () => {
+      expect(() => getE2eDatabaseUrl()).not.toThrow();
+      expect(getE2eDatabaseUrl()).toBe(url1);
+    });
+
+    const url2 = 'postgresql://user:pw@localhost:5432/e2e?schema=public';
+    withEnv({ CINESPHERE_E2E_DATABASE_URL: url2 }, () => {
+      expect(() => getE2eDatabaseUrl()).not.toThrow();
+      expect(getE2eDatabaseUrl()).toBe(url2);
     });
   });
 
@@ -198,36 +331,160 @@ describe('E2E Database Configuration — getE2eDatabaseUrl()', () => {
   });
 });
 
-// ── Cleanup safety contract ───────────────────────────────────────────────────
+// ── Pattern-level token validation ──────────────────────────────────────────
 
-describe('E2E Cleanup Safety — cleanupTestLibraryEntries scope', () => {
-  it('the [E2E] title filter covers expected test titles', () => {
-    const e2eTitles = [
-      '[E2E] Inception Test Film',
-      '[E2E] Breaking Test Series',
-      '[E2E] Another Test Item',
-    ];
-    const realTitles = [
-      'Inception',
-      'Breaking Bad',
-      'The Dark Knight',
-      'My favourite film',
-      'E2E documentation',
-    ];
+describe('APPROVED_DB_TOKEN_PATTERN delimiter-aware token matching', () => {
+  const validNames = [
+    'cinesphere_test',
+    'cinesphere-test',
+    'cinesphere_e2e',
+    'cinesphere-e2e',
+    'test_cinesphere',
+    'e2e_cinesphere',
+    'test-cinesphere',
+    'e2e-cinesphere',
+    'test',
+    'e2e',
+    'TEST',
+    'E2E',
+    'cinesphere_TEST',
+    'cinesphere_E2E',
+    'db_test_suite',
+    'app-e2e-run',
+  ];
 
-    for (const title of e2eTitles) {
-      expect(title.includes('[E2E]')).toBe(true);
-    }
-    for (const title of realTitles) {
-      expect(title.includes('[E2E]')).toBe(false);
+  const invalidNames = [
+    'cinesphere',
+    'contest',
+    'mycontestdb',
+    'cinesphere_testing',
+    'testing',
+    'cinesphere_latest',
+    'testdb',
+    'dbtest',
+    'e2edb',
+    'dbe2e',
+    'note2e',
+    'prode2e',
+    'staging',
+    'production',
+  ];
+
+  it.each(validNames)('approves valid test/e2e token database name: "%s"', (name) => {
+    expect(APPROVED_DB_TOKEN_PATTERN.test(name)).toBe(true);
+  });
+
+  it.each(invalidNames)('rejects non-test or embedded-substring database name: "%s"', (name) => {
+    expect(APPROVED_DB_TOKEN_PATTERN.test(name)).toBe(false);
+  });
+});
+
+// ── Cleanup ownership precision ──────────────────────────────────────────────
+
+describe('E2E Cleanup Ownership — deleteLibraryEntriesByIds()', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('performs no HTTP requests when passed an empty array []', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock;
+
+    await deleteLibraryEntriesByIds([]);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('ignores empty strings and whitespace-only IDs without making HTTP requests', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock;
+
+    await deleteLibraryEntriesByIds(['', '   ', '\t']);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('deletes only the exact ID passed to it via DELETE /api/library/:id', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+    });
+    global.fetch = fetchMock;
+
+    const targetId = 'uuid-test-entry-123';
+    await deleteLibraryEntriesByIds([targetId]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`/library/${targetId}$`)),
+      { method: 'DELETE' },
+    );
+  });
+
+  it('deletes multiple explicit IDs and strictly no other IDs', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+    });
+    global.fetch = fetchMock;
+
+    const ids = ['entry-aaa', 'entry-bbb', 'entry-ccc'];
+    await deleteLibraryEntriesByIds(ids);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const id of ids) {
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`/library/${id}$`)), {
+        method: 'DELETE',
+      });
     }
   });
 
-  it('a title with [E2E] in the middle is treated as test-owned', () => {
-    expect('Something [E2E] Something'.includes('[E2E]')).toBe(true);
+  it('filters out blank elements and deletes only valid IDs from a mixed list', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+    });
+    global.fetch = fetchMock;
+
+    await deleteLibraryEntriesByIds(['valid-id-1', '', '  ', 'valid-id-2']);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/library\/valid-id-1$/), {
+      method: 'DELETE',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/library\/valid-id-2$/), {
+      method: 'DELETE',
+    });
   });
 
-  it('a title that starts with "E2E" but lacks brackets is treated as user data', () => {
-    expect('E2E documentation'.includes('[E2E]')).toBe(false);
+  it('ignores 404 responses gracefully (idempotent deletion when record is already absent)', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+    });
+    global.fetch = fetchMock;
+
+    await expect(deleteLibraryEntriesByIds(['non-existent-id'])).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates non-404 HTTP errors with a descriptive error message', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+    });
+    global.fetch = fetchMock;
+
+    await expect(deleteLibraryEntriesByIds(['failing-id'])).rejects.toThrow(
+      /deleteLibraryEntry\(failing-id\) failed: 500 Internal Server Error/,
+    );
   });
 });
