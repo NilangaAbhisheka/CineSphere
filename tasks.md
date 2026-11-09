@@ -6,14 +6,14 @@
 
 ## Project Overview
 
-| Field             | Value                                                                                                                                                                                                             |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project           | CineSphere                                                                                                                                                                                                        |
-| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                 |
-| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                            |
-| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                   |
-| Current Milestone | Phase 3 Complete ✅ (Stages 3.0–3.8: DB integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening — 278 unit tests, 152 integration tests, 30 E2E tests, all passing)              |
-| Last Updated      | 2026-11-09                                                                                                                                                                                                        |
+| Field             | Value                                                                                                                                                                                                          |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project           | CineSphere                                                                                                                                                                                                     |
+| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                              |
+| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                         |
+| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                |
+| Current Milestone | Phase 3 Complete ✅ (Stages 3.0–3.8: DB integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening & isolation — 297 unit tests, 152 integration tests, 30 E2E tests, all passing) |
+| Last Updated      | 2026-11-09                                                                                                                                                                                                     |
 
 ---
 
@@ -458,6 +458,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] CI Integration: Added Playwright E2E pipeline job to `.github/workflows/ci.yml` (pgvector service, migration deployment, production API startup, Chromium installation, E2E run, and report artifact upload)
 - [x] Full test suite verified: 30/30 Playwright E2E tests passing, 278 monorepo unit tests (143 backend + 135 frontend), 152 backend integration tests (8 suites), 4 Python ML tests. Phase 3 fully completed.
 - [x] Post-completion hardening (commit `4bcb137`): scoped `cleanupAllLibraryEntries` to `[E2E]`-prefixed test entries only (isolation defect fix); corrected `role="tab"` Playwright locator in Workflow F4; set `reuseExistingServer: true` unconditionally in `playwright.config.ts` for CI compatibility. All 30 E2E tests re-verified passing after fixes. **Phase 3 formally closed.**
+- [x] E2E Database Isolation Hardening & CI Recovery: enforced dedicated test database via `CINESPHERE_E2E_DATABASE_URL` with fail-closed validation (`database-config.ts`), removed dev DB fallbacks, isolated Playwright server reuse (`reuseExistingServer: false` locally), added 19 database isolation tests (297 total unit tests), and verified clean CI formatting.
 
 ---
 
