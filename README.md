@@ -290,6 +290,7 @@ pnpm test
 pnpm test:integration
 
 # Playwright End-to-End workflow tests (requires CINESPHERE_E2E_DATABASE_URL targeting a dedicated test database)
+# The test database name must contain "test" or "e2e" as a distinct token (e.g., cinesphere_test)
 # 1. Create test DB & deploy migrations (one-time setup):
 #    docker exec -it cinesphere-postgres psql -U cinesphere_user -c "CREATE DATABASE cinesphere_test;"
 #    DATABASE_URL="postgresql://cinesphere_user:cinesphere_dev_password@localhost:5432/cinesphere_test?schema=public" pnpm --filter @cinesphere/api exec prisma migrate deploy

@@ -151,10 +151,11 @@ Write tests for meaningful functionality. Do not treat a successful TypeScript c
 To protect the developer's local watch history and personal library data:
 
 - **Dedicated Database Required:** E2E tests must never run against or connect to the development database (`cinesphere`). They require a dedicated test database (e.g., `cinesphere_test`).
+- **Token-Level Database Name Validation:** E2E database names must contain `test` or `e2e` as a distinct token delimited by string boundaries, underscores (`_`), or hyphens (`-`). Substrings embedded within other words (e.g., `contest`, `mycontestdb`, `cinesphere_testing`) are strictly rejected.
 - **Explicit Configuration (`CINESPHERE_E2E_DATABASE_URL`):** E2E setup, teardown, and API orchestration must resolve the database URL exclusively from `CINESPHERE_E2E_DATABASE_URL`. Fallbacks to `DATABASE_URL` or `.env` are prohibited.
 - **Fail-Closed Validation:** Missing, malformed, or development-database URLs must abort execution immediately before any network or database connection is established.
 - **Server Isolation:** Playwright must never silently reuse an ordinary development API server (`reuseExistingServer: false` in local development). Both setup and the API process must target the same dedicated test database.
-- **Narrowly Scoped Cleanup:** Test cleanup must target only test-owned records (e.g., `[E2E]`-prefixed titles). Global teardown and per-test cleanup must never perform broad user-data deletion.
+- **Narrowly Scoped Cleanup (Exact IDs):** Test cleanup must target only records explicitly created and owned by the test execution, tracked strictly by ID (`deleteLibraryEntriesByIds(ids)`). Broad deletions, wildcard title-prefix queries, and wiping unowned user data are strictly prohibited.
 
 ---
 
