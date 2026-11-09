@@ -84,6 +84,7 @@ test.describe('Workflow B — Movie Viewing History', () => {
 
     const modal = getDetailModal(page);
     const historyItems = modal.getByTestId('viewing-history-item');
+    await expect(historyItems.first()).toBeVisible({ timeout: 8_000 });
 
     // Should still have at least 2 events from B1 + B2
     const count = await historyItems.count();
