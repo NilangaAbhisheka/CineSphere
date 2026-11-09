@@ -12,7 +12,7 @@
 | Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                              |
 | Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                         |
 | Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                |
-| Current Milestone | Phase 3 Complete ✅ (Stages 3.0–3.8: DB integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening & isolation — 297 unit tests, 152 integration tests, 30 E2E tests, all passing) |
+| Current Milestone | Phase 3 Complete ✅ (Stages 3.0–3.8: DB integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening & isolation — 342 unit tests, 152 integration tests, 30 E2E tests, all passing; CI green on `177fdc2`) |
 | Last Updated      | 2026-11-09                                                                                                                                                                                                     |
 
 ---
