@@ -12,17 +12,23 @@
  * The variable must:
  *   - Be present (missing → abort with clear instructions).
  *   - Be a syntactically valid postgresql:// URL.
- *   - Target a database whose name contains "test" or "e2e" (case-insensitive).
+ *   - Target a database whose name contains "test" or "e2e" as a distinct token
+ *     delimited by string boundaries, underscores (_), or hyphens (-).
  *   - NOT target the normal development database (name: "cinesphere" without
- *     a "test" or "e2e" qualifier).
+ *     a distinct "test" or "e2e" qualifier).
  *
  * No fallback to DATABASE_URL or .env files is performed.  If this
  * validation fails, E2E execution aborts before any database connection
  * is established.
  */
 
-/** The approved database name patterns for E2E use. */
-const APPROVED_DB_PATTERNS = [/test/i, /e2e/i];
+/**
+ * Delimiter-aware regular expression requiring "test" or "e2e" as a distinct token.
+ * Valid delimiters are string boundaries (^/$), underscores (_), and hyphens (-).
+ * Embedded substrings (e.g. "contest", "mycontestdb", "cinesphere_testing") are
+ * strictly rejected.
+ */
+export const APPROVED_DB_TOKEN_PATTERN = /(?:^|[_-])(test|e2e)(?:$|[_-])/i;
 
 /** Exact development database name that must be rejected. */
 const DEV_DB_NAME = 'cinesphere';
@@ -136,18 +142,18 @@ export function getE2eDatabaseUrl(): string {
     );
   }
 
-  // Require an approved test/e2e qualifier in the database name
-  const isApproved = APPROVED_DB_PATTERNS.some((pattern) => pattern.test(dbName));
-  if (!isApproved) {
+  // Require an approved test/e2e distinct token in the database name
+  if (!APPROVED_DB_TOKEN_PATTERN.test(dbName)) {
     throw new Error(
       [
         '',
         `CINESPHERE_E2E_DATABASE_URL targets database "${dbName}".`,
         '',
-        'The E2E database name must contain "test" or "e2e" to be accepted.',
+        'The E2E database name must contain "test" or "e2e" as a distinct token',
+        '(delimited by string boundaries, underscores, or hyphens).',
         'This prevents accidental use of a non-test database.',
         '',
-        `Approved examples: "cinesphere_test", "cinesphere_e2e"`,
+        `Approved examples: "cinesphere_test", "cinesphere-test", "cinesphere_e2e", "test_cinesphere"`,
         `Rejected:          "${dbName}"`,
         '',
       ].join('\n'),

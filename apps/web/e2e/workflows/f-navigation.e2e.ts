@@ -6,10 +6,19 @@
  * and the Library empty state renders when no entries exist.
  */
 import { test, expect } from '@playwright/test';
-import { cleanupAllLibraryEntries } from '../helpers/api';
+import { deleteLibraryEntriesByIds } from '../helpers/api';
 import { navigateTo } from '../helpers/pages';
 
 test.describe('Workflow F — Navigation and Page Integration', () => {
+  // Track IDs of any library entries created within this suite for exact cleanup
+  const createdEntryIds: string[] = [];
+
+  test.afterAll(async () => {
+    if (createdEntryIds.length > 0) {
+      await deleteLibraryEntriesByIds(createdEntryIds);
+      createdEntryIds.length = 0;
+    }
+  });
   test('F1: All 4 nav links are accessible and navigate correctly', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
@@ -92,9 +101,6 @@ test.describe('Workflow F — Navigation and Page Integration', () => {
   });
 
   test('F4: Library page shows empty state when no library entries exist', async ({ page }) => {
-    // Ensure lingering test entries are cleaned up without touching user data
-    await cleanupAllLibraryEntries();
-
     await navigateTo(page, '/library');
 
     // Switch to 'Dropped' filter tab (role="tab") to guarantee an empty state test without wiping developer data
