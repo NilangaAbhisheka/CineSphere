@@ -11,8 +11,8 @@
 | Project           | CineSphere                                                                                                                                                                                                        |
 | Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                 |
 | Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                            |
-| Phase             | **Phase 3 — Personal Library and Tracking**                                                                                                                                                                       |
-| Current Milestone | Phase 3 Stage 3.7 Complete (Statistics Frontend Foundation — Shared Contracts, Summary Cards, Pure SVG Visualizations, Responsive `/statistics` Route, Navbar Integration, 304 unit tests, 152 integration tests) |
+| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                   |
+| Current Milestone | Phase 3 Complete ✅ (Stages 3.0–3.8: DB integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening — 278 unit tests, 152 integration tests, 30 E2E tests, all passing)              |
 | Last Updated      | 2026-11-09                                                                                                                                                                                                        |
 
 ---
@@ -22,7 +22,7 @@
 ```
 Phase 1  — Project Foundation                  ████████████████  100% (monorepo, docker, pgvector, prisma, tooling, CI workflow stabilized)
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
-Phase 3  — Personal Library and Tracking       ███████████████░  95% (Stages 3.0–3.7: DB foundation, bootstrap, integrity, Library REST API, Frontend Personal Library, Baseline Stabilization, Dashboard & Statistics Frontend Foundation complete)
+Phase 3  — Personal Library and Tracking       ████████████████  100% (Stages 3.0–3.8: DB foundation, integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening — COMPLETE)
 Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
@@ -457,6 +457,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] Defect remediation: Fixed `AddLibraryModal` dual-identifier payload conflict (`mediaId` vs `tmdbId` mutual exclusion); resolved NestJS CLI production build emitting behavior with `incremental: false` in `tsconfig.build.json`
 - [x] CI Integration: Added Playwright E2E pipeline job to `.github/workflows/ci.yml` (pgvector service, migration deployment, production API startup, Chromium installation, E2E run, and report artifact upload)
 - [x] Full test suite verified: 30/30 Playwright E2E tests passing, 278 monorepo unit tests (143 backend + 135 frontend), 152 backend integration tests (8 suites), 4 Python ML tests. Phase 3 fully completed.
+- [x] Post-completion hardening (commit `4bcb137`): scoped `cleanupAllLibraryEntries` to `[E2E]`-prefixed test entries only (isolation defect fix); corrected `role="tab"` Playwright locator in Workflow F4; set `reuseExistingServer: true` unconditionally in `playwright.config.ts` for CI compatibility. All 30 E2E tests re-verified passing after fixes. **Phase 3 formally closed.**
 
 ---
 
