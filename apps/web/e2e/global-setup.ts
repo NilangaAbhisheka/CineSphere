@@ -1,16 +1,19 @@
 /**
- * E2E Global Setup — CineSphere Stage 3.8
+ * E2E Global Setup — CineSphere
  *
  * Seeds the test catalogue items (movie + TV show with seasons/episodes)
  * that the E2E test suite relies on.  Catalogue records are upserted so
  * repeated runs are idempotent.  Library entries created during each test
  * are deleted by per-test afterAll hooks — not here.
  *
+ * Database connection is obtained exclusively from CINESPHERE_E2E_DATABASE_URL.
+ * No fallback to DATABASE_URL or .env files is performed.  Missing or unsafe
+ * configuration causes immediate abort before any database operation.
+ *
  * Uses raw pg SQL to avoid Prisma codegen dependency in apps/web.
  */
 import { Client } from 'pg';
-import * as fs from 'fs';
-import * as path from 'path';
+import { getE2eDatabaseUrl } from './config/database-config';
 
 // ── Shared E2E seed constants (re-exported for use in test files) ────────────
 export const E2E_MOVIE_TMDB_ID = 9_000_001;
@@ -21,33 +24,12 @@ export const E2E_TV_TITLE = '[E2E] Breaking Test Series';
 export const E2E_TV_SEASON_NUMBER = 1;
 export const E2E_TV_EPISODE_COUNT = 3;
 
-function getDatabaseUrl(): string {
-  if (process.env.DATABASE_URL) {
-    return process.env.DATABASE_URL;
-  }
-  // Search for .env upwards
-  let dir = process.cwd();
-  for (let i = 0; i < 3; i++) {
-    const candidate = path.join(dir, '.env');
-    if (fs.existsSync(candidate)) {
-      const content = fs.readFileSync(candidate, 'utf-8');
-      for (const line of content.split('\n')) {
-        const match = line.match(/^\s*DATABASE_URL\s*=\s*(.*)$/);
-        if (match) {
-          return match[1].trim().replace(/^['"]|['"]$/g, '');
-        }
-      }
-    }
-    dir = path.dirname(dir);
-  }
-  return 'postgresql://cinesphere_user:cinesphere_dev_password@localhost:5432/cinesphere?schema=public';
-}
-
 export default async function globalSetup(): Promise<void> {
-  const client = new Client({
-    connectionString: getDatabaseUrl(),
-  });
+  // Fail-closed: validate the dedicated E2E database URL before connecting.
+  // This throws with a clear error message if configuration is missing or unsafe.
+  const connectionString = getE2eDatabaseUrl();
 
+  const client = new Client({ connectionString });
   await client.connect();
 
   try {
