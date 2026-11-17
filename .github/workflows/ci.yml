@@ -176,6 +176,20 @@ jobs:
             sleep 2
           done
 
+      - name: Start Next.js web server in background
+        run: pnpm --filter @cinesphere/web dev &
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:4000/api
+
+      - name: Wait for Next.js to be ready
+        run: |
+          echo "Waiting for Next.js dev server..."
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000 && echo "Next.js ready" && break
+            echo "Attempt $i: Next.js not ready yet"
+            sleep 3
+          done
+
       - name: Run E2E Tests
         run: pnpm test:e2e
 
