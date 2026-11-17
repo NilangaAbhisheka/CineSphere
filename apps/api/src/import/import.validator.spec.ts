@@ -214,11 +214,70 @@ describe('validateJsonImport', () => {
             tmdbId: 550,
             mediaType: 'MOVIE',
             status: 'COMPLETED',
-            viewingEvents: [{ rating: 11.0 }],
+            viewingEvents: [{ watchedAt: '2023-01-01T20:00:00.000Z', rating: 11.0 }],
           },
         ],
       });
       expect(errors.some((e) => e.message.includes('viewingEvents[0].rating'))).toBe(true);
+    });
+
+    it('rejects missing watchedAt on viewing event', () => {
+      const { errors } = validateJsonImport({
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: 550,
+            mediaType: 'MOVIE',
+            status: 'COMPLETED',
+            viewingEvents: [{ rating: 8.5 }],
+          },
+        ],
+      });
+      expect(errors.some((e) => e.field === 'viewingEvents[0].watchedAt')).toBe(true);
+      expect(errors.some((e) => e.message.includes('required'))).toBe(true);
+    });
+
+    it('rejects empty or malformed watchedAt on viewing event', () => {
+      const emptyRes = validateJsonImport({
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: 550,
+            mediaType: 'MOVIE',
+            status: 'COMPLETED',
+            viewingEvents: [{ watchedAt: '   ' }],
+          },
+        ],
+      });
+      expect(emptyRes.errors.some((e) => e.field === 'viewingEvents[0].watchedAt')).toBe(true);
+
+      const invalidRes = validateJsonImport({
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: 550,
+            mediaType: 'MOVIE',
+            status: 'COMPLETED',
+            viewingEvents: [{ watchedAt: 'not-a-timestamp' }],
+          },
+        ],
+      });
+      expect(invalidRes.errors.some((e) => e.field === 'viewingEvents[0].watchedAt')).toBe(true);
+    });
+
+    it('accepts valid ISO 8601 watchedAt on viewing event', () => {
+      const { errors } = validateJsonImport({
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: 550,
+            mediaType: 'MOVIE',
+            status: 'COMPLETED',
+            viewingEvents: [{ watchedAt: '2023-05-15T19:30:00.000Z', rating: 8.5 }],
+          },
+        ],
+      });
+      expect(errors.filter((e) => e.field?.includes('viewingEvents'))).toHaveLength(0);
     });
 
     it('rejects duplicate episode TMDB IDs within an entry', () => {
@@ -427,6 +486,38 @@ describe('validateCsvImport', () => {
     const { rows, errors } = validateCsvImport(csv);
     expect(errors).toHaveLength(0);
     expect(rows[0].notes).toBe('He said "wow"');
+  });
+
+  it('handles quoted fields with embedded newlines and preserves accurate row numbers', () => {
+    const csv = `tmdb_id,media_type,status,notes
+550,MOVIE,COMPLETED,"Line 1 of notes
+Line 2 of notes
+Line 3 of notes"
+1399,TV,INVALID,note for show`;
+    const { rows, errors } = validateCsvImport(csv);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].notes).toBe('Line 1 of notes\nLine 2 of notes\nLine 3 of notes');
+    // Row 2 is the second logical data row even though row 1 spanned multiple physical lines
+    expect(errors.some((e) => e.message.includes('Row 2: "status" must be one of'))).toBe(true);
+  });
+
+  it('handles CRLF row endings and embedded CRLF in quotes', () => {
+    const csv =
+      'tmdb_id,media_type,status,notes\r\n550,MOVIE,COMPLETED,"Multi\r\nline note"\r\n1399,TV,WATCHING,Single line\r\n';
+    const { rows, errors } = validateCsvImport(csv);
+    expect(errors).toHaveLength(0);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].notes).toBe('Multi\r\nline note');
+    expect(rows[1].notes).toBe('Single line');
+  });
+
+  it('rejects malformed CSV with unclosed quotes', () => {
+    const csv = `tmdb_id,media_type,status,notes\n550,MOVIE,COMPLETED,"Unclosed quote notes`;
+    const { rows, errors } = validateCsvImport(csv);
+    expect(rows).toHaveLength(0);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toContain('CSV parse error');
+    expect(errors[0].message.toLowerCase()).toContain('unclosed quote');
   });
 
   it('collects multiple errors across rows', () => {

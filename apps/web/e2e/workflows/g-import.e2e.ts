@@ -98,9 +98,11 @@ test.describe('Workflow G — Data Import', () => {
     // Error list should mention an invalid status
     await expect(page.getByText(/must be one of/i)).toBeVisible();
 
-    // Footer confirms no data was written
+    // Footer confirms no personal tracking records were written
     await expect(
-      page.getByText('No data was written. Fix the errors in your file and try again.'),
+      page.getByText(
+        'No personal tracking records were written. Fix the errors in your file and try again.',
+      ),
     ).toBeVisible();
   });
 

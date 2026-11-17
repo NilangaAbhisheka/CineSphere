@@ -368,7 +368,7 @@ function ValidationErrors({ result }: { result: ImportResponse }) {
         ))}
       </ul>
       <p className="text-gray-500 text-xs mt-4">
-        No data was written. Fix the errors in your file and try again.
+        No personal tracking records were written. Fix the errors in your file and try again.
       </p>
     </div>
   );

@@ -33,6 +33,12 @@ function isValidDateString(d: unknown): boolean {
   return !isNaN(ts);
 }
 
+function isRequiredDateString(d: unknown): boolean {
+  if (d === null || d === undefined || typeof d !== 'string' || d.trim() === '') return false;
+  const ts = Date.parse(d);
+  return !isNaN(ts);
+}
+
 function pushError(
   errors: ImportValidationError[],
   index: number,
@@ -257,11 +263,12 @@ function validateViewingEvent(
 
   const ev = raw as Record<string, unknown>;
 
-  if (ev['watchedAt'] !== undefined && !isValidDateString(ev['watchedAt'])) {
+  // watchedAt is REQUIRED for viewing events
+  if (!isRequiredDateString(ev['watchedAt'])) {
     pushError(
       errors,
       entryIndex,
-      `viewingEvents[${eventIndex}].watchedAt is not a valid ISO 8601 date.`,
+      `viewingEvents[${eventIndex}].watchedAt is required and must be a valid ISO 8601 date/time string.`,
       `viewingEvents[${eventIndex}].watchedAt`,
     );
   }
@@ -402,20 +409,35 @@ export const CSV_ALL_HEADERS = [...CSV_REQUIRED_HEADERS, ...CSV_OPTIONAL_HEADERS
 /**
  * Parse and validate a raw CSV string.
  * Returns parsed rows and all validation errors found.
+ *
+ * Uses a full RFC 4180 compliant parser that correctly handles:
+ * - Quoted fields containing commas
+ * - Escaped double quotes ("")
+ * - Quoted fields containing embedded CRLF or LF newlines
+ * - Standard CRLF and LF row endings
  */
 export function validateCsvImport(csvText: string): {
   rows: CsvImportRow[];
   errors: ImportValidationError[];
 } {
   const errors: ImportValidationError[] = [];
-  const lines = csvText.split(/\r?\n/);
 
-  if (lines.length === 0 || lines[0].trim() === '') {
+  // Parse all records with the RFC 4180 compliant parser
+  let parsedRecords: { rowNumber: number; fields: string[] }[];
+  try {
+    parsedRecords = parseCsvRfc4180(csvText);
+  } catch (parseErr: unknown) {
+    const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+    return { rows: [], errors: [{ index: 0, message: `CSV parse error: ${msg}` }] };
+  }
+
+  if (parsedRecords.length === 0) {
     return { rows: [], errors: [{ index: 0, message: 'CSV file is empty.' }] };
   }
 
-  // Parse header
-  const headers = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+  // First record is the header row
+  const headerRecord = parsedRecords[0];
+  const headers = headerRecord.fields.map((h) => h.trim().toLowerCase());
 
   // Check required headers
   for (const req of CSV_REQUIRED_HEADERS) {
@@ -442,12 +464,10 @@ export function validateCsvImport(csvText: string): {
   const rows: CsvImportRow[] = [];
   const seenEntries = new Map<string, number>();
 
-  for (let lineIdx = 1; lineIdx < lines.length; lineIdx++) {
-    const line = lines[lineIdx];
-    if (line.trim() === '') continue; // skip blank lines
-
-    const csvRowNumber = lineIdx; // 1-based (header is line 0 for display, row 1 = first data row)
-    const values = parseCsvLine(line);
+  for (let recordIdx = 1; recordIdx < parsedRecords.length; recordIdx++) {
+    const record = parsedRecords[recordIdx];
+    const csvRowNumber = recordIdx; // 1-based data row index for diagnostics
+    const values = record.fields;
 
     if (values.length !== headers.length) {
       errors.push({
@@ -540,42 +560,121 @@ export function validateCsvImport(csvText: string): {
 }
 
 /**
- * Parse a single CSV line respecting double-quote escaping.
+ * RFC 4180 compliant CSV parser.
+ * Returns an array of records where each record contains:
+ * - rowNumber: physical line number where the record began
+ * - fields: the parsed string fields
+ * Correctly handles:
+ * - Quoted fields containing commas
+ * - Escaped double quotes ("")
+ * - Quoted fields containing CRLF or LF newlines
+ * - Standard CRLF and LF row endings
+ * - Blank line skipping
+ * Throws a descriptive Error on malformed quoting (e.g. unclosed quote).
  */
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let insideQuotes = false;
+export function parseCsvRfc4180(text: string): { rowNumber: number; fields: string[] }[] {
+  const records: { rowNumber: number; fields: string[] }[] = [];
+  let pos = 0;
+  const len = text.length;
+  let currentLine = 1;
 
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+  while (pos < len) {
+    const recordStartLine = currentLine;
+    const fields: string[] = [];
 
-    if (insideQuotes) {
-      if (ch === '"') {
-        // Peek ahead for escaped quote ""
-        if (i + 1 < line.length && line[i + 1] === '"') {
-          current += '"';
-          i++; // skip next quote
-        } else {
-          insideQuotes = false;
+    // Parse one record
+    while (true) {
+      let field = '';
+
+      if (pos < len && text[pos] === '"') {
+        // Quoted field
+        pos++; // consume opening quote
+        while (true) {
+          if (pos >= len) {
+            throw new Error(`Unclosed quote in CSV starting near line ${recordStartLine}.`);
+          }
+          if (text[pos] === '"') {
+            if (pos + 1 < len && text[pos + 1] === '"') {
+              field += '"';
+              pos += 2; // escaped quote ""
+            } else {
+              pos++; // closing quote
+              break;
+            }
+          } else {
+            if (text[pos] === '\r') {
+              if (pos + 1 < len && text[pos + 1] === '\n') {
+                field += '\r\n';
+                pos += 2;
+                currentLine++;
+              } else {
+                field += '\r';
+                pos++;
+                currentLine++;
+              }
+            } else if (text[pos] === '\n') {
+              field += '\n';
+              pos++;
+              currentLine++;
+            } else {
+              field += text[pos];
+              pos++;
+            }
+          }
+        }
+
+        // Consume any whitespace after closing quote until delimiter or newline/EOF
+        while (pos < len && text[pos] !== ',' && text[pos] !== '\r' && text[pos] !== '\n') {
+          if (text[pos] === ' ' || text[pos] === '\t') {
+            pos++;
+          } else {
+            throw new Error(
+              `Unexpected character '${text[pos]}' after closing quote near line ${recordStartLine}.`,
+            );
+          }
         }
       } else {
-        current += ch;
+        // Unquoted field
+        while (pos < len && text[pos] !== ',' && text[pos] !== '\r' && text[pos] !== '\n') {
+          field += text[pos];
+          pos++;
+        }
       }
-    } else {
-      if (ch === '"') {
-        insideQuotes = true;
-      } else if (ch === ',') {
-        result.push(current);
-        current = '';
+
+      fields.push(field);
+
+      if (pos < len && text[pos] === ',') {
+        pos++; // next field
       } else {
-        current += ch;
+        break; // end of record
       }
     }
+
+    // Consume line break at end of record
+    if (pos < len) {
+      if (text[pos] === '\r') {
+        if (pos + 1 < len && text[pos + 1] === '\n') {
+          pos += 2;
+          currentLine++;
+        } else {
+          pos++;
+          currentLine++;
+        }
+      } else if (text[pos] === '\n') {
+        pos++;
+        currentLine++;
+      }
+    }
+
+    // Skip empty lines (a single empty field)
+    if (fields.length === 1 && fields[0].trim() === '') {
+      continue;
+    }
+
+    records.push({ rowNumber: recordStartLine, fields });
   }
 
-  result.push(current);
-  return result;
+  return records;
 }
 
 // ── Re-exports for type convenience ──────────────────────────────────────────

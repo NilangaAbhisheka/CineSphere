@@ -528,7 +528,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] On any validation or database error, the entire import rolls back
 - [x] Never silently discard invalid records — report all errors
   - [x] Invalid records cause the entire import to fail with a full error list
-  - [x] Frontend displays "No data was written" notice when validation errors are present
+  - [x] Frontend displays "No personal tracking records were written" notice when validation errors are present
 - [x] Import UI (`/import`)
   - [x] File dropzone with drag-and-drop, format detection, format guide cards
   - [x] Loading state with spinner during import
@@ -538,6 +538,14 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] Unit tests: 36 validator + 14 service + 4 controller + 11 frontend page + 5 api-client = 70 tests
 - [x] Integration tests: 20 tests covering valid imports, rollback, duplicate skipping, TMDB resolution
 - [x] E2E tests: Workflow G (3 tests — page access, validation error, successful CSV import)
+- [x] Post-implementation audit & corrective fixes:
+  - [x] Fix navigateTo() route union type in `apps/web/e2e/helpers/pages.ts` to include `/import`
+  - [x] Replace naive CSV splitting with RFC 4180 compliant state machine parser
+  - [x] Enforce mandatory ISO 8601 `watchedAt` for all `viewingEvents` records (no silent substitution)
+  - [x] Pre-validate episode and season TMDB references against catalogue (reject invalid refs; no silent skip)
+  - [x] Clarify atomicity semantics in `docs/IMPORT_FORMAT.md` and UI notice
+  - [x] Correct API documentation in `docs/IMPORT_FORMAT.md` to HTTP 200 on success
+  - [x] Add regression integration and unit tests for all audit items
 
 ### 4.5 Data Export
 
@@ -924,7 +932,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 | Phase 3 Stages 3.0–3.3 complete (Database Foundation)             | 2026-11-07 | SingleUserBootstrap, 4-model schema + integrity migration, 112 integration tests + 69 unit tests all passing. READ COMMITTED + VOLATILE trigger concurrency verified.       |
 | Phase 3 Stages 3.4–3.8 complete (Library, UI, Hardening)          | 2026-11-09 | Full library tracking (movies/TV), Dashboard with continuation/history, Statistics foundation, Playwright E2E suite (31 tests), CI green.                                   |
 | Phase 4 Stages 4.1–4.3 complete (Statistics Backend & Live UI)    | 2026-11-17 | Dedicated StatsModule with 4 endpoints, UTC monthly aggregation, live frontend integration with skeleton/error retry, CI run 44100431302 green (383 unit, 164 int, 31 E2E). |
-| Phase 4 Stage 4.4 complete (Data Import)                          | 2026-11-17 | JSON + CSV import endpoints, atomic transactions, full validation, duplicate skipping, frontend /import page, Workflow G E2E (3/3), 231 unit + 184 int + 34 E2E passing.  |
+| Phase 4 Stage 4.4 complete (Data Import)                          | 2026-11-17 | JSON + CSV import endpoints, atomic transactions, full validation, duplicate skipping, frontend /import page, Workflow G E2E (3/3), 231 unit + 184 int + 34 E2E passing.    |
 
 ---
 

@@ -422,6 +422,152 @@ describe('Import Integration Tests', () => {
       const count = await prisma.userLibraryEntry.count({ where: { userId: SINGLE_USER_ID } });
       expect(count).toBe(0);
     });
+
+    it('rejects import if an episode TMDB ID is missing from the catalogue (no silent discard)', async () => {
+      const show = await createTvShow('TV Show Missing Episode');
+      const nonexistentEpTmdbId = uniqueTmdbId();
+
+      const doc = {
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: show.tmdbId,
+            mediaType: 'TV',
+            status: 'WATCHING',
+            episodeProgress: [{ episodeTmdbId: nonexistentEpTmdbId }],
+          },
+        ],
+      };
+
+      const result = await importService.importJson(makeJsonBuffer(doc));
+
+      expect(result.success).toBe(false);
+      expect(
+        result.errors.some(
+          (e) => e.field?.includes('episodeProgress') && e.message.includes('not found'),
+        ),
+      ).toBe(true);
+
+      // Verify no partial tracking records were written
+      const count = await prisma.userLibraryEntry.count({ where: { userId: SINGLE_USER_ID } });
+      expect(count).toBe(0);
+      const epCount = await prisma.episodeProgress.count({
+        where: { libraryEntry: { userId: SINGLE_USER_ID } },
+      });
+      expect(epCount).toBe(0);
+    });
+
+    it('rejects import if an episode TMDB ID belongs to a different TV show', async () => {
+      const showA = await createTvShow('TV Show A');
+      const showB = await createTvShow('TV Show B');
+
+      const doc = {
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: showA.tmdbId,
+            mediaType: 'TV',
+            status: 'WATCHING',
+            // Try to assign showB's episode to showA's entry
+            episodeProgress: [{ episodeTmdbId: showB.episode1TmdbId }],
+          },
+        ],
+      };
+
+      const result = await importService.importJson(makeJsonBuffer(doc));
+
+      expect(result.success).toBe(false);
+      expect(result.errors.some((e) => e.message.includes('belongs to a different TV show'))).toBe(
+        true,
+      );
+
+      const count = await prisma.userLibraryEntry.count({ where: { userId: SINGLE_USER_ID } });
+      expect(count).toBe(0);
+    });
+
+    it('rejects import if a season TMDB ID is missing from the catalogue (no silent discard)', async () => {
+      const show = await createTvShow('TV Show Missing Season');
+      const nonexistentSeasonTmdbId = uniqueTmdbId();
+
+      const doc = {
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: show.tmdbId,
+            mediaType: 'TV',
+            status: 'COMPLETED',
+            seasonRatings: [{ seasonTmdbId: nonexistentSeasonTmdbId, rating: 8.5 }],
+          },
+        ],
+      };
+
+      const result = await importService.importJson(makeJsonBuffer(doc));
+
+      expect(result.success).toBe(false);
+      expect(
+        result.errors.some(
+          (e) => e.field?.includes('seasonRatings') && e.message.includes('not found'),
+        ),
+      ).toBe(true);
+
+      const count = await prisma.userLibraryEntry.count({ where: { userId: SINGLE_USER_ID } });
+      expect(count).toBe(0);
+      const srCount = await prisma.seasonRating.count({
+        where: { libraryEntry: { userId: SINGLE_USER_ID } },
+      });
+      expect(srCount).toBe(0);
+    });
+
+    it('rejects import if a season TMDB ID belongs to a different TV show', async () => {
+      const showA = await createTvShow('TV Show Alpha');
+      const showB = await createTvShow('TV Show Beta');
+
+      const doc = {
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: showA.tmdbId,
+            mediaType: 'TV',
+            status: 'COMPLETED',
+            seasonRatings: [{ seasonTmdbId: showB.season1TmdbId, rating: 9.0 }],
+          },
+        ],
+      };
+
+      const result = await importService.importJson(makeJsonBuffer(doc));
+
+      expect(result.success).toBe(false);
+      expect(result.errors.some((e) => e.message.includes('belongs to a different TV show'))).toBe(
+        true,
+      );
+
+      const count = await prisma.userLibraryEntry.count({ where: { userId: SINGLE_USER_ID } });
+      expect(count).toBe(0);
+    });
+
+    it('rejects import if viewing event is missing watchedAt (enforces required timestamp)', async () => {
+      const movie = await createMovie('Viewing Event Missing WatchedAt Movie');
+
+      const doc = {
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: movie.tmdbId,
+            mediaType: 'MOVIE',
+            status: 'COMPLETED',
+            viewingEvents: [{ rating: 8.5 }], // missing watchedAt
+          },
+        ],
+      };
+
+      const result = await importService.importJson(makeJsonBuffer(doc));
+
+      expect(result.success).toBe(false);
+      expect(result.errors.some((e) => e.field === 'viewingEvents[0].watchedAt')).toBe(true);
+
+      const count = await prisma.userLibraryEntry.count({ where: { userId: SINGLE_USER_ID } });
+      expect(count).toBe(0);
+    });
   });
 
   // ── CSV Import Tests ─────────────────────────────────────────────────────────

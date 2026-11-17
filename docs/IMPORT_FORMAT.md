@@ -8,10 +8,10 @@ This document defines the supported import formats for CineSphere Stage 4.4 data
 
 CineSphere supports two import formats:
 
-| Format | Endpoint                | Size Limit | Fidelity                              |
-| ------ | ----------------------- | ---------- | ------------------------------------- |
-| JSON   | `POST /api/import/json` | 5 MB       | Full (entries, history, progress)     |
-| CSV    | `POST /api/import/csv`  | 2 MB       | Flat (library entries only)           |
+| Format | Endpoint                | Size Limit | Fidelity                          |
+| ------ | ----------------------- | ---------- | --------------------------------- |
+| JSON   | `POST /api/import/json` | 5 MB       | Full (entries, history, progress) |
+| CSV    | `POST /api/import/csv`  | 2 MB       | Flat (library entries only)       |
 
 **Use JSON for complete backups.** CSV is a convenience format for simple library imports.
 
@@ -21,8 +21,9 @@ CineSphere supports two import formats:
 
 ### Atomicity
 
-Imports are **all-or-nothing**. If any record fails validation, or any database write fails, the
-entire import is rolled back and your existing data is left unchanged.
+Personal tracking records (library entries, viewing events, episode progress, season ratings) are **all-or-nothing**. If any record fails validation or any personal-data database write fails, the entire personal tracking transaction is rolled back and your existing library data is left completely unchanged.
+
+> **Note on TMDB Catalogue Ingestion:** If an import references movies or TV shows not yet present in the local CineSphere catalogue, those catalogue items are fetched from TMDB and ingested into the shared catalogue prior to the personal tracking transaction. These catalogue additions are non-destructive and remain in the shared movie/TV database even if the subsequent personal tracking transaction fails or is rolled back. No partial personal tracking data is ever written on failure.
 
 ### Validation
 
@@ -104,47 +105,47 @@ JSON is the canonical format and supports full tracking data fidelity.
 
 #### Root Object
 
-| Field        | Type   | Required | Description                                             |
-| ------------ | ------ | -------- | ------------------------------------------------------- |
-| `version`    | string | Yes      | Must be `"1.0"`                                         |
-| `exportedAt` | string | No       | ISO 8601 datetime (informational only)                  |
-| `entries`    | array  | Yes      | Array of library entry objects (may be empty)           |
+| Field        | Type   | Required | Description                                   |
+| ------------ | ------ | -------- | --------------------------------------------- |
+| `version`    | string | Yes      | Must be `"1.0"`                               |
+| `exportedAt` | string | No       | ISO 8601 datetime (informational only)        |
+| `entries`    | array  | Yes      | Array of library entry objects (may be empty) |
 
 #### Entry Object
 
-| Field            | Type    | Required | Description                                                                   |
-| ---------------- | ------- | -------- | ----------------------------------------------------------------------------- |
-| `tmdbId`         | integer | Yes      | TMDB ID of the movie or TV show (must be a positive integer)                  |
-| `mediaType`      | string  | Yes      | `"MOVIE"` or `"TV"` (case-insensitive)                                        |
-| `status`         | string  | Yes      | See [Status Values](#status-values)                                           |
-| `personalRating` | number  | No       | 1.0–10.0 in 0.5 increments (e.g. `7.5`, `8.0`, `9.5`)                       |
-| `notes`          | string  | No       | Personal notes (max 10,000 characters)                                        |
-| `createdAt`      | string  | No       | ISO 8601 datetime for the library entry creation date                         |
-| `viewingEvents`  | array   | No       | Movie only — array of individual viewing occurrences (see below)              |
-| `episodeProgress`| array   | No       | TV only — array of watched episode records (see below)                        |
-| `seasonRatings`  | array   | No       | TV only — array of per-season rating records (see below)                      |
+| Field             | Type    | Required | Description                                                      |
+| ----------------- | ------- | -------- | ---------------------------------------------------------------- |
+| `tmdbId`          | integer | Yes      | TMDB ID of the movie or TV show (must be a positive integer)     |
+| `mediaType`       | string  | Yes      | `"MOVIE"` or `"TV"` (case-insensitive)                           |
+| `status`          | string  | Yes      | See [Status Values](#status-values)                              |
+| `personalRating`  | number  | No       | 1.0–10.0 in 0.5 increments (e.g. `7.5`, `8.0`, `9.5`)            |
+| `notes`           | string  | No       | Personal notes (max 10,000 characters)                           |
+| `createdAt`       | string  | No       | ISO 8601 datetime for the library entry creation date            |
+| `viewingEvents`   | array   | No       | Movie only — array of individual viewing occurrences (see below) |
+| `episodeProgress` | array   | No       | TV only — array of watched episode records (see below)           |
+| `seasonRatings`   | array   | No       | TV only — array of per-season rating records (see below)         |
 
 #### ViewingEvent Object (Movie only)
 
-| Field       | Type   | Required | Description                                           |
-| ----------- | ------ | -------- | ----------------------------------------------------- |
-| `watchedAt` | string | Yes      | ISO 8601 datetime of the viewing                      |
-| `rating`    | number | No       | 1.0–10.0 in 0.5 increments                           |
-| `notes`     | string | No       | Notes for this specific viewing                       |
+| Field       | Type   | Required | Description                      |
+| ----------- | ------ | -------- | -------------------------------- |
+| `watchedAt` | string | Yes      | ISO 8601 datetime of the viewing |
+| `rating`    | number | No       | 1.0–10.0 in 0.5 increments       |
+| `notes`     | string | No       | Notes for this specific viewing  |
 
 #### EpisodeProgress Object (TV only)
 
-| Field           | Type    | Required | Description                                       |
-| --------------- | ------- | -------- | ------------------------------------------------- |
-| `episodeTmdbId` | integer | Yes      | TMDB ID of the watched episode                    |
-| `watchedAt`     | string  | No       | ISO 8601 datetime when the episode was watched    |
+| Field           | Type    | Required | Description                                    |
+| --------------- | ------- | -------- | ---------------------------------------------- |
+| `episodeTmdbId` | integer | Yes      | TMDB ID of the watched episode                 |
+| `watchedAt`     | string  | No       | ISO 8601 datetime when the episode was watched |
 
 #### SeasonRating Object (TV only)
 
-| Field          | Type    | Required | Description                                        |
-| -------------- | ------- | -------- | -------------------------------------------------- |
-| `seasonTmdbId` | integer | Yes      | TMDB ID of the rated season                        |
-| `rating`       | number  | Yes      | 1.0–10.0 in 0.5 increments                        |
+| Field          | Type    | Required | Description                 |
+| -------------- | ------- | -------- | --------------------------- |
+| `seasonTmdbId` | integer | Yes      | TMDB ID of the rated season |
+| `rating`       | number  | Yes      | 1.0–10.0 in 0.5 increments  |
 
 ---
 
@@ -155,13 +156,13 @@ ratings) are **not supported** — use JSON for those.
 
 ### Columns
 
-| Column            | Required | Description                                                        |
-| ----------------- | -------- | ------------------------------------------------------------------ |
-| `tmdb_id`         | Yes      | TMDB ID of the movie or TV show (positive integer)                 |
-| `media_type`      | Yes      | `movie` or `tv` (case-insensitive)                                 |
-| `status`          | Yes      | See [Status Values](#status-values) (case-insensitive)             |
-| `personal_rating` | No       | 1.0–10.0 in 0.5 increments (leave blank if unrated)               |
-| `notes`           | No       | Personal notes (quote with `"..."` if the notes contain commas)    |
+| Column            | Required | Description                                                             |
+| ----------------- | -------- | ----------------------------------------------------------------------- |
+| `tmdb_id`         | Yes      | TMDB ID of the movie or TV show (positive integer)                      |
+| `media_type`      | Yes      | `movie` or `tv` (case-insensitive)                                      |
+| `status`          | Yes      | See [Status Values](#status-values) (case-insensitive)                  |
+| `personal_rating` | No       | 1.0–10.0 in 0.5 increments (leave blank if unrated)                     |
+| `notes`           | No       | Personal notes (quote with `"..."` if the notes contain commas)         |
 | `created_at`      | No       | ISO 8601 date or datetime (e.g. `2023-01-15` or `2023-01-15T10:00:00Z`) |
 
 ### Example
@@ -185,12 +186,12 @@ tmdb_id,media_type,status,personal_rating,notes,created_at
 
 ## Status Values
 
-| Value           | Description                     |
-| --------------- | ------------------------------- |
-| `PLAN_TO_WATCH` | Added to watch later list        |
-| `WATCHING`      | Currently watching               |
-| `COMPLETED`     | Finished                         |
-| `DROPPED`       | Stopped watching                 |
+| Value           | Description               |
+| --------------- | ------------------------- |
+| `PLAN_TO_WATCH` | Added to watch later list |
+| `WATCHING`      | Currently watching        |
+| `COMPLETED`     | Finished                  |
+| `DROPPED`       | Stopped watching          |
 
 Status values are case-insensitive in both JSON and CSV imports.
 
@@ -219,7 +220,7 @@ On validation failure (`success: false`):
   "total": 1,
   "imported": 0,
   "skipped": 0,
-  "summary": "Import failed due to 1 validation error. No data was written.",
+  "summary": "Import failed with 1 validation error. No personal tracking data was written.",
   "errors": [
     {
       "index": 0,
@@ -230,8 +231,12 @@ On validation failure (`success: false`):
 }
 ```
 
-The HTTP status code is `400 Bad Request` when validation errors are present, `201 Created` on
-success.
+Both endpoints return HTTP `200 OK` with an `ImportResponse` body. Inspect `success` to determine the outcome:
+
+- When `success: true`, `imported` and `skipped` indicate the record counts.
+- When `success: false`, `errors` contains the structured list of validation errors.
+
+If the uploaded file is malformed (e.g. invalid JSON syntax), HTTP `400 Bad Request` is returned. If the file exceeds the size limit, HTTP `413 Payload Too Large` is returned.
 
 ---
 

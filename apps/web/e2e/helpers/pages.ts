@@ -8,7 +8,10 @@ import { type Page, expect } from '@playwright/test';
 
 // ── Navigation ───────────────────────────────────────────────────────────────
 
-export async function navigateTo(page: Page, path: '/' | '/discover' | '/library' | '/statistics') {
+export async function navigateTo(
+  page: Page,
+  path: '/' | '/discover' | '/library' | '/statistics' | '/import',
+) {
   await page.goto(path);
   await page.waitForLoadState('networkidle');
 }

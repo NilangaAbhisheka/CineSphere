@@ -164,7 +164,7 @@ describe('ImportPage', () => {
         { index: 0, field: 'status', message: 'Row 1: invalid status "INVALID"' },
         { index: 1, field: 'tmdb_id', message: 'Row 2: tmdb_id must be a positive integer' },
       ],
-      summary: 'Import failed with 2 validation errors. No data was written.',
+      summary: 'Import failed with 2 validation errors. No personal tracking records were written.',
     };
     mockImportCsv.mockResolvedValue(errorResponse);
 

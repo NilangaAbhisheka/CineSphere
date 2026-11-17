@@ -39,7 +39,7 @@ export interface ImportEntry {
 }
 
 export interface ImportViewingEvent {
-  watchedAt?: string | null;
+  watchedAt: string;
   rating?: number | null;
   notes?: string | null;
 }

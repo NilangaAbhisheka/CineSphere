@@ -109,6 +109,18 @@ export class ImportService {
       return this.validationFailureResponse(resolutionResults.errors, total);
     }
 
+    // Phase 1b: Validate episode and season references against the catalogue.
+    // If any referenced episode/season does not exist or belongs to a different show,
+    // reject the entire import — never silently discard supplied progress records.
+    const referenceErrors = await this.validateJsonEntryReferences(
+      entries,
+      resolutionResults.resolvedIds,
+    );
+
+    if (referenceErrors.length > 0) {
+      return this.validationFailureResponse(referenceErrors, total);
+    }
+
     // Phase 2: Check which entries already exist in the user's library.
     // Existing entries are SKIPPED (not overwritten) — safe import semantics.
     const { newEntries, skippedCount } = await this.partitionJsonEntries(
@@ -200,6 +212,78 @@ export class ImportService {
   }
 
   /**
+   * Validate that all referenced episode and season TMDB IDs exist in the local
+   * catalogue (post-ingestion) and belong to the correct TV show.
+   * Never silently discard or skip missing/mismatched sub-records.
+   */
+  private async validateJsonEntryReferences(
+    entries: ImportEntry[],
+    resolvedIds: Map<number, { movieId?: string; tvShowId?: string }>,
+  ): Promise<ImportValidationError[]> {
+    const errors: ImportValidationError[] = [];
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      if (entry.mediaType !== 'TV') continue;
+
+      const resolved = resolvedIds.get(i);
+      if (!resolved?.tvShowId) continue;
+
+      // Validate episode references
+      if (entry.episodeProgress && entry.episodeProgress.length > 0) {
+        for (let epIdx = 0; epIdx < entry.episodeProgress.length; epIdx++) {
+          const ep = entry.episodeProgress[epIdx];
+          const episode = await this.prisma.episode.findFirst({
+            where: { tmdbId: ep.episodeTmdbId },
+            select: { id: true, season: { select: { tvShowId: true } } },
+          });
+
+          if (!episode) {
+            errors.push({
+              index: i,
+              field: `episodeProgress[${epIdx}].episodeTmdbId`,
+              message: `Entry ${i}: Episode TMDB ID ${ep.episodeTmdbId} not found in catalogue.`,
+            });
+          } else if (episode.season.tvShowId !== resolved.tvShowId) {
+            errors.push({
+              index: i,
+              field: `episodeProgress[${epIdx}].episodeTmdbId`,
+              message: `Entry ${i}: Episode TMDB ID ${ep.episodeTmdbId} belongs to a different TV show.`,
+            });
+          }
+        }
+      }
+
+      // Validate season references
+      if (entry.seasonRatings && entry.seasonRatings.length > 0) {
+        for (let srIdx = 0; srIdx < entry.seasonRatings.length; srIdx++) {
+          const sr = entry.seasonRatings[srIdx];
+          const season = await this.prisma.season.findFirst({
+            where: { tmdbId: sr.seasonTmdbId },
+            select: { id: true, tvShowId: true },
+          });
+
+          if (!season) {
+            errors.push({
+              index: i,
+              field: `seasonRatings[${srIdx}].seasonTmdbId`,
+              message: `Entry ${i}: Season TMDB ID ${sr.seasonTmdbId} not found in catalogue.`,
+            });
+          } else if (season.tvShowId !== resolved.tvShowId) {
+            errors.push({
+              index: i,
+              field: `seasonRatings[${srIdx}].seasonTmdbId`,
+              message: `Entry ${i}: Season TMDB ID ${sr.seasonTmdbId} belongs to a different TV show.`,
+            });
+          }
+        }
+      }
+    }
+
+    return errors;
+  }
+
+  /**
    * Partition entries into new (to import) vs already existing (to skip).
    */
   private async partitionJsonEntries(
@@ -267,7 +351,7 @@ export class ImportService {
               await tx.viewingEvent.create({
                 data: {
                   libraryEntryId: libraryEntry.id,
-                  watchedAt: ev.watchedAt ? new Date(ev.watchedAt) : new Date(),
+                  watchedAt: new Date(ev.watchedAt),
                   rating:
                     ev.rating !== undefined && ev.rating !== null
                       ? new Prisma.Decimal(ev.rating.toFixed(2))
@@ -291,22 +375,13 @@ export class ImportService {
                 select: { id: true, season: { select: { tvShowId: true } } },
               });
 
-              if (!episode) {
-                this.logger.warn(
-                  `Import: Episode TMDB ID ${ep.episodeTmdbId} not found in catalogue — skipping episode progress record.`,
+              if (!episode || episode.season.tvShowId !== resolved.tvShowId) {
+                throw new Error(
+                  `Episode TMDB ID ${ep.episodeTmdbId} unexpectedly invalid or mismatched during persistence.`,
                 );
-                continue;
               }
 
-              // Verify episode belongs to the correct TV show
-              if (episode.season.tvShowId !== resolved.tvShowId) {
-                this.logger.warn(
-                  `Import: Episode TMDB ID ${ep.episodeTmdbId} belongs to a different TV show — skipping.`,
-                );
-                continue;
-              }
-
-              // Use createMany with skipDuplicates to handle concurrent inserts safely
+              // Use upsert to handle concurrent inserts safely
               await tx.episodeProgress.upsert({
                 where: {
                   libraryEntryId_episodeId: {
@@ -332,18 +407,10 @@ export class ImportService {
                 select: { id: true, tvShowId: true },
               });
 
-              if (!season) {
-                this.logger.warn(
-                  `Import: Season TMDB ID ${sr.seasonTmdbId} not found in catalogue — skipping season rating.`,
+              if (!season || season.tvShowId !== resolved.tvShowId) {
+                throw new Error(
+                  `Season TMDB ID ${sr.seasonTmdbId} unexpectedly invalid or mismatched during persistence.`,
                 );
-                continue;
-              }
-
-              if (season.tvShowId !== resolved.tvShowId) {
-                this.logger.warn(
-                  `Import: Season TMDB ID ${sr.seasonTmdbId} belongs to a different TV show — skipping.`,
-                );
-                continue;
               }
 
               await tx.seasonRating.upsert({
@@ -593,7 +660,7 @@ export class ImportService {
       imported: 0,
       skipped: 0,
       errors,
-      summary: `Import failed with ${errors.length} validation ${errors.length === 1 ? 'error' : 'errors'}. No data was written.`,
+      summary: `Import failed with ${errors.length} validation ${errors.length === 1 ? 'error' : 'errors'}. No personal tracking records were written.`,
     };
   }
 }
