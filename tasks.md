@@ -502,14 +502,42 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] Real network loading skeletons and API error handling with retry trigger
 - [x] Verify live rendering of summary cards, genre chart, activity timeline, and rating distribution
 
-### 4.4 Data Import
+### 4.4 Data Import (Stage 4.4 Complete ✅)
 
-- [ ] JSON import endpoint with schema validation
-- [ ] CSV import endpoint with schema validation
-- [ ] Duplicate detection logic
-- [ ] Import validation with detailed error reporting
-- [ ] Atomic import transactions (all-or-nothing or rollback on failure)
-- [ ] Never silently discard invalid records — report all errors
+- [x] JSON import endpoint with schema validation
+  - [x] `POST /api/import/json` — NestJS `FileInterceptor`, 5 MB limit
+  - [x] JSON schema v1.0 parser: `version`, `exportedAt`, `entries[]`
+  - [x] Validates `mediaType` (MOVIE/TV), `status`, `personalRating` (half-step 1–10), date formats, `viewingEvents`, `episodeProgress`, `seasonRatings`
+  - [x] Shared TypeScript contracts in `@cinesphere/shared` (`ImportDocument`, `ImportEntry`, `ImportResponse`, etc.)
+- [x] CSV import endpoint with schema validation
+  - [x] `POST /api/import/csv` — NestJS `FileInterceptor`, 2 MB limit
+  - [x] RFC-compliant CSV parser with quote/escape support
+  - [x] Required headers: `tmdb_id`, `media_type`, `status`; optional: `personal_rating`, `notes`, `created_at`
+  - [x] Row-level validation errors with row number and field references
+- [x] Duplicate detection logic
+  - [x] Intra-file duplicate detection (same `mediaType` + `tmdbId` appears twice → validation error)
+  - [x] Pre-import check against existing library — existing entries are **skipped** (not overwritten)
+  - [x] Clear skip/import counts in the import result (`total`, `imported`, `skipped`)
+- [x] Import validation with detailed error reporting
+  - [x] Full error accumulation pass before any database write
+  - [x] Errors identify entry index (or CSV row number) and field name
+  - [x] Frontend renders structured error list with per-entry diagnostics
+- [x] Atomic import transactions (all-or-nothing or rollback on failure)
+  - [x] READ COMMITTED Prisma `$transaction` wrapping all persistence writes
+  - [x] TMDB catalogue resolution (on-demand ingestion) runs **outside** the transaction
+  - [x] On any validation or database error, the entire import rolls back
+- [x] Never silently discard invalid records — report all errors
+  - [x] Invalid records cause the entire import to fail with a full error list
+  - [x] Frontend displays "No data was written" notice when validation errors are present
+- [x] Import UI (`/import`)
+  - [x] File dropzone with drag-and-drop, format detection, format guide cards
+  - [x] Loading state with spinner during import
+  - [x] Success result panel: total, imported, skipped counts + summary + "View My Library" link
+  - [x] Validation error panel with per-entry diagnostics and footer notice
+  - [x] "Import Data" link on My Library page header
+- [x] Unit tests: 36 validator + 14 service + 4 controller + 11 frontend page + 5 api-client = 70 tests
+- [x] Integration tests: 20 tests covering valid imports, rollback, duplicate skipping, TMDB resolution
+- [x] E2E tests: Workflow G (3 tests — page access, validation error, successful CSV import)
 
 ### 4.5 Data Export
 
@@ -887,15 +915,16 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ## Completed Milestones
 
-| Milestone                                                         | Completed  | Notes                                                                                                                                                                 |
-| ----------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Documentation and architecture initialization                     | 2026-11-05 | All foundation docs created. No implementation yet.                                                                                                                   |
-| Antigravity setup, Git initialization & environment configuration | 2026-11-05 | AGENTS.md, Git init (main), .gitignore, .env.example, .env, root configs created.                                                                                     |
-| Monorepo initialization & PostgreSQL + pgvector foundation        | 2026-11-06 | TD-02/TD-04 resolved. Turborepo+pnpm, Next.js, NestJS, Prisma, pgvector verified.                                                                                     |
-| Phase 2 complete (Catalogue, TMDB Ingestion & Discover UI)        | 2026-11-07 | TMDB client, ingestion, discover API, frontend Discover page, 100+ tests passing.                                                                                     |
-| Phase 3 Stages 3.0–3.3 complete (Database Foundation)             | 2026-11-07 | SingleUserBootstrap, 4-model schema + integrity migration, 112 integration tests + 69 unit tests all passing. READ COMMITTED + VOLATILE trigger concurrency verified. |
-| Phase 3 Stages 3.4–3.8 complete (Library, UI, Hardening)          | 2026-11-09 | Full library tracking (movies/TV), Dashboard with continuation/history, Statistics foundation, Playwright E2E suite (31 tests), CI green.                               |
+| Milestone                                                         | Completed  | Notes                                                                                                                                                                       |
+| ----------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Documentation and architecture initialization                     | 2026-11-05 | All foundation docs created. No implementation yet.                                                                                                                         |
+| Antigravity setup, Git initialization & environment configuration | 2026-11-05 | AGENTS.md, Git init (main), .gitignore, .env.example, .env, root configs created.                                                                                           |
+| Monorepo initialization & PostgreSQL + pgvector foundation        | 2026-11-06 | TD-02/TD-04 resolved. Turborepo+pnpm, Next.js, NestJS, Prisma, pgvector verified.                                                                                           |
+| Phase 2 complete (Catalogue, TMDB Ingestion & Discover UI)        | 2026-11-07 | TMDB client, ingestion, discover API, frontend Discover page, 100+ tests passing.                                                                                           |
+| Phase 3 Stages 3.0–3.3 complete (Database Foundation)             | 2026-11-07 | SingleUserBootstrap, 4-model schema + integrity migration, 112 integration tests + 69 unit tests all passing. READ COMMITTED + VOLATILE trigger concurrency verified.       |
+| Phase 3 Stages 3.4–3.8 complete (Library, UI, Hardening)          | 2026-11-09 | Full library tracking (movies/TV), Dashboard with continuation/history, Statistics foundation, Playwright E2E suite (31 tests), CI green.                                   |
 | Phase 4 Stages 4.1–4.3 complete (Statistics Backend & Live UI)    | 2026-11-17 | Dedicated StatsModule with 4 endpoints, UTC monthly aggregation, live frontend integration with skeleton/error retry, CI run 44100431302 green (383 unit, 164 int, 31 E2E). |
+| Phase 4 Stage 4.4 complete (Data Import)                          | 2026-11-17 | JSON + CSV import endpoints, atomic transactions, full validation, duplicate skipping, frontend /import page, Workflow G E2E (3/3), 231 unit + 184 int + 34 E2E passing.  |
 
 ---
 

@@ -9,6 +9,7 @@ import {
   DashboardStats,
   EpisodeProgressResponse,
   GenreStatItem,
+  ImportResponse,
   LibraryEntryListItem,
   LibraryEntryResponse,
   ListLibraryQuery,
@@ -524,6 +525,55 @@ class ApiClient {
 
   public async getStatsRatings(signal?: AbortSignal): Promise<RatingStatsData> {
     return this.request<RatingStatsData>('/stats/ratings', undefined, signal);
+  }
+
+  // ── Import Endpoints ─────────────────────────────────────────────────────────
+
+  public async importJson(file: File, signal?: AbortSignal): Promise<ImportResponse> {
+    return this.uploadFile<ImportResponse>('/import/json', file, signal);
+  }
+
+  public async importCsv(file: File, signal?: AbortSignal): Promise<ImportResponse> {
+    return this.uploadFile<ImportResponse>('/import/csv', file, signal);
+  }
+
+  private async uploadFile<T>(endpoint: string, file: File, signal?: AbortSignal): Promise<T> {
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${this.baseUrl}${cleanEndpoint}`;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        signal,
+        // Do NOT set Content-Type header — browser sets it automatically with boundary
+      });
+
+      if (!response.ok) {
+        let errorMsg = `API request failed with status ${response.status}`;
+        let responseBody: unknown;
+        try {
+          responseBody = await response.json();
+          if (responseBody && typeof responseBody === 'object' && 'message' in responseBody) {
+            const bodyMsg = (responseBody as { message: unknown }).message;
+            errorMsg = Array.isArray(bodyMsg) ? bodyMsg.join(', ') : String(bodyMsg);
+          }
+        } catch {
+          // Non-JSON response
+        }
+        throw new ApiClientError(response.status, errorMsg, responseBody);
+      }
+
+      return (await response.json()) as T;
+    } catch (err: unknown) {
+      if (err instanceof ApiClientError) throw err;
+      if (err instanceof DOMException && err.name === 'AbortError') throw err;
+      const error = err as Error;
+      throw new ApiClientError(0, error.message || 'Network connection failed');
+    }
   }
 }
 

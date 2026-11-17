@@ -5,6 +5,11 @@ import { PrismaClient } from '@prisma/client';
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
+  constructor() {
+    const url = process.env.CINESPHERE_E2E_DATABASE_URL || process.env.DATABASE_URL;
+    super(url ? { datasources: { db: { url } } } : undefined);
+  }
+
   async onModuleInit(): Promise<void> {
     try {
       await this.$connect();

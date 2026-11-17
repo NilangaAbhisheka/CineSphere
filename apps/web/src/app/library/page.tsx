@@ -145,21 +145,42 @@ export default function LibraryPage() {
               </p>
             </div>
 
-            {/* Discover CTA */}
-            <Link
-              href="/discover"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-lg shadow-sky-600/20 hover:shadow-sky-500/30 transition-all self-start sm:self-center"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4.5v15m7.5-7.5h-15"
-                />
-              </svg>
-              Discover &amp; Add Titles
-            </Link>
+            {/* Actions: Import & Discover CTA */}
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              <Link
+                href="/import"
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold hover:border-slate-600 transition-all shadow-sm"
+              >
+                <svg
+                  className="w-4 h-4 text-sky-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                  />
+                </svg>
+                Import Data
+              </Link>
+              <Link
+                href="/discover"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-lg shadow-sky-600/20 hover:shadow-sky-500/30 transition-all"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4.5v15m7.5-7.5h-15"
+                  />
+                </svg>
+                Discover &amp; Add Titles
+              </Link>
+            </div>
           </div>
 
           {/* ── Filter & Navigation Bar ────────────────────────────────────────── */}
