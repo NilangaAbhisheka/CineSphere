@@ -80,7 +80,10 @@ export async function openFirstLibraryDetailModal(page: Page): Promise<void> {
   const firstCard = page.getByTestId('library-card').first();
   await expect(firstCard).toBeVisible({ timeout: 10_000 });
   await firstCard.getByRole('button', { name: 'Manage Tracking' }).click();
-  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
+  const modal = page.getByRole('dialog');
+  await expect(modal).toBeVisible({ timeout: 5_000 });
+  // Wait for initial detail fetch to complete so modal content is loaded
+  await expect(modal.getByText('Loading library details...')).not.toBeVisible({ timeout: 10_000 });
 }
 
 /**

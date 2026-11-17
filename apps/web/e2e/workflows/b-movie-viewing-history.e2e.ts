@@ -61,16 +61,17 @@ test.describe('Workflow B — Movie Viewing History', () => {
 
     await openFirstLibraryDetailModal(page);
 
-    // Count existing events first
+    // Count existing events first — wait for the existing event to be visible
     const modal = getDetailModal(page);
     const historyItems = modal.getByTestId('viewing-history-item');
+    await expect(historyItems.first()).toBeVisible({ timeout: 10_000 });
     const before = await historyItems.count();
 
     // Log another viewing event
     await logViewingEvent(page);
 
     // There should now be one more event
-    await expect(historyItems).toHaveCount(before + 1, { timeout: 8_000 });
+    await expect(historyItems).toHaveCount(before + 1, { timeout: 10_000 });
   });
 
   test('B3: Reload — viewing history persists across page navigation', async ({ page }) => {
@@ -84,11 +85,10 @@ test.describe('Workflow B — Movie Viewing History', () => {
 
     const modal = getDetailModal(page);
     const historyItems = modal.getByTestId('viewing-history-item');
-    await expect(historyItems.first()).toBeVisible({ timeout: 8_000 });
+    await expect(historyItems.first()).toBeVisible({ timeout: 10_000 });
 
     // Should still have at least 2 events from B1 + B2
-    const count = await historyItems.count();
-    expect(count).toBeGreaterThanOrEqual(2);
+    await expect(historyItems).toHaveCount(2, { timeout: 10_000 });
   });
 
   test('B4: Library entry still exists independently of viewing events', async ({ page }) => {
