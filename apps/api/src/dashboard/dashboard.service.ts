@@ -159,6 +159,7 @@ export class DashboardService {
         let lastWatchedAt: string | null = null;
         if (entry.episodeProgresses.length > 0) {
           const maxDate = entry.episodeProgresses.reduce<Date | null>((max, p) => {
+            if (!p.watchedAt) return max;
             return max === null || p.watchedAt > max ? p.watchedAt : max;
           }, null);
           lastWatchedAt = maxDate ? maxDate.toISOString() : null;
@@ -225,7 +226,7 @@ export class DashboardService {
       }),
       // TV episode progress events
       this.prisma.episodeProgress.findMany({
-        where: { libraryEntry: { userId, mediaType: 'TV' } },
+        where: { libraryEntry: { userId, mediaType: 'TV' }, watchedAt: { not: null } },
         orderBy: { watchedAt: 'desc' },
         take: limit,
         select: {
@@ -266,7 +267,7 @@ export class DashboardService {
 
     const tvItems: RecentActivityItem[] = episodeEvents.map((e) => ({
       activityType: 'TV_EPISODE' as const,
-      watchedAt: e.watchedAt.toISOString(),
+      watchedAt: e.watchedAt ? e.watchedAt.toISOString() : '',
       libraryEntryId: e.libraryEntryId,
       tvShow: e.libraryEntry.tvShow
         ? {

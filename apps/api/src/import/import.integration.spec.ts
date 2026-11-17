@@ -265,6 +265,59 @@ describe('Import Integration Tests', () => {
       expect(ule?.episodeProgresses).toHaveLength(2);
     });
 
+    it('stores null watchedAt when omitted in episode progress and preserves exact timestamp when provided', async () => {
+      const show = await createTvShow('Import Test Show Null WatchedAt');
+
+      const doc = {
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: show.tmdbId,
+            mediaType: 'TV',
+            status: 'WATCHING',
+            episodeProgress: [
+              { episodeTmdbId: show.episode1TmdbId, watchedAt: '2023-02-01T20:00:00Z' },
+              { episodeTmdbId: show.episode2TmdbId }, // omitted watchedAt
+            ],
+          },
+        ],
+      };
+
+      const result = await importService.importJson(makeJsonBuffer(doc));
+
+      expect(result.success).toBe(true);
+      expect(result.imported).toBe(1);
+
+      const ule = await prisma.userLibraryEntry.findFirst({
+        where: { userId: SINGLE_USER_ID, tvShowId: show.id },
+        include: {
+          episodeProgresses: {
+            orderBy: { episodeId: 'asc' },
+            include: { episode: true },
+          },
+        },
+      });
+
+      expect(ule?.episodeProgresses).toHaveLength(2);
+
+      const ep1 = ule!.episodeProgresses.find((p) => p.episode.tmdbId === show.episode1TmdbId);
+      const ep2 = ule!.episodeProgresses.find((p) => p.episode.tmdbId === show.episode2TmdbId);
+
+      expect(ep1).toBeDefined();
+      expect(ep1!.watchedAt).not.toBeNull();
+      expect(ep1!.watchedAt?.toISOString()).toBe('2023-02-01T20:00:00.000Z');
+
+      expect(ep2).toBeDefined();
+      // Crucial requirement: watchedAt must be null when omitted, not fabricated with current date
+      expect(ep2!.watchedAt).toBeNull();
+
+      // Total count in DB is preserved accurately
+      const totalProgressCount = await prisma.episodeProgress.count({
+        where: { libraryEntryId: ule!.id },
+      });
+      expect(totalProgressCount).toBe(2);
+    });
+
     it('imports season ratings for a TV show', async () => {
       const show = await createTvShow('Import Test Show C');
 
@@ -349,6 +402,29 @@ describe('Import Integration Tests', () => {
       expect(result.errors.length).toBeGreaterThan(0);
 
       // No entries should have been written
+      const count = await prisma.userLibraryEntry.count({ where: { userId: SINGLE_USER_ID } });
+      expect(count).toBe(0);
+    });
+
+    it('rejects viewing events with invalid calendar date or missing timezone (no records written)', async () => {
+      const movie = await createMovie('Invalid Date Test Movie');
+
+      const invalidDoc = {
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: movie.tmdbId,
+            mediaType: 'MOVIE',
+            status: 'COMPLETED',
+            viewingEvents: [{ watchedAt: '2024-02-30T12:00:00Z' }], // Feb 30 does not exist
+          },
+        ],
+      };
+
+      const result = await importService.importJson(makeJsonBuffer(invalidDoc));
+      expect(result.success).toBe(false);
+      expect(result.errors.some((e) => e.field === 'viewingEvents[0].watchedAt')).toBe(true);
+
       const count = await prisma.userLibraryEntry.count({ where: { userId: SINGLE_USER_ID } });
       expect(count).toBe(0);
     });
@@ -649,6 +725,28 @@ describe('Import Integration Tests', () => {
       const result = await importService.importCsv(makeCsvBuffer(csv));
       expect(result.success).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
+    });
+
+    it('reports validation errors using physical line numbers when earlier rows contain multiline fields', async () => {
+      const movie1 = await createMovie('CSV Multiline Movie 1');
+
+      // Line 1: Header
+      // Line 2-4: Row 1 (multiline notes)
+      // Line 5: Row 2 (invalid status)
+      const csv = [
+        'tmdb_id,media_type,status,notes',
+        `${movie1.tmdbId},MOVIE,COMPLETED,"Note line 1`,
+        'Note line 2',
+        'Note line 3"',
+        '999999,MOVIE,INVALID_STATUS,Invalid row note',
+      ].join('\n');
+
+      const result = await importService.importCsv(makeCsvBuffer(csv));
+      expect(result.success).toBe(false);
+      const statusError = result.errors.find((e) => e.field === 'status');
+      expect(statusError).toBeDefined();
+      expect(statusError?.index).toBe(5); // Physical CSV line 5
+      expect(statusError?.message).toContain('Row 5: "status" must be one of');
     });
 
     it('handles multiple movies in one CSV', async () => {

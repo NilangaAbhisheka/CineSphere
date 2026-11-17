@@ -70,12 +70,14 @@ export interface CsvImportRow {
   personal_rating?: string;
   notes?: string;
   created_at?: string;
+  /** Physical 1-based CSV line number where the record began */
+  _rowNumber?: number;
 }
 
 // ── Import API Contracts ──────────────────────────────────────────────────────
 
 export interface ImportValidationError {
-  /** Entry index (0-based for JSON) or CSV row number (1-based, excluding header) */
+  /** Entry index (0-based for JSON) or CSV physical row number (1-based) */
   index: number;
   field?: string;
   message: string;

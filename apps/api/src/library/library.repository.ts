@@ -46,7 +46,7 @@ export interface EntryWithRelations {
   episodeProgresses?: Array<{
     libraryEntryId: string;
     episodeId: string;
-    watchedAt: Date;
+    watchedAt: Date | null;
     episode?: {
       id: string;
       episodeNumber: number;

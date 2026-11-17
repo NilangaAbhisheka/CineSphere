@@ -275,9 +275,9 @@ model ViewingEvent {
 }
 
 model EpisodeProgress {
-  libraryEntryId String   @db.Uuid @map("library_entry_id")
-  episodeId      String   @db.Uuid @map("episode_id")
-  watchedAt      DateTime @default(now()) @db.Timestamptz(6) @map("watched_at")
+  libraryEntryId String    @db.Uuid @map("library_entry_id")
+  episodeId      String    @db.Uuid @map("episode_id")
+  watchedAt      DateTime? @default(now()) @db.Timestamptz(6) @map("watched_at")
 
   libraryEntry UserLibraryEntry @relation(fields: [libraryEntryId], references: [id], onDelete: Cascade)
   episode      Episode          @relation(fields: [episodeId], references: [id], onDelete: Restrict)

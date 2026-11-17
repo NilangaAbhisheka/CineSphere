@@ -21,9 +21,21 @@ CineSphere supports two import formats:
 
 ### Atomicity
 
-Personal tracking records (library entries, viewing events, episode progress, season ratings) are **all-or-nothing**. If any record fails validation or any personal-data database write fails, the entire personal tracking transaction is rolled back and your existing library data is left completely unchanged.
+Import execution proceeds in two distinct phases with different transactional guarantees:
 
-> **Note on TMDB Catalogue Ingestion:** If an import references movies or TV shows not yet present in the local CineSphere catalogue, those catalogue items are fetched from TMDB and ingested into the shared catalogue prior to the personal tracking transaction. These catalogue additions are non-destructive and remain in the shared movie/TV database even if the subsequent personal tracking transaction fails or is rolled back. No partial personal tracking data is ever written on failure.
+**Phase 1 — Catalogue Ingestion (non-transactional, idempotent):**
+If an imported entry references a movie or TV show not yet in the local CineSphere catalogue, that item is fetched from TMDB and inserted into the shared catalogue before the personal tracking transaction begins. These catalogue writes are:
+
+- Performed outside the personal tracking transaction
+- Idempotent — the same title can be fetched multiple times without side effects
+- **Permanent** — catalogue additions remain even if the subsequent personal tracking transaction rolls back
+
+If TMDB cannot resolve a referenced title (invalid ID or API error), the import is aborted before any personal data is written.
+
+**Phase 2 — Personal Tracking Transaction (`READ COMMITTED`, atomic):**
+All personal tracking records (library entries, viewing events, episode progress, season ratings) are written inside a single `READ COMMITTED` database transaction. If any write fails, **the entire transaction is rolled back** and your existing library data is left completely unchanged. No partial personal tracking data is ever persisted on failure.
+
+> **Summary:** Catalogue metadata additions from Phase 1 are not rolled back when Phase 2 fails. Personal tracking data from Phase 2 is strictly all-or-nothing.
 
 ### Validation
 
@@ -113,32 +125,32 @@ JSON is the canonical format and supports full tracking data fidelity.
 
 #### Entry Object
 
-| Field             | Type    | Required | Description                                                      |
-| ----------------- | ------- | -------- | ---------------------------------------------------------------- |
-| `tmdbId`          | integer | Yes      | TMDB ID of the movie or TV show (must be a positive integer)     |
-| `mediaType`       | string  | Yes      | `"MOVIE"` or `"TV"` (case-insensitive)                           |
-| `status`          | string  | Yes      | See [Status Values](#status-values)                              |
-| `personalRating`  | number  | No       | 1.0–10.0 in 0.5 increments (e.g. `7.5`, `8.0`, `9.5`)            |
-| `notes`           | string  | No       | Personal notes (max 10,000 characters)                           |
-| `createdAt`       | string  | No       | ISO 8601 datetime for the library entry creation date            |
-| `viewingEvents`   | array   | No       | Movie only — array of individual viewing occurrences (see below) |
-| `episodeProgress` | array   | No       | TV only — array of watched episode records (see below)           |
-| `seasonRatings`   | array   | No       | TV only — array of per-season rating records (see below)         |
+| Field             | Type    | Required | Description                                                                                                |
+| ----------------- | ------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `tmdbId`          | integer | Yes      | TMDB ID of the movie or TV show (must be a positive integer)                                               |
+| `mediaType`       | string  | Yes      | `"MOVIE"` or `"TV"` (case-insensitive)                                                                     |
+| `status`          | string  | Yes      | See [Status Values](#status-values)                                                                        |
+| `personalRating`  | number  | No       | 1.0–10.0 in 0.5 increments (e.g. `7.5`, `8.0`, `9.5`)                                                      |
+| `notes`           | string  | No       | Personal notes (max 10,000 characters)                                                                     |
+| `createdAt`       | string  | No       | ISO 8601 datetime with explicit timezone (e.g. `2023-01-15T10:00:00Z`) for the library entry creation date |
+| `viewingEvents`   | array   | No       | Movie only — array of individual viewing occurrences (see below)                                           |
+| `episodeProgress` | array   | No       | TV only — array of watched episode records (see below)                                                     |
+| `seasonRatings`   | array   | No       | TV only — array of per-season rating records (see below)                                                   |
 
 #### ViewingEvent Object (Movie only)
 
-| Field       | Type   | Required | Description                      |
-| ----------- | ------ | -------- | -------------------------------- |
-| `watchedAt` | string | Yes      | ISO 8601 datetime of the viewing |
-| `rating`    | number | No       | 1.0–10.0 in 0.5 increments       |
-| `notes`     | string | No       | Notes for this specific viewing  |
+| Field       | Type   | Required | Description                                                                                                                                                                     |
+| ----------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `watchedAt` | string | **Yes**  | ISO 8601 datetime with explicit timezone — `YYYY-MM-DDTHH:mm:ssZ` or `YYYY-MM-DDTHH:mm:ss±HH:mm`. Date-only strings and strings without a timezone designator are **rejected**. |
+| `rating`    | number | No       | 1.0–10.0 in 0.5 increments                                                                                                                                                      |
+| `notes`     | string | No       | Notes for this specific viewing                                                                                                                                                 |
 
 #### EpisodeProgress Object (TV only)
 
-| Field           | Type    | Required | Description                                    |
-| --------------- | ------- | -------- | ---------------------------------------------- |
-| `episodeTmdbId` | integer | Yes      | TMDB ID of the watched episode                 |
-| `watchedAt`     | string  | No       | ISO 8601 datetime when the episode was watched |
+| Field           | Type    | Required | Description                                                                                                                                                                                                                                                                                 |
+| --------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `episodeTmdbId` | integer | Yes      | TMDB ID of the watched episode                                                                                                                                                                                                                                                              |
+| `watchedAt`     | string  | No       | ISO 8601 datetime with explicit timezone — `YYYY-MM-DDTHH:mm:ssZ` or `YYYY-MM-DDTHH:mm:ss±HH:mm`. If omitted, the episode is marked as watched but no watch timestamp is stored (stored as `null`). Do not omit if you want the watch date to appear in activity statistics and dashboards. |
 
 #### SeasonRating Object (TV only)
 
@@ -156,21 +168,21 @@ ratings) are **not supported** — use JSON for those.
 
 ### Columns
 
-| Column            | Required | Description                                                             |
-| ----------------- | -------- | ----------------------------------------------------------------------- |
-| `tmdb_id`         | Yes      | TMDB ID of the movie or TV show (positive integer)                      |
-| `media_type`      | Yes      | `movie` or `tv` (case-insensitive)                                      |
-| `status`          | Yes      | See [Status Values](#status-values) (case-insensitive)                  |
-| `personal_rating` | No       | 1.0–10.0 in 0.5 increments (leave blank if unrated)                     |
-| `notes`           | No       | Personal notes (quote with `"..."` if the notes contain commas)         |
-| `created_at`      | No       | ISO 8601 date or datetime (e.g. `2023-01-15` or `2023-01-15T10:00:00Z`) |
+| Column            | Required | Description                                                                                                                                    |
+| ----------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tmdb_id`         | Yes      | TMDB ID of the movie or TV show (positive integer)                                                                                             |
+| `media_type`      | Yes      | `movie` or `tv` (case-insensitive)                                                                                                             |
+| `status`          | Yes      | See [Status Values](#status-values) (case-insensitive)                                                                                         |
+| `personal_rating` | No       | 1.0–10.0 in 0.5 increments (leave blank if unrated)                                                                                            |
+| `notes`           | No       | Personal notes (quote with `"..."` if the notes contain commas or newlines)                                                                    |
+| `created_at`      | No       | ISO 8601 datetime with explicit timezone (e.g. `2023-01-15T10:00:00Z` or `2023-01-15T10:00:00+05:30`). Date-only strings are **not** accepted. |
 
 ### Example
 
 ```csv
 tmdb_id,media_type,status,personal_rating,notes,created_at
 550,movie,COMPLETED,8.5,Great film,2023-01-15T10:00:00Z
-1399,tv,WATCHING,,Still watching,2023-06-01
+1399,tv,WATCHING,,Still watching,2023-06-01T00:00:00+05:30
 680,movie,PLAN_TO_WATCH,,,
 ```
 
@@ -179,8 +191,8 @@ tmdb_id,media_type,status,personal_rating,notes,created_at
 - The header row must be present and must include at minimum `tmdb_id`, `media_type`, `status`.
 - Extra columns (beyond the six defined above) are rejected as a validation error.
 - Blank values for optional fields are accepted.
-- Standard CSV quoting applies: use `"..."` to enclose values containing commas or quotes; double
-  an internal quote (`""`) to escape it.
+- Standard RFC 4180 CSV quoting applies: use `"..."` to enclose values containing commas, double quotes, or embedded newlines; double an internal quote (`""`) to escape it.
+- Validation error messages include the **physical CSV line number** where the offending record starts, so multiline quoted fields are accounted for correctly.
 
 ---
 

@@ -18,7 +18,7 @@ export interface ViewingEventResponse {
 export interface EpisodeProgressResponse {
   libraryEntryId: string;
   episodeId: string;
-  watchedAt: string;
+  watchedAt: string | null;
   episodeNumber?: number;
   seasonNumber?: number;
   name?: string | null;

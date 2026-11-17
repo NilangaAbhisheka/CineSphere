@@ -3,7 +3,12 @@
 // Phase 4.4
 // ==============================================================================
 
-import { validateJsonImport, validateCsvImport, CSV_REQUIRED_HEADERS } from './import.validator.js';
+import {
+  validateJsonImport,
+  validateCsvImport,
+  CSV_REQUIRED_HEADERS,
+  isStrictIso8601DateTime,
+} from './import.validator.js';
 
 // ── JSON Validation Tests ─────────────────────────────────────────────────────
 
@@ -497,8 +502,10 @@ Line 3 of notes"
     const { rows, errors } = validateCsvImport(csv);
     expect(rows).toHaveLength(2);
     expect(rows[0].notes).toBe('Line 1 of notes\nLine 2 of notes\nLine 3 of notes');
-    // Row 2 is the second logical data row even though row 1 spanned multiple physical lines
-    expect(errors.some((e) => e.message.includes('Row 2: "status" must be one of'))).toBe(true);
+    // Physical line 5 is where the second record begins because line 1 is header and record 1 spanned lines 2-4
+    expect(
+      errors.some((e) => e.index === 5 && e.message.includes('Row 5: "status" must be one of')),
+    ).toBe(true);
   });
 
   it('handles CRLF row endings and embedded CRLF in quotes', () => {
@@ -524,5 +531,97 @@ Line 3 of notes"
     const csv = `tmdb_id,media_type,status\nabc,INVALID,BAD\nxyz,ALSO_INVALID,WRONG`;
     const { errors } = validateCsvImport(csv);
     expect(errors.length).toBeGreaterThanOrEqual(4); // at least 2 per row
+  });
+
+  it('correctly maps physical CSV line numbers across multiple multiline rows', () => {
+    // Line 1: Header
+    // Line 2-4: Row 1 (multiline notes)
+    // Line 5: Row 2 (single line)
+    // Line 6-7: Row 3 (multiline notes with invalid status)
+    const csv = [
+      'tmdb_id,media_type,status,notes',
+      '550,MOVIE,COMPLETED,"Note line 1',
+      'Note line 2',
+      'Note line 3"',
+      '680,MOVIE,PLAN_TO_WATCH,Clean single line note',
+      '1399,TV,INVALID_STATUS,"TV note line 1',
+      'TV note line 2"',
+    ].join('\n');
+
+    const { rows, errors } = validateCsvImport(csv);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]._rowNumber).toBe(2);
+    expect(rows[1]._rowNumber).toBe(5);
+    expect(rows[2]._rowNumber).toBe(6);
+
+    const statusError = errors.find((e) => e.field === 'status');
+    expect(statusError).toBeDefined();
+    expect(statusError?.index).toBe(6); // Physical line 6
+    expect(statusError?.message).toContain('Row 6: "status" must be one of');
+  });
+});
+
+// ── Strict ISO 8601 DateTime Helper Tests ─────────────────────────────────────
+
+describe('isStrictIso8601DateTime', () => {
+  it('accepts valid UTC timestamps with Z', () => {
+    expect(isStrictIso8601DateTime('2024-01-15T20:00:00Z')).toBe(true);
+    expect(isStrictIso8601DateTime('2024-01-15T20:00:00.000Z')).toBe(true);
+    expect(isStrictIso8601DateTime('2024-12-31T23:59:59.999Z')).toBe(true);
+  });
+
+  it('accepts valid timestamps with positive and negative timezone offsets', () => {
+    expect(isStrictIso8601DateTime('2024-01-15T20:00:00+05:30')).toBe(true);
+    expect(isStrictIso8601DateTime('2024-01-15T20:00:00-08:00')).toBe(true);
+    expect(isStrictIso8601DateTime('2024-06-01T00:00:00+00:00')).toBe(true);
+  });
+
+  it('accepts February 29 on leap years', () => {
+    expect(isStrictIso8601DateTime('2024-02-29T12:00:00Z')).toBe(true);
+    expect(isStrictIso8601DateTime('2000-02-29T12:00:00Z')).toBe(true);
+  });
+
+  it('rejects February 29 on non-leap years', () => {
+    expect(isStrictIso8601DateTime('2023-02-29T12:00:00Z')).toBe(false);
+    expect(isStrictIso8601DateTime('2100-02-29T12:00:00Z')).toBe(false); // 2100 is not leap year
+  });
+
+  it('rejects invalid days for 30-day months', () => {
+    expect(isStrictIso8601DateTime('2024-04-31T12:00:00Z')).toBe(false); // April has 30 days
+    expect(isStrictIso8601DateTime('2024-06-31T12:00:00Z')).toBe(false); // June has 30 days
+    expect(isStrictIso8601DateTime('2024-09-31T12:00:00Z')).toBe(false); // September has 30 days
+    expect(isStrictIso8601DateTime('2024-11-31T12:00:00Z')).toBe(false); // November has 30 days
+  });
+
+  it('rejects February 30 and 31', () => {
+    expect(isStrictIso8601DateTime('2024-02-30T12:00:00Z')).toBe(false);
+    expect(isStrictIso8601DateTime('2024-02-31T12:00:00Z')).toBe(false);
+  });
+
+  it('rejects date-only strings without time and timezone', () => {
+    expect(isStrictIso8601DateTime('2024-01-01')).toBe(false);
+    expect(isStrictIso8601DateTime('2023-12-31')).toBe(false);
+  });
+
+  it('rejects datetime strings missing explicit timezone designator', () => {
+    expect(isStrictIso8601DateTime('2024-01-01T12:00:00')).toBe(false);
+  });
+
+  it('rejects invalid clock times', () => {
+    expect(isStrictIso8601DateTime('2024-01-01T24:00:00Z')).toBe(false);
+    expect(isStrictIso8601DateTime('2024-01-01T25:00:00Z')).toBe(false);
+    expect(isStrictIso8601DateTime('2024-01-01T12:60:00Z')).toBe(false);
+    expect(isStrictIso8601DateTime('2024-01-01T12:00:60Z')).toBe(false);
+  });
+
+  it('rejects non-ISO formats and non-string types', () => {
+    expect(isStrictIso8601DateTime('01/15/2024')).toBe(false);
+    expect(isStrictIso8601DateTime('15-01-2024 12:00:00')).toBe(false);
+    expect(isStrictIso8601DateTime('January 15, 2024')).toBe(false);
+    expect(isStrictIso8601DateTime(null)).toBe(false);
+    expect(isStrictIso8601DateTime(undefined)).toBe(false);
+    expect(isStrictIso8601DateTime(1234567890)).toBe(false);
+    expect(isStrictIso8601DateTime({})).toBe(false);
+    expect(isStrictIso8601DateTime('')).toBe(false);
   });
 });

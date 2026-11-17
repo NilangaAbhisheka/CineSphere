@@ -392,7 +392,7 @@ export class ImportService {
                 create: {
                   libraryEntryId: libraryEntry.id,
                   episodeId: episode.id,
-                  watchedAt: ep.watchedAt ? new Date(ep.watchedAt) : new Date(),
+                  watchedAt: ep.watchedAt ? new Date(ep.watchedAt) : null,
                 },
                 update: {}, // already exists (shouldn't happen for a new entry)
               });
@@ -469,7 +469,7 @@ export class ImportService {
       const row = rows[i];
       const tmdbId = parseInt(row.tmdb_id.trim(), 10);
       const mediaType = row.media_type.trim().toUpperCase();
-      const rowNumber = i + 1; // 1-based for display
+      const rowNumber = row._rowNumber ?? i + 1;
 
       try {
         if (mediaType === 'MOVIE') {

@@ -26,17 +26,38 @@ function isValidRating(r: unknown): boolean {
   return Math.round(r * 2) / 2 === r;
 }
 
-function isValidDateString(d: unknown): boolean {
-  if (d === null || d === undefined) return true;
-  if (typeof d !== 'string' || d.trim() === '') return true; // optional
+const ISO_8601_DATETIME_REGEX =
+  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/i;
+
+export function isStrictIso8601DateTime(d: unknown): boolean {
+  if (typeof d !== 'string') return false;
+  const match = ISO_8601_DATETIME_REGEX.exec(d);
+  if (!match) return false;
+
+  const year = parseInt(d.substring(0, 4), 10);
+  const month = parseInt(d.substring(5, 7), 10);
+  const day = parseInt(d.substring(8, 10), 10);
+
+  const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const daysInMonth = [0, 31, isLeapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+  if (day > daysInMonth[month]) {
+    return false;
+  }
+
   const ts = Date.parse(d);
   return !isNaN(ts);
 }
 
-function isRequiredDateString(d: unknown): boolean {
+function isValidOptionalDateTimeString(d: unknown): boolean {
+  if (d === null || d === undefined) return true;
+  if (typeof d !== 'string' || d.trim() === '') return true; // optional
+  return isStrictIso8601DateTime(d);
+}
+
+function isRequiredDateTimeString(d: unknown): boolean {
   if (d === null || d === undefined || typeof d !== 'string' || d.trim() === '') return false;
-  const ts = Date.parse(d);
-  return !isNaN(ts);
+  return isStrictIso8601DateTime(d);
 }
 
 function pushError(
@@ -163,8 +184,13 @@ function validateJsonEntry(
   }
 
   // createdAt (optional)
-  if (entry['createdAt'] !== undefined && !isValidDateString(entry['createdAt'])) {
-    pushError(errors, index, '"createdAt" is not a valid ISO 8601 date string.', 'createdAt');
+  if (entry['createdAt'] !== undefined && !isValidOptionalDateTimeString(entry['createdAt'])) {
+    pushError(
+      errors,
+      index,
+      '"createdAt" must be a valid ISO 8601 datetime string with timezone (e.g. YYYY-MM-DDTHH:mm:ssZ).',
+      'createdAt',
+    );
   }
 
   // Duplicate detection within file
@@ -264,11 +290,11 @@ function validateViewingEvent(
   const ev = raw as Record<string, unknown>;
 
   // watchedAt is REQUIRED for viewing events
-  if (!isRequiredDateString(ev['watchedAt'])) {
+  if (!isRequiredDateTimeString(ev['watchedAt'])) {
     pushError(
       errors,
       entryIndex,
-      `viewingEvents[${eventIndex}].watchedAt is required and must be a valid ISO 8601 date/time string.`,
+      `viewingEvents[${eventIndex}].watchedAt is required and must be a valid ISO 8601 datetime string with timezone (e.g. YYYY-MM-DDTHH:mm:ssZ).`,
       `viewingEvents[${eventIndex}].watchedAt`,
     );
   }
@@ -336,11 +362,11 @@ function validateEpisodeProgress(
     }
   }
 
-  if (ep['watchedAt'] !== undefined && !isValidDateString(ep['watchedAt'])) {
+  if (ep['watchedAt'] !== undefined && !isValidOptionalDateTimeString(ep['watchedAt'])) {
     pushError(
       errors,
       entryIndex,
-      `episodeProgress[${epIndex}].watchedAt is not a valid ISO 8601 date.`,
+      `episodeProgress[${epIndex}].watchedAt must be a valid ISO 8601 datetime string with timezone (e.g. YYYY-MM-DDTHH:mm:ssZ).`,
       `episodeProgress[${epIndex}].watchedAt`,
     );
   }
@@ -466,7 +492,7 @@ export function validateCsvImport(csvText: string): {
 
   for (let recordIdx = 1; recordIdx < parsedRecords.length; recordIdx++) {
     const record = parsedRecords[recordIdx];
-    const csvRowNumber = recordIdx; // 1-based data row index for diagnostics
+    const csvRowNumber = record.rowNumber;
     const values = record.fields;
 
     if (values.length !== headers.length) {
@@ -478,7 +504,9 @@ export function validateCsvImport(csvText: string): {
     }
 
     // Build row object
-    const rowObj: Record<string, string> = {};
+    const rowObj: Record<string, unknown> = {
+      _rowNumber: record.rowNumber,
+    };
     headers.forEach((h, i) => {
       rowObj[h] = values[i] ?? '';
     });
@@ -530,11 +558,11 @@ export function validateCsvImport(csvText: string): {
 
     // Validate created_at (optional)
     if (row.created_at !== undefined && row.created_at.trim() !== '') {
-      if (!isValidDateString(row.created_at)) {
+      if (!isValidOptionalDateTimeString(row.created_at)) {
         errors.push({
           index: csvRowNumber,
           field: 'created_at',
-          message: `Row ${csvRowNumber}: "created_at" is not a valid ISO 8601 date (got: "${row.created_at}").`,
+          message: `Row ${csvRowNumber}: "created_at" must be a valid ISO 8601 datetime string with timezone (got: "${row.created_at}").`,
         });
       }
     }

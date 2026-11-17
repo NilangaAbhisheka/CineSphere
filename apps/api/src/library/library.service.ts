@@ -215,7 +215,7 @@ export class LibraryService {
       return {
         libraryEntryId: existing.libraryEntryId,
         episodeId: existing.episodeId,
-        watchedAt: existing.watchedAt.toISOString(),
+        watchedAt: existing.watchedAt ? existing.watchedAt.toISOString() : null,
         alreadyWatched: true,
       };
     }
@@ -225,7 +225,7 @@ export class LibraryService {
     return {
       libraryEntryId: created.libraryEntryId,
       episodeId: created.episodeId,
-      watchedAt: created.watchedAt.toISOString(),
+      watchedAt: created.watchedAt ? created.watchedAt.toISOString() : null,
       episodeNumber: created.episode?.episodeNumber,
       seasonNumber: created.episode?.season?.seasonNumber,
       name: created.episode?.name,
@@ -414,7 +414,7 @@ export class LibraryService {
         ? entry.episodeProgresses.map((p) => ({
             libraryEntryId: p.libraryEntryId,
             episodeId: p.episodeId,
-            watchedAt: p.watchedAt.toISOString(),
+            watchedAt: p.watchedAt ? p.watchedAt.toISOString() : null,
             episodeNumber: p.episode?.episodeNumber,
             seasonNumber: p.episode?.season?.seasonNumber,
             name: p.episode?.name,
