@@ -39,11 +39,19 @@ export default defineConfig({
   fullyParallel: false,
   /* Fail CI immediately on test.only leakage */
   forbidOnly: isCI,
+  /* Generous test timeout (60s) to accommodate Next.js on-demand compilation in CI */
+  timeout: 60_000,
   /* One retry in CI to reduce flakiness from timing issues */
   retries: isCI ? 1 : 0,
   /* Single worker — shared E2E DB requires serial execution */
   workers: 1,
-  reporter: [['list'], ['html', { open: 'never', outputFolder: 'apps/web/playwright-report' }]],
+  reporter: isCI
+    ? [
+        ['list'],
+        ['github'],
+        ['html', { open: 'never', outputFolder: 'apps/web/playwright-report' }],
+      ]
+    : [['list'], ['html', { open: 'never', outputFolder: 'apps/web/playwright-report' }]],
   use: {
     /* Base URL for page.goto('/') calls */
     baseURL: 'http://localhost:3000',
