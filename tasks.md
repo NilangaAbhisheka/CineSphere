@@ -12,7 +12,7 @@
 | Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                                                                                                                      |
 | Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                                                                                                                 |
 | Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                                                                                                                                                                        |
-| Current Milestone | Stage 4.3 Complete ✅ (Statistics Live Integration — live data fetching via ApiClient, loading skeleton, error handling with functional retry, live summary cards, genre chart, activity timeline, rating distribution, 383 unit tests [168 backend + 215 frontend], 164 integration tests [9 suites], 31 E2E tests [7 in Workflow F], 4 Python ML tests, all passing) |
+| Current Milestone | Stage 4.4 Complete ✅ (Data Import Hardening & Verification — RFC 4180 CSV physical line reporting, strict ISO 8601 calendar/timezone validation, nullable EpisodeProgress.watchedAt migration, two-phase atomicity architecture docs, 401 unit tests, 192 integration tests [10 suites], 34 E2E tests, clean build) |
 | Last Updated      | 2026-11-17                                                                                                                                                                                                                                                                                                                                                             |
 
 ---
@@ -23,7 +23,7 @@
 Phase 1  — Project Foundation                  ████████████████  100% (monorepo, docker, pgvector, prisma, tooling, CI workflow stabilized)
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
 Phase 3  — Personal Library and Tracking       ████████████████  100% (Stages 3.0–3.8: DB foundation, integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening — COMPLETE)
-Phase 4  — Statistics and Data Import/Export   ████████░░░░░░░░  50% (Stages 4.1 & 4.3 complete)
+Phase 4  — Statistics and Data Import/Export   █████████████░░░  80% (Stages 4.1, 4.2, 4.3, 4.4 complete)
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
 Phase 7  — Local LLM Integration               ░░░░░░░░░░░░░░░░  0%
@@ -535,8 +535,8 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Success result panel: total, imported, skipped counts + summary + "View My Library" link
   - [x] Validation error panel with per-entry diagnostics and footer notice
   - [x] "Import Data" link on My Library page header
-- [x] Unit tests: 36 validator + 14 service + 4 controller + 11 frontend page + 5 api-client = 70 tests
-- [x] Integration tests: 20 tests covering valid imports, rollback, duplicate skipping, TMDB resolution
+- [x] Unit tests: 66 validator + 14 service + 4 controller + 11 frontend page + 5 api-client = 100 tests
+- [x] Integration tests: 28 tests covering valid imports, rollback, duplicate skipping, TMDB resolution, nullable watchedAt, calendar leap-year validation, and physical line CSV reporting
 - [x] E2E tests: Workflow G (3 tests — page access, validation error, successful CSV import)
 - [x] Post-implementation audit & corrective fixes:
   - [x] Fix navigateTo() route union type in `apps/web/e2e/helpers/pages.ts` to include `/import`
@@ -546,6 +546,11 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Clarify atomicity semantics in `docs/IMPORT_FORMAT.md` and UI notice
   - [x] Correct API documentation in `docs/IMPORT_FORMAT.md` to HTTP 200 on success
   - [x] Add regression integration and unit tests for all audit items
+- [x] Final import hardening & documentation audit (commit `c4c9ec8`):
+  - [x] Finding 1 — CSV physical row number accuracy: parser `record.rowNumber` propagated to error messages (`_rowNumber`), correctly handling multiline quoted fields
+  - [x] Finding 2 — Strict ISO 8601 datetime validation: replaced `Date.parse()` with strict regex requiring full datetime + explicit timezone (`Z` or `±HH:mm`) and calendar/leap-year validation (`isStrictIso8601DateTime`)
+  - [x] Finding 3 — Episode progress timestamp policy: migration `20261117223000_episode_progress_watched_at_nullable` applied; `null` stored on omission instead of fabricating `new Date()`; dashboard activity null-safe guards added
+  - [x] Finding 4 — Import atomicity documentation: updated `docs/IMPORT_FORMAT.md` with explicit two-phase execution breakdown (Phase 1 catalogue ingestion, Phase 2 personal tracking atomic transaction)
 
 ### 4.5 Data Export
 
