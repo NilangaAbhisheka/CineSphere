@@ -1,4 +1,5 @@
 import {
+  ActivityTimelineData,
   ContinueWatchingItem,
   CreateEpisodeProgressRequest,
   CreateLibraryEntryRequest,
@@ -7,6 +8,7 @@ import {
   DashboardOverviewResponse,
   DashboardStats,
   EpisodeProgressResponse,
+  GenreStatItem,
   LibraryEntryListItem,
   LibraryEntryResponse,
   ListLibraryQuery,
@@ -16,8 +18,10 @@ import {
   MovieListItem,
   PaginatedResult,
   QuickPickItem,
+  RatingStatsData,
   RecentActivityItem,
   SeasonRatingResponse,
+  StatsOverviewSummary,
   TmdbMovieSearchResult,
   TmdbSearchResponse,
   TmdbTvSearchResult,
@@ -499,6 +503,27 @@ class ApiClient {
       limit !== undefined ? { limit } : undefined,
       signal,
     );
+  }
+
+  // ── Stats Endpoints ─────────────────────────────────────────────────────────
+
+  public async getStatsOverview(signal?: AbortSignal): Promise<StatsOverviewSummary> {
+    return this.request<StatsOverviewSummary>('/stats/overview', undefined, signal);
+  }
+
+  public async getStatsGenres(signal?: AbortSignal): Promise<GenreStatItem[]> {
+    return this.request<GenreStatItem[]>('/stats/genres', undefined, signal);
+  }
+
+  public async getStatsActivity(
+    params?: { from?: string; to?: string },
+    signal?: AbortSignal,
+  ): Promise<ActivityTimelineData> {
+    return this.request<ActivityTimelineData>('/stats/activity', params, signal);
+  }
+
+  public async getStatsRatings(signal?: AbortSignal): Promise<RatingStatsData> {
+    return this.request<RatingStatsData>('/stats/ratings', undefined, signal);
   }
 }
 

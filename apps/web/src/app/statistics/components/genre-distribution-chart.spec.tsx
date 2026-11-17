@@ -75,4 +75,12 @@ describe('GenreDistributionChart', () => {
     expect(screen.getByText('Genre Breakdown')).toBeInTheDocument();
     expect(screen.getByText(/Analytics not yet connected/i)).toBeInTheDocument();
   });
+
+  it('renders authentic empty state when genres is an empty array', () => {
+    render(<GenreDistributionChart genres={[]} />);
+
+    expect(screen.getByText('Genre Breakdown')).toBeInTheDocument();
+    expect(screen.getByText('No completed titles')).toBeInTheDocument();
+    expect(screen.getByText(/No completed titles with genres found/i)).toBeInTheDocument();
+  });
 });

@@ -24,14 +24,14 @@ export function GenreDistributionChart({ genres }: GenreDistributionChartProps) 
   const displayedGenres = showAll ? sortedGenres : sortedGenres.slice(0, 8);
   const hasMoreThanEight = sortedGenres.length > 8;
 
-  if (!genres || genres.length === 0) {
+  if (!genres) {
     return (
       <div
         className="rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center space-y-2"
         role="region"
         aria-label="Genre Distribution"
       >
-        <p className="text-sm font-semibold text-slate-300">Genre Breakdown</p>
+        <h3 className="text-sm font-semibold text-slate-300">Genre Breakdown</h3>
         <p className="text-xs text-slate-500 max-w-md mx-auto">
           Statistics aggregation endpoints will be connected in Phase 4. As you complete movies and
           TV shows in your library, your top genres will appear here.
@@ -39,6 +39,27 @@ export function GenreDistributionChart({ genres }: GenreDistributionChartProps) 
         <div className="pt-2">
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">
             Analytics not yet connected
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (genres.length === 0) {
+    return (
+      <div
+        className="rounded-xl border border-slate-800 bg-slate-900/40 p-6 text-center space-y-2"
+        role="region"
+        aria-label="Genre Distribution"
+      >
+        <h3 className="text-sm font-semibold text-slate-300">Genre Breakdown</h3>
+        <p className="text-xs text-slate-500 max-w-md mx-auto">
+          No completed titles with genres found. As you complete movies and TV shows in your
+          library, your top genres will appear here.
+        </p>
+        <div className="pt-2">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800/80 text-slate-400 border border-slate-700">
+            No completed titles
           </span>
         </div>
       </div>

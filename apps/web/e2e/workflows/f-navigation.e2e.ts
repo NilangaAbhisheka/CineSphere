@@ -73,31 +73,70 @@ test.describe('Workflow F — Navigation and Page Integration', () => {
     await expect(page.getByRole('heading', { name: 'Statistics' })).toBeVisible();
   });
 
-  test('F3: Statistics page shows foundation state (Phase 3.7) — no fabricated numbers', async ({
+  test('F3a: Statistics page fetches live data from backend and renders summary cards and charts', async ({
     page,
   }) => {
     await navigateTo(page, '/statistics');
+    await page.waitForLoadState('networkidle');
 
-    // The statistics page should show unavailable indicators
-    // Phase 3.7 displays "—" or "Not available" for all stats
-    const bodyText = await page.textContent('body');
+    // Page header should be visible
+    await expect(page.getByRole('heading', { level: 1, name: 'Statistics' })).toBeVisible({
+      timeout: 10_000,
+    });
 
-    // Should show at least one of the unavailability indicators or the foundation banner
-    const hasUnavailableIndicator =
-      bodyText?.includes('—') ||
-      bodyText?.includes('Not available') ||
-      bodyText?.includes('Statistics') ||
-      bodyText?.includes('Phase');
+    // Loading skeleton should disappear
+    await expect(page.getByTestId('statistics-skeleton')).not.toBeVisible();
 
-    expect(
-      hasUnavailableIndicator,
-      'Statistics page should show unavailability indicators, not live numbers',
-    ).toBe(true);
+    // Summary cards should be present with live labels
+    const summary = page.getByRole('region', { name: /Viewing Summary/i });
+    await expect(summary.getByText('Movies Completed')).toBeVisible();
+    await expect(summary.getByText('Episodes Watched')).toBeVisible();
+    await expect(summary.getByText('Shows Completed')).toBeVisible();
+    await expect(summary.getByText('Average Rating')).toBeVisible();
 
-    // Should not show a fabricated 0 as a live stat (not a "0 movies" live count)
-    // The page may legitimately show "0" in foundation state without issue;
-    // we just verify the page renders without error.
+    // The Phase 3.7 foundation state notice banner should no longer be rendered
+    await expect(page.getByText('Statistics Foundation (Phase 3.7)')).not.toBeVisible();
+
+    // Charts / distribution sections are present
+    await expect(page.getByRole('heading', { name: 'Genre Breakdown' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Viewing Activity Timeline' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Personal Rating Distribution' })).toBeVisible();
+
+    // Ensure no 500 error
     await expect(page.locator('body')).not.toContainText('500 Internal Server Error');
+  });
+
+  test('F3b: Statistics page displays error state on API failure and recovers on retry', async ({
+    page,
+  }) => {
+    // Intercept /api/stats/overview to simulate network or server failure
+    await page.route('**/api/stats/overview', (route) =>
+      route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Simulated server failure' }),
+      }),
+    );
+
+    await page.goto('/statistics');
+    await page.waitForLoadState('networkidle');
+
+    // ErrorState should be displayed
+    const errorState = page.getByTestId('error-state');
+    await expect(errorState).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Unable to Load Data')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Try Again/i })).toBeVisible();
+
+    // Remove route interception to simulate recovery
+    await page.unroute('**/api/stats/overview');
+
+    // Click retry
+    await page.getByRole('button', { name: /Try Again/i }).click();
+
+    // Page should recover to live data
+    await expect(errorState).not.toBeVisible({ timeout: 10_000 });
+    const summary = page.getByRole('region', { name: /Viewing Summary/i });
+    await expect(summary.getByText('Movies Completed')).toBeVisible();
   });
 
   test('F4: Library page shows empty state when no library entries exist', async ({ page }) => {

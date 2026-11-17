@@ -6,14 +6,14 @@
 
 ## Project Overview
 
-| Field             | Value                                                                                                                                                                                                                                                                                                    |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project           | CineSphere                                                                                                                                                                                                                                                                                               |
-| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                                                        |
-| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                                                   |
-| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                                                                                                          |
-| Current Milestone | Stage 4.1 Complete ✅ (Viewing Statistics Backend Aggregations & REST API — 4 endpoints under `/api/stats/*`, UTC database-side aggregation, 367 unit tests [168 backend + 199 frontend], 164 integration tests [9 suites], 30 E2E tests, 4 Python ML tests, all passing — CI green on commit `94ad6d5`) |
-| Last Updated      | 2026-11-17                                                                                                                                                                                                                                                                                               |
+| Field             | Value                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project           | CineSphere                                                                                                                                                                                                                                                                                                                                                             |
+| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                                                                                                                      |
+| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                                                                                                                 |
+| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                                                                                                                                                                        |
+| Current Milestone | Stage 4.3 Complete ✅ (Statistics Live Integration — live data fetching via ApiClient, loading skeleton, error handling with functional retry, live summary cards, genre chart, activity timeline, rating distribution, 383 unit tests [168 backend + 215 frontend], 164 integration tests [9 suites], 31 E2E tests [7 in Workflow F], 4 Python ML tests, all passing) |
+| Last Updated      | 2026-11-17                                                                                                                                                                                                                                                                                                                                                             |
 
 ---
 
@@ -23,7 +23,7 @@
 Phase 1  — Project Foundation                  ████████████████  100% (monorepo, docker, pgvector, prisma, tooling, CI workflow stabilized)
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
 Phase 3  — Personal Library and Tracking       ████████████████  100% (Stages 3.0–3.8: DB foundation, integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening — COMPLETE)
-Phase 4  — Statistics and Data Import/Export   ████░░░░░░░░░░░░  25% (Stage 4.1 backend aggregations & REST API complete)
+Phase 4  — Statistics and Data Import/Export   ████████░░░░░░░░  50% (Stages 4.1 & 4.3 complete)
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
 Phase 7  — Local LLM Integration               ░░░░░░░░░░░░░░░░  0%
@@ -497,10 +497,10 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ### 4.3 Statistics Live Integration
 
-- [ ] Connect `/statistics` page and components to Phase 4 statistics API endpoints
-- [ ] Implement live data fetching via `ApiClient` (`getStatsOverview`, `getStatsGenres`, `getStatsActivity`, `getStatsRatings`)
-- [ ] Real network loading skeletons and API error handling with retry trigger
-- [ ] Verify live rendering of summary cards, genre chart, activity timeline, and rating distribution
+- [x] Connect `/statistics` page and components to Phase 4 statistics API endpoints
+- [x] Implement live data fetching via `ApiClient` (`getStatsOverview`, `getStatsGenres`, `getStatsActivity`, `getStatsRatings`)
+- [x] Real network loading skeletons and API error handling with retry trigger
+- [x] Verify live rendering of summary cards, genre chart, activity timeline, and rating distribution
 
 ### 4.4 Data Import
 
