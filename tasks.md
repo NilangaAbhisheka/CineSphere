@@ -6,14 +6,14 @@
 
 ## Project Overview
 
-| Field             | Value                                                                                                                                                                                                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project           | CineSphere                                                                                                                                                                                                                                                                |
-| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                         |
-| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                    |
-| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                                                                           |
-| Current Milestone | Stage 4.1 Complete ✅ (Viewing Statistics Backend Aggregations & REST API — 4 endpoints under `/api/stats/*`, UTC database-side aggregation, 367 unit tests [168 backend + 199 frontend], 164 integration tests [9 suites], 30 E2E tests, 4 Python ML tests, all passing) |
-| Last Updated      | 2026-11-17                                                                                                                                                                                                                                                                |
+| Field             | Value                                                                                                                                                                                                                                                                                                    |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project           | CineSphere                                                                                                                                                                                                                                                                                               |
+| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                                                        |
+| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                                                   |
+| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                                                                                                          |
+| Current Milestone | Stage 4.1 Complete ✅ (Viewing Statistics Backend Aggregations & REST API — 4 endpoints under `/api/stats/*`, UTC database-side aggregation, 367 unit tests [168 backend + 199 frontend], 164 integration tests [9 suites], 30 E2E tests, 4 Python ML tests, all passing — CI green on commit `a304c77`) |
+| Last Updated      | 2026-11-17                                                                                                                                                                                                                                                                                               |
 
 ---
 
@@ -143,6 +143,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Backend PostgreSQL integration tests (`pnpm test:integration` — 137 tests passing across 7 suites)
   - [x] Production build compilation (`pnpm build` — Next.js static pages + NestJS build)
   - [x] Python ML checks (Ruff lint/format & Pytest — 4/4 passing)
+  - [x] Dedicated E2E job: explicitly pre-starts Next.js dev server and waits for readiness before Playwright runs (fixes CI environment timing regression)
 
 ---
 
