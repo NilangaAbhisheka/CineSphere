@@ -6,14 +6,14 @@
 
 ## Project Overview
 
-| Field             | Value                                                                                                                                                                                                          |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project           | CineSphere                                                                                                                                                                                                     |
-| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                              |
-| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                         |
-| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                |
-| Current Milestone | Phase 3 Complete ✅ (Stages 3.0–3.8: DB integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening & isolation — 342 unit tests, 152 integration tests, 30 E2E tests, all passing; CI green on `177fdc2`) |
-| Last Updated      | 2026-11-09                                                                                                                                                                                                     |
+| Field             | Value                                                                                                                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project           | CineSphere                                                                                                                                                                                                                                                                |
+| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                         |
+| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                    |
+| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                                                                           |
+| Current Milestone | Stage 4.1 Complete ✅ (Viewing Statistics Backend Aggregations & REST API — 4 endpoints under `/api/stats/*`, UTC database-side aggregation, 367 unit tests [168 backend + 199 frontend], 164 integration tests [9 suites], 30 E2E tests, 4 Python ML tests, all passing) |
+| Last Updated      | 2026-11-17                                                                                                                                                                                                                                                                |
 
 ---
 
@@ -23,7 +23,7 @@
 Phase 1  — Project Foundation                  ████████████████  100% (monorepo, docker, pgvector, prisma, tooling, CI workflow stabilized)
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
 Phase 3  — Personal Library and Tracking       ████████████████  100% (Stages 3.0–3.8: DB foundation, integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening — COMPLETE)
-Phase 4  — Statistics and Data Import/Export   ░░░░░░░░░░░░░░░░  0%
+Phase 4  — Statistics and Data Import/Export   ████░░░░░░░░░░░░  25% (Stage 4.1 backend aggregations & REST API complete)
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
 Phase 7  — Local LLM Integration               ░░░░░░░░░░░░░░░░  0%
@@ -479,21 +479,20 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ### 4.1 Statistics Calculations
 
-- [ ] Total movies watched
-- [ ] Total completed TV shows, seasons, and episodes watched
-- [ ] Genre distribution (by count and by time)
-- [ ] Average personal rating overall and per genre
-- [ ] Rating distribution histogram
-- [ ] Monthly and yearly viewing activity
-- [ ] Watching / Completed / Plan to Watch / Dropped distribution
-- [ ] Highest-rated and most-watched genres
+- [x] Total movies watched (completed movie titles and repeat viewing events counted independently)
+- [x] Total completed TV shows and episodes watched (decoupled TV shows from episode progress)
+- [x] Genre distribution (by count, using all completed titles including genre-less titles as denominator)
+- [x] Average personal rating overall (rounded to 1 decimal place, null when unrated)
+- [x] Rating distribution histogram (all 19 half-step buckets 1.0–10.0 + unrated count)
+- [x] Monthly viewing activity (UTC parameterized database-side monthly aggregation with zero-fill)
+- [ ] Seasons watched, genre distribution by time, avg rating per genre, yearly viewing activity, library status distribution, highest-rated genres (deferred to subsequent statistics enhancements)
 
 ### 4.2 Statistics API
 
-- [ ] `GET /api/stats/overview` — summary statistics
-- [ ] `GET /api/stats/genres` — genre breakdown
-- [ ] `GET /api/stats/activity` — activity over time
-- [ ] `GET /api/stats/ratings` — rating distribution
+- [x] `GET /api/stats/overview` — summary statistics (movies completed, viewing events, episodes watched, TV completed, avg rating)
+- [x] `GET /api/stats/genres` — genre breakdown (sorted by count desc, name asc tie-break, with percentage)
+- [x] `GET /api/stats/activity` — activity over time (parameterized SQL, 4 date-range resolution cases, 60-month limit, zero-month filling)
+- [x] `GET /api/stats/ratings` — rating distribution (19 half-step buckets + unrated entries count)
 
 ### 4.3 Statistics Live Integration
 
