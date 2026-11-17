@@ -894,6 +894,8 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 | Monorepo initialization & PostgreSQL + pgvector foundation        | 2026-11-06 | TD-02/TD-04 resolved. Turborepo+pnpm, Next.js, NestJS, Prisma, pgvector verified.                                                                                     |
 | Phase 2 complete (Catalogue, TMDB Ingestion & Discover UI)        | 2026-11-07 | TMDB client, ingestion, discover API, frontend Discover page, 100+ tests passing.                                                                                     |
 | Phase 3 Stages 3.0–3.3 complete (Database Foundation)             | 2026-11-07 | SingleUserBootstrap, 4-model schema + integrity migration, 112 integration tests + 69 unit tests all passing. READ COMMITTED + VOLATILE trigger concurrency verified. |
+| Phase 3 Stages 3.4–3.8 complete (Library, UI, Hardening)          | 2026-11-09 | Full library tracking (movies/TV), Dashboard with continuation/history, Statistics foundation, Playwright E2E suite (31 tests), CI green.                               |
+| Phase 4 Stages 4.1–4.3 complete (Statistics Backend & Live UI)    | 2026-11-17 | Dedicated StatsModule with 4 endpoints, UTC monthly aggregation, live frontend integration with skeleton/error retry, CI run 44100431302 green (383 unit, 164 int, 31 E2E). |
 
 ---
 
