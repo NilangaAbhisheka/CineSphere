@@ -95,20 +95,54 @@ describe('Export PostgreSQL Integration Tests', () => {
   });
 
   afterAll(async () => {
-    // Scoped cleanup of test users' library entries
-    await prisma.userLibraryEntry.deleteMany({
-      where: { userId: { in: [EXPORT_TEST_USER_ID, OTHER_TEST_USER_ID] } },
-    });
-
-    // Clean up created catalogue test records by explicit ID
-    if (createdMovieIds.length > 0) {
-      await prisma.movie.deleteMany({ where: { id: { in: createdMovieIds } } });
-    }
-    if (createdTvShowIds.length > 0) {
-      await prisma.tvShow.deleteMany({ where: { id: { in: createdTvShowIds } } });
+    if (!prisma) {
+      return;
     }
 
-    await prisma.$disconnect();
+    const cleanupErrors: unknown[] = [];
+
+    try {
+      // Scoped cleanup of test users' library entries
+      try {
+        await prisma.userLibraryEntry.deleteMany({
+          where: { userId: { in: [EXPORT_TEST_USER_ID, OTHER_TEST_USER_ID] } },
+        });
+      } catch (err) {
+        cleanupErrors.push(err);
+      }
+
+      // Clean up created catalogue test records by explicit ID
+      if (createdMovieIds.length > 0) {
+        try {
+          await prisma.movie.deleteMany({ where: { id: { in: createdMovieIds } } });
+        } catch (err) {
+          cleanupErrors.push(err);
+        }
+      }
+
+      if (createdTvShowIds.length > 0) {
+        try {
+          await prisma.tvShow.deleteMany({ where: { id: { in: createdTvShowIds } } });
+        } catch (err) {
+          cleanupErrors.push(err);
+        }
+      }
+    } finally {
+      try {
+        await prisma.$disconnect();
+      } catch (disconnectErr) {
+        cleanupErrors.push(disconnectErr);
+      }
+    }
+
+    if (cleanupErrors.length > 0) {
+      const messages = cleanupErrors
+        .map((e) => (e instanceof Error ? e.stack || e.message : String(e)))
+        .join('\n');
+      throw new Error(
+        `Teardown cleanup encountered ${cleanupErrors.length} error(s):\n${messages}`,
+      );
+    }
   });
 
   beforeEach(async () => {
