@@ -265,22 +265,24 @@ export class DashboardService {
       viewingEventRating: e.rating !== null ? Number(e.rating) : null,
     }));
 
-    const tvItems: RecentActivityItem[] = episodeEvents.map((e) => ({
-      activityType: 'TV_EPISODE' as const,
-      watchedAt: e.watchedAt ? e.watchedAt.toISOString() : '',
-      libraryEntryId: e.libraryEntryId,
-      tvShow: e.libraryEntry.tvShow
-        ? {
-            id: e.libraryEntry.tvShow.id,
-            tmdbId: e.libraryEntry.tvShow.tmdbId,
-            name: e.libraryEntry.tvShow.name,
-            posterPath: e.libraryEntry.tvShow.posterPath,
-          }
-        : undefined,
-      episodeNumber: e.episode?.episodeNumber,
-      seasonNumber: e.episode?.season?.seasonNumber,
-      episodeName: e.episode?.name ?? null,
-    }));
+    const tvItems: RecentActivityItem[] = episodeEvents
+      .filter((e): e is typeof e & { watchedAt: Date } => e.watchedAt !== null)
+      .map((e) => ({
+        activityType: 'TV_EPISODE' as const,
+        watchedAt: e.watchedAt.toISOString(),
+        libraryEntryId: e.libraryEntryId,
+        tvShow: e.libraryEntry.tvShow
+          ? {
+              id: e.libraryEntry.tvShow.id,
+              tmdbId: e.libraryEntry.tvShow.tmdbId,
+              name: e.libraryEntry.tvShow.name,
+              posterPath: e.libraryEntry.tvShow.posterPath,
+            }
+          : undefined,
+        episodeNumber: e.episode?.episodeNumber,
+        seasonNumber: e.episode?.season?.seasonNumber,
+        episodeName: e.episode?.name ?? null,
+      }));
 
     // Merge and sort by watchedAt descending, slice to limit
     const merged = [...movieItems, ...tvItems];

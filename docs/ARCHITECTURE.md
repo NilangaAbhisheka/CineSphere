@@ -1,10 +1,10 @@
 # CineSphere — System Architecture
 
-**Status:** Active / Implemented Baseline (Phases 1, 2, 3.0–3.5 Verified)  
-**Last Updated:** 2026-11-08  
-**Version:** 1.2
+**Status:** Active / Implemented Baseline (Phases 1, 2, 3, and 4.1–4.4 Verified)  
+**Last Updated:** 2026-11-18  
+**Version:** 1.3
 
-> This document describes the CineSphere system architecture. The foundation (Phase 1), catalogue and TMDB integration (Phase 2), and personal library & tracking system (Phase 3 Stages 3.0–3.5) are fully implemented and verified with automated test suites. Future domains (recommendation engine, ML pipeline, Movie Universe) remain design specifications.
+> This document describes the CineSphere system architecture. The foundation (Phase 1), catalogue and TMDB integration (Phase 2), personal library & tracking system (Phase 3 Stages 3.0–3.8), and personal statistics & data import (Phase 4 Stages 4.1–4.4) are fully implemented and verified with automated test suites. Personal data export (Stage 4.5), recommendation intelligence, ML pipelines, and the Movie Universe visualization remain design specifications.
 
 ---
 
@@ -74,16 +74,18 @@ flowchart TD
 - `/` — Personal Dashboard with Viewing Summary cards, Continue Watching section (progress bars, next-episode calculations), Recent Activity feed, and Quick Picks catalogue recommendations.
 - `/discover` — TMDB search, curated popular/trending content, genre/year filters, and catalogue browsing with debounced search input.
 - `/library` — My Library page with 5 status tabs (All, Watching, Plan to Watch, Completed, Dropped), media type filtering, sorting, pagination, and empty/error states.
-- `/statistics` — Personal viewing analytics and tracking intelligence: Summary cards, Genre distribution, Viewing activity timeline, and Personal rating distribution (Phase 3.7 frontend foundation; Phase 4 connects live backend aggregation endpoints).
+- `/statistics` — Personal viewing analytics and tracking intelligence with live backend API integration: Summary cards, Genre distribution, Viewing activity timeline, and Personal rating distribution with loading skeletons and retry error handling.
+- `/import` — Data import page for importing personal movie and TV tracking history from JSON and CSV files, featuring drag-and-drop dropzone, format auto-detection, progress spinner, summary metrics, and item-level validation diagnostics.
 
 **Implemented Components:**
 
-- `Navbar` — Responsive navigation header with active page indicators (Dashboard, Discover, My Library, Statistics).
-- `StatisticsView` — Container component rendering summary cards, charts, and foundation state notice.
+- `Navbar` — Responsive navigation header with active page indicators (Dashboard, Discover, My Library, Statistics, and Import link).
+- `StatisticsView` — Container component rendering live summary cards, charts, and interactive controls.
 - `StatsSummaryCards` — Primary metric cards (Movies Completed, Episodes Watched, Shows Completed, Average Personal Rating) with secondary metrics and unavailable placeholders (`—`).
-- `GenreDistributionChart` — Pure SVG + Tailwind horizontal bar chart displaying top 8 genres (with expansion toggle), multi-genre safe calculations, and hidden accessible table.
+- `GenreDistributionChart` — Pure SVG + Tailwind horizontal bar chart displaying top 8 genres (with expansion modal), multi-genre safe calculations, and hidden accessible table.
 - `ActivityTimelineChart` — Pure SVG + Tailwind stacked column chart for monthly movie and episode viewing volume with accessible table.
 - `RatingDistributionChart` — Pure SVG + Tailwind 19-bucket histogram for 1.0–10.0 ratings with average guideline marker and accessible table.
+- `ImportDropzone` / `ImportFormatGuides` / `ImportResultsPanel` / `ImportErrorsPanel` — Components for file drag-and-drop, format guidance, import results, and error lists.
 - `StatCard` / `ContinueWatchingCard` / `RecentActivityRow` / `QuickPickCard` — Dashboard widget components with loading skeletons and empty states.
 - `LibraryCard` — Visual card displaying poster, title, status badge, media type badge, personal rating badge, watch counts (movies) or episode progress bar (TV), and "Manage Tracking" trigger.
 - `AddLibraryModal` — Dialog for adding any movie or TV show to the personal library with status selection, optional 1.0–10.0 rating, notes, and 409 conflict handling.
@@ -121,6 +123,8 @@ flowchart TD
 - `CatalogueModule`: Local database catalogue browsing, filtering, search, and details endpoints (`GET /api/catalogue/movies`, `/tv`, `/movies/:id`, `/tv/:id`).
 - `LibraryModule`: Personal library management (`POST/GET/PATCH/DELETE /api/library`, viewing events, episode progress, mark-all-watched, season ratings).
 - `DashboardModule`: Consolidated dashboard data aggregation (`GET /api/dashboard/overview`, `/stats`, `/continue-watching`, `/recent-activity`, `/quick-picks`).
+- `StatsModule`: Live viewing statistics calculations and metrics (`GET /api/stats/overview`, `/genres`, `/activity`, `/ratings`).
+- `ImportModule`: Personal tracking data import with RFC 4180 CSV parsing, strict ISO 8601 validation, TMDB catalogue resolution, and atomic `READ COMMITTED` transactions (`POST /api/import/json`, `/api/import/csv`).
 - Swagger / OpenAPI documentation automatically generated and served at `/api/docs`.
 
 **Does not:**
@@ -136,9 +140,11 @@ flowchart TD
 
 - Dashboard types: `DashboardOverviewResponse`, `DashboardStats`, `ContinueWatchingItem`, `RecentActivityItem`, `QuickPickItem`, `NextEpisodeInfo`.
 - Statistics types: `StatsOverviewSummary`, `GenreStatItem`, `ActivityTimelineItem`, `ActivityTimelineData`, `RatingDistributionBucket`, `RatingStatsData`, `StatisticsPageData`.
+- Import types: `ImportDocument`, `ImportEntry`, `ImportViewingEvent`, `ImportEpisodeProgress`, `ImportSeasonRating`, `ImportResponse`, `ImportValidationError`, `CsvImportRow`.
 - Library types: `LibraryMediaType`, `LibraryStatus`, `LibraryEntryResponse`, `ViewingEventResponse`, `EpisodeProgressResponse`, `SeasonRatingResponse`, `LibraryEntryStats`.
 - Media types: `MovieDetails`, `TvShowDetails`, `SeasonDetails`, `EpisodeDetails`, `Genre`, `PersonCredit`.
 - TMDB types: search results, trending/popular responses, pagination contracts.
+- Health and vector diagnostic types.
 - Health and vector diagnostic types.
 
 **`packages/config/`:** Shared ESLint, Prettier, and TypeScript configurations ensuring strict type checking and consistent formatting across the monorepo.

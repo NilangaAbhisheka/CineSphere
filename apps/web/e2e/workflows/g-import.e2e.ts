@@ -121,7 +121,7 @@ test.describe('Workflow G — Data Import', () => {
     // Valid CSV targeting the seeded E2E movie
     const validCsv = [
       'tmdb_id,media_type,status,personal_rating,notes,created_at',
-      `${E2E_MOVIE_TMDB_ID},movie,PLAN_TO_WATCH,9.0,Imported via E2E test,2026-11-17`,
+      `${E2E_MOVIE_TMDB_ID},movie,PLAN_TO_WATCH,9.0,Imported via E2E test,2026-11-17T00:00:00Z`,
     ].join('\n');
 
     const fileInput = page.locator('input[type="file"]');

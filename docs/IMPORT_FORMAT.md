@@ -37,10 +37,23 @@ All personal tracking records (library entries, viewing events, episode progress
 
 > **Summary:** Catalogue metadata additions from Phase 1 are not rolled back when Phase 2 fails. Personal tracking data from Phase 2 is strictly all-or-nothing.
 
-### Validation
+### Validation & Execution Lifecycle
 
-All records are validated before any database write. The API accumulates as many errors as
-possible in a single validation pass and returns them all in the response.
+Import processing executes in clearly delineated stages, distinguishing between in-memory structural validation, shared catalogue resolution, and user personal tracking persistence:
+
+1. **Syntactic & Schema Validation (Pre-Database):**  
+   The uploaded file structure is validated in memory before any database write. For JSON, document structure, media types, status enums, 1.0–10.0 half-step rating increments, strict ISO 8601 datetimes with explicit timezones, and intra-file duplicate entries (`mediaType` + `tmdbId`) are verified. For CSV, RFC 4180 compliance, header correctness, row delimiters, and field formats are validated. If any syntactic or schema check fails, the import fails immediately with accumulated error diagnostics, and **zero database writes** occur.
+
+2. **Phase 1 — Catalogue Resolution & Ingestion (Outside Transaction, Idempotent):**  
+   Before personal tracking records can be linked to specific catalogue entities, referenced movies and TV shows must exist in the CineSphere catalogue. If an imported entry references a title not yet present in the local database, it is fetched on-demand from TMDB and persisted into shared catalogue tables (`movies`, `tv_shows`, `seasons`, `episodes`). These writes occur outside the personal tracking transaction and are idempotent and permanent catalogue assets. If TMDB resolution fails (e.g. unknown TMDB ID or TMDB API failure), processing stops before any personal tracking records are written.
+
+3. **Phase 1b — Catalogue-Dependent Reference Validation:**  
+   Once catalogue resolution is complete, all nested references (`episodeProgress[].episodeTmdbId`, `seasonRatings[].seasonTmdbId`) are validated against the local catalogue to confirm that each referenced episode and season actually exists and belongs specifically to the imported TV show. If any reference is missing or belongs to a different show, the entire import is rejected with structured errors identifying the invalid entry and field. No personal tracking data is created.
+
+4. **Phase 2 — Personal Tracking Transaction (`READ COMMITTED`, Atomic):**  
+   Existing library entries for the user are identified; existing titles are **skipped** (not overwritten). All new personal tracking records (`UserLibraryEntry`, `ViewingEvent`, `EpisodeProgress`, `SeasonRating`) are then persisted within a single atomic Prisma interactive transaction (`READ COMMITTED`). If any write fails, **the entire personal tracking transaction is rolled back**, ensuring zero partial or corrupted tracking records.
+
+> **Summary:** Catalogue metadata additions from Phase 1 are permanent shared assets and are not rolled back when Phase 2 fails. Personal tracking data from Phase 2 is strictly atomic and all-or-nothing.
 
 ### Duplicate Handling
 
@@ -52,7 +65,7 @@ possible in a single validation pass and returns them all in the response.
 ### TMDB Catalogue Resolution
 
 If an imported entry refers to a movie or TV show that is not yet in the local CineSphere
-catalogue, it is ingested on-demand from TMDB before the import transaction begins.
+catalogue, it is ingested on-demand from TMDB before the personal tracking transaction begins.
 
 If TMDB cannot resolve a referenced item (invalid ID, API error), the import fails with a clear
 error message. No incomplete catalogue records are created.

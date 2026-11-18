@@ -337,6 +337,33 @@ describe('DashboardService', () => {
       const result = await service.getRecentActivity();
       expect(typeof result[0].viewingEventRating).toBe('number');
     });
+
+    it('safely filters out episode progress records with null watchedAt without artificial fallback', async () => {
+      prisma.viewingEvent.findMany.mockResolvedValue([]);
+      prisma.episodeProgress.findMany.mockResolvedValue([
+        {
+          watchedAt: null,
+          libraryEntryId: 'lib-tv-null',
+          libraryEntry: {
+            tvShow: { id: 'tv-null', tmdbId: 99, name: 'Null Show', posterPath: null },
+          },
+          episode: { episodeNumber: 1, name: null, season: { seasonNumber: 1 } },
+        },
+        {
+          watchedAt: new Date('2026-03-01T12:00:00Z'),
+          libraryEntryId: 'lib-tv-valid',
+          libraryEntry: {
+            tvShow: { id: 'tv-valid', tmdbId: 100, name: 'Valid Show', posterPath: null },
+          },
+          episode: { episodeNumber: 2, name: null, season: { seasonNumber: 1 } },
+        },
+      ]);
+
+      const result = await service.getRecentActivity();
+      expect(result).toHaveLength(1);
+      expect(result[0].libraryEntryId).toBe('lib-tv-valid');
+      expect(result[0].watchedAt).toBe('2026-03-01T12:00:00.000Z');
+    });
   });
 
   // ─── getQuickPicks ───────────────────────────────────────────────────────

@@ -6,14 +6,14 @@
 
 ## Project Overview
 
-| Field             | Value                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project           | CineSphere                                                                                                                                                                                                                                                                                                                                                             |
-| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                                                                                                                      |
-| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                                                                                                                 |
-| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                                                                                                                                                                        |
-| Current Milestone | Stage 4.4 Complete ✅ (Data Import Hardening & Verification — RFC 4180 CSV physical line reporting, strict ISO 8601 calendar/timezone validation, nullable EpisodeProgress.watchedAt migration, two-phase atomicity architecture docs, 401 unit tests, 192 integration tests [10 suites], 34 E2E tests, clean build) |
-| Last Updated      | 2026-11-17                                                                                                                                                                                                                                                                                                                                                             |
+| Field             | Value                                                                                                                                                                                                                                                                                                     |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project           | CineSphere                                                                                                                                                                                                                                                                                                |
+| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                                                         |
+| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                                                    |
+| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                                                                                                           |
+| Current Milestone | Stage 4.4 Complete ✅ (Data Import Final Verification & CI Recovery — Prettier format check fix, strict ISO 8601 E2E alignment, type-safe dashboard recent activity mapping, two-phase atomicity documentation, 464 unit tests, 193 integration tests [10 suites], 34 E2E tests, clean production builds) |
+| Last Updated      | 2026-11-18                                                                                                                                                                                                                                                                                                |
 
 ---
 
@@ -551,6 +551,14 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Finding 2 — Strict ISO 8601 datetime validation: replaced `Date.parse()` with strict regex requiring full datetime + explicit timezone (`Z` or `±HH:mm`) and calendar/leap-year validation (`isStrictIso8601DateTime`)
   - [x] Finding 3 — Episode progress timestamp policy: migration `20261117223000_episode_progress_watched_at_nullable` applied; `null` stored on omission instead of fabricating `new Date()`; dashboard activity null-safe guards added
   - [x] Finding 4 — Import atomicity documentation: updated `docs/IMPORT_FORMAT.md` with explicit two-phase execution breakdown (Phase 1 catalogue ingestion, Phase 2 personal tracking atomic transaction)
+- [x] Final CI recovery, documentation synchronization & verification:
+  - [x] Prettier format check failure resolved across all markdown and configuration files
+  - [x] Synchronized `README.md`, `docs/PROJECT_PLAN.md`, and `docs/ARCHITECTURE.md` with Phase 4 (Stages 4.1–4.4 complete)
+  - [x] Corrected `docs/IMPORT_FORMAT.md` atomicity and lifecycle documentation to reflect true multi-phase execution boundaries
+  - [x] Type-safe filter narrowing for `watchedAt` in `dashboard.service.ts` recent activity feed
+  - [x] Aligned Playwright Workflow G test payload with strict ISO 8601 datetime requirements (`2026-11-17T00:00:00Z`)
+  - [x] Verified clean Prisma migration application from baseline against fresh PostgreSQL database (`cinesphere_clean_verify`)
+  - [x] Re-verified all Playwright E2E suites (Workflows A–G passing) and complete monorepo test/build pipeline
 
 ### 4.5 Data Export
 

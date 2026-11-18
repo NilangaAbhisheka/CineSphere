@@ -333,6 +333,32 @@ describe('Dashboard API Integration Tests', () => {
         },
       });
     });
+
+    it('excludes episode progress with null watchedAt from recent activity but counts in totalEpisodesWatched', async () => {
+      const tv = await createTvShow('Null WatchedAt Show');
+      const tvEntryId = await addToLibrary('TV', tv.tvShowId, 'WATCHING');
+
+      // Create episode progress with null watchedAt
+      await prisma.episodeProgress.create({
+        data: {
+          libraryEntryId: tvEntryId,
+          episodeId: tv.episodes[0],
+          watchedAt: null,
+        },
+      });
+
+      const recentResult = await dashboardService.getRecentActivity(10);
+      const tvItem = recentResult.find((i) => i.libraryEntryId === tvEntryId);
+      expect(tvItem).toBeUndefined();
+
+      const statsResult = await dashboardService.getStats();
+      expect(statsResult.totalEpisodesWatched).toBeGreaterThanOrEqual(1);
+
+      // Cleanup
+      await prisma.userLibraryEntry.deleteMany({
+        where: { id: tvEntryId },
+      });
+    });
   });
 
   // ── getQuickPicks ─────────────────────────────────────────────────────────
