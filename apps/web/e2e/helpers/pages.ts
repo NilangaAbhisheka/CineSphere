@@ -10,7 +10,7 @@ import { type Page, expect } from '@playwright/test';
 
 export async function navigateTo(
   page: Page,
-  path: '/' | '/discover' | '/library' | '/statistics' | '/import',
+  path: '/' | '/discover' | '/library' | '/statistics' | '/import' | '/export',
 ) {
   await page.goto(path);
   await page.waitForLoadState('networkidle');

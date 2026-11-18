@@ -537,6 +537,72 @@ class ApiClient {
     return this.uploadFile<ImportResponse>('/import/csv', file, signal);
   }
 
+  // ── Export Endpoints ──────────────────────────────────────────────────────────
+
+  public async exportJsonBlob(signal?: AbortSignal): Promise<{ blob: Blob; filename: string }> {
+    return this.downloadBlob('/export/json', signal);
+  }
+
+  public async exportCsvBlob(signal?: AbortSignal): Promise<{ blob: Blob; filename: string }> {
+    return this.downloadBlob('/export/csv', signal);
+  }
+
+  private async downloadBlob(
+    endpoint: string,
+    signal?: AbortSignal,
+  ): Promise<{ blob: Blob; filename: string }> {
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${this.baseUrl}${cleanEndpoint}`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: endpoint.includes('csv') ? 'text/csv' : 'application/json' },
+        signal,
+      });
+
+      if (!response.ok) {
+        let errorMsg = `API request failed with status ${response.status}`;
+        let responseBody: unknown;
+        try {
+          responseBody = await response.json();
+          if (responseBody && typeof responseBody === 'object' && 'message' in responseBody) {
+            const bodyMsg = (responseBody as { message: unknown }).message;
+            errorMsg = Array.isArray(bodyMsg) ? bodyMsg.join(', ') : String(bodyMsg);
+          }
+        } catch {
+          // Non-JSON response
+        }
+        throw new ApiClientError(response.status, errorMsg, responseBody);
+      }
+
+      let filename = endpoint.includes('csv') ? 'cinesphere-export.csv' : 'cinesphere-export.json';
+      const disposition = response.headers.get('content-disposition');
+      if (disposition) {
+        const match = /filename=["']?([^"';]+)["']?/i.exec(disposition);
+        if (match && match[1]) {
+          const rawName = match[1].trim().replace(/^.*[\\/]/, '');
+          if (rawName.length > 0) {
+            filename = rawName;
+          }
+        }
+      }
+
+      const blob = await response.blob();
+      return { blob, filename };
+    } catch (err: unknown) {
+      if (err instanceof ApiClientError) throw err;
+      if (
+        (err instanceof DOMException && err.name === 'AbortError') ||
+        (err instanceof Error && err.name === 'AbortError')
+      ) {
+        throw err;
+      }
+      const error = err as Error;
+      throw new ApiClientError(0, error.message || 'Network connection failed');
+    }
+  }
+
   private async uploadFile<T>(endpoint: string, file: File, signal?: AbortSignal): Promise<T> {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = `${this.baseUrl}${cleanEndpoint}`;

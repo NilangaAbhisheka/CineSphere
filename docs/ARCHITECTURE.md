@@ -76,6 +76,7 @@ flowchart TD
 - `/library` — My Library page with 5 status tabs (All, Watching, Plan to Watch, Completed, Dropped), media type filtering, sorting, pagination, and empty/error states.
 - `/statistics` — Personal viewing analytics and tracking intelligence with live backend API integration: Summary cards, Genre distribution, Viewing activity timeline, and Personal rating distribution with loading skeletons and retry error handling.
 - `/import` — Data import page for importing personal movie and TV tracking history from JSON and CSV files, featuring drag-and-drop dropzone, format auto-detection, progress spinner, summary metrics, and item-level validation diagnostics.
+- `/export` — Data export page for downloading personal tracking data as full-fidelity JSON backups or flat RFC 4180 CSV exports, featuring dedicated format cards, explicit limitation notices, immediate download triggers, and error resilience.
 
 **Implemented Components:**
 
@@ -125,6 +126,7 @@ flowchart TD
 - `DashboardModule`: Consolidated dashboard data aggregation (`GET /api/dashboard/overview`, `/stats`, `/continue-watching`, `/recent-activity`, `/quick-picks`).
 - `StatsModule`: Live viewing statistics calculations and metrics (`GET /api/stats/overview`, `/genres`, `/activity`, `/ratings`).
 - `ImportModule`: Personal tracking data import with RFC 4180 CSV parsing, strict ISO 8601 validation, TMDB catalogue resolution, and atomic `READ COMMITTED` transactions (`POST /api/import/json`, `/api/import/csv`).
+- `ExportModule`: Personal tracking data export providing full-fidelity JSON backups (symmetric with v1.0 import) and flat RFC 4180 CSV exports with `REPEATABLE READ` snapshot isolation, zero silent data loss enforcement, and `no-store` cache headers (`GET /api/export/json`, `/api/export/csv`).
 - Swagger / OpenAPI documentation automatically generated and served at `/api/docs`.
 
 **Does not:**
@@ -140,7 +142,7 @@ flowchart TD
 
 - Dashboard types: `DashboardOverviewResponse`, `DashboardStats`, `ContinueWatchingItem`, `RecentActivityItem`, `QuickPickItem`, `NextEpisodeInfo`.
 - Statistics types: `StatsOverviewSummary`, `GenreStatItem`, `ActivityTimelineItem`, `ActivityTimelineData`, `RatingDistributionBucket`, `RatingStatsData`, `StatisticsPageData`.
-- Import types: `ImportDocument`, `ImportEntry`, `ImportViewingEvent`, `ImportEpisodeProgress`, `ImportSeasonRating`, `ImportResponse`, `ImportValidationError`, `CsvImportRow`.
+- Import & Export types: `ExportDocument`, `ImportDocument`, `ImportEntry`, `ImportViewingEvent`, `ImportEpisodeProgress`, `ImportSeasonRating`, `ImportResponse`, `ImportValidationError`, `CsvImportRow`.
 - Library types: `LibraryMediaType`, `LibraryStatus`, `LibraryEntryResponse`, `ViewingEventResponse`, `EpisodeProgressResponse`, `SeasonRatingResponse`, `LibraryEntryStats`.
 - Media types: `MovieDetails`, `TvShowDetails`, `SeasonDetails`, `EpisodeDetails`, `Genre`, `PersonCredit`.
 - TMDB types: search results, trending/popular responses, pagination contracts.

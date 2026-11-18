@@ -6,14 +6,14 @@
 
 ## Project Overview
 
-| Field             | Value                                                                                                                                                                                                                                                                                                     |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project           | CineSphere                                                                                                                                                                                                                                                                                                |
-| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                                                         |
-| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                                                    |
-| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                                                                                                           |
-| Current Milestone | Stage 4.4 Complete ✅ (Data Import Final Verification & CI Recovery — Prettier format check fix, strict ISO 8601 E2E alignment, type-safe dashboard recent activity mapping, two-phase atomicity documentation, 464 unit tests, 193 integration tests [10 suites], 34 E2E tests, clean production builds) |
-| Last Updated      | 2026-11-18                                                                                                                                                                                                                                                                                                |
+| Field             | Value                                                                                                                                                                                                                                                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project           | CineSphere                                                                                                                                                                                                                                                                                                                  |
+| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                                                                           |
+| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                                                                      |
+| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                                                                                                                             |
+| Current Milestone | Stage 4.5 Complete ✅ (Data Export — Full-fidelity JSON and flat RFC 4180 CSV exports, RepeatableRead snapshot isolation, zero silent data loss enforcement, full JSON and limited CSV round-trip verification, 513 unit tests [21 backend + 18 frontend], 199 integration tests [11 suites], 39 E2E tests [Workflows A–H]) |
+| Last Updated      | 2026-11-18                                                                                                                                                                                                                                                                                                                  |
 
 ---
 
@@ -23,7 +23,7 @@
 Phase 1  — Project Foundation                  ████████████████  100% (monorepo, docker, pgvector, prisma, tooling, CI workflow stabilized)
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
 Phase 3  — Personal Library and Tracking       ████████████████  100% (Stages 3.0–3.8: DB foundation, integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening — COMPLETE)
-Phase 4  — Statistics and Data Import/Export   █████████████░░░  80% (Stages 4.1, 4.2, 4.3, 4.4 complete)
+Phase 4  — Statistics and Data Import/Export   ████████████████  100% (Stages 4.1, 4.2, 4.3, 4.4, 4.5 complete — Phase 4 COMPLETE)
 Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
 Phase 7  — Local LLM Integration               ░░░░░░░░░░░░░░░░  0%
@@ -560,12 +560,37 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Verified clean Prisma migration application from baseline against fresh PostgreSQL database (`cinesphere_clean_verify`)
   - [x] Re-verified all Playwright E2E suites (Workflows A–G passing) and complete monorepo test/build pipeline
 
-### 4.5 Data Export
+### 4.5 Data Export (Stage 4.5 Complete ✅)
 
-- [ ] JSON export (full nested format with TV progress, ratings, history)
-- [ ] CSV export (flat spreadsheet-friendly format)
-- [ ] Export personal data endpoint
-- [ ] Confirm exported data is re-importable
+- [x] Shared export contract in `@cinesphere/shared`
+  - [x] `ExportDocument` interface extending `ImportDocument` contract with `version: '1.0'`, `exportedAt`, `entries: ImportEntry[]`
+  - [x] Fully symmetric with v1.0 import schema
+- [x] Backend export service and controllers in `apps/api`
+  - [x] `ExportService` with `REPEATABLE READ` snapshot isolation transaction across relational queries
+  - [x] Zero silent data loss enforcement (throws `InternalServerErrorException` on missing TMDB ID or broken relations)
+  - [x] Deterministic ordering: entries by `createdAt ASC, id ASC`; viewing events by `watchedAt ASC, id ASC`; episode progress by `seasonNumber ASC, episodeNumber ASC, episodeId ASC`; season ratings by `seasonNumber ASC, seasonId ASC`
+  - [x] Full-fidelity JSON serialization: `personalRating` decimal to number conversion, null-safe date serialization
+  - [x] RFC 4180 compliant CSV serialization: strictly 6 columns (`tmdb_id,media_type,status,personal_rating,notes,created_at`), CRLF line endings (`\r\n`), escaping quotes with `""`
+  - [x] `ExportController` with `GET /api/export/json` and `GET /api/export/csv`
+  - [x] HTTP headers: `Content-Disposition: attachment`, `Content-Type`, `Cache-Control: no-store, no-cache, must-revalidate, private`, `Pragma: no-cache`
+  - [x] `ExportModule` registered in root `AppModule`
+- [x] Frontend export interface and API client in `apps/web`
+  - [x] `ApiClient.downloadBlob()`, `exportJsonBlob()`, `exportCsvBlob()` with filename parsing and traversal sanitization
+  - [x] Error handling preserving structured `ApiClientError` and `AbortError`
+  - [x] Dedicated `/export` page with format cards, loading spinners, and download triggers via `URL.createObjectURL`
+  - [x] Explicit limitation notice clarifying CSV restores only 6 core library fields (no viewing events, episode progress, or season ratings)
+  - [x] Error banner with retry and dismiss controls (`data-testid="export-error-alert"`)
+  - [x] "Export Data" navigation link in `/library` header action cluster
+  - [x] `/export` added to E2E helper `navigateTo` route union
+- [x] Testing & verification
+  - [x] Backend unit tests: 9 service tests + 4 controller tests = 13 tests (`export.service.spec.ts`, `export.controller.spec.ts`)
+  - [x] Frontend unit tests: 7 API client tests + 4 page tests = 11 tests (`api-client.spec.ts`, `export/page.spec.tsx`)
+  - [x] PostgreSQL integration tests (6 tests in `export.integration.spec.ts`): empty JSON/CSV, single-user isolation, read-only invariant (0 mutations), JSON full-fidelity round-trip via `ImportService`, CSV limited round-trip with explicit non-restoration assertions
+  - [x] Dedicated test database protection guards (`APPROVED_DB_TOKEN_PATTERN`)
+  - [x] Playwright E2E tests (Workflow H, 5 tests): format cards rendering, JSON download stream verification, CSV download stream verification, direct URL routing, error banner handling
+- [x] Documentation & format synchronization
+  - [x] `docs/IMPORT_FORMAT.md` updated with comprehensive Data Export section, snapshot isolation explanation, zero data loss policy, and CSV round-trip limitations
+  - [x] `README.md`, `docs/PROJECT_PLAN.md`, and `docs/ARCHITECTURE.md` synchronized with Stage 4.5 completion (Phase 4 100% complete)
 
 ---
 

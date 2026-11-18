@@ -145,8 +145,8 @@ export default function LibraryPage() {
               </p>
             </div>
 
-            {/* Actions: Import & Discover CTA */}
-            <div className="flex items-center gap-2 self-start sm:self-center">
+            {/* Actions: Import, Export & Discover CTA */}
+            <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
               <Link
                 href="/import"
                 className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold hover:border-slate-600 transition-all shadow-sm"
@@ -165,6 +165,25 @@ export default function LibraryPage() {
                   />
                 </svg>
                 Import Data
+              </Link>
+              <Link
+                href="/export"
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold hover:border-slate-600 transition-all shadow-sm"
+              >
+                <svg
+                  className="w-4 h-4 text-sky-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+                Export Data
               </Link>
               <Link
                 href="/discover"

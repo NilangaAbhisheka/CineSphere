@@ -8,6 +8,7 @@ import { LibraryModule } from './library/library.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { StatsModule } from './stats/stats.module.js';
 import { ImportModule } from './import/import.module.js';
+import { ExportModule } from './export/export.module.js';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ImportModule } from './import/import.module.js';
     DashboardModule,
     StatsModule,
     ImportModule,
+    ExportModule,
   ],
 })
 export class AppModule {}

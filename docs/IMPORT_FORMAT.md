@@ -1,19 +1,19 @@
-# CineSphere — Data Import Format Reference
+# CineSphere — Data Import & Export Format Reference
 
-This document defines the supported import formats for CineSphere Stage 4.4 data import.
+This document defines the supported data import and export formats, transactional semantics, schema contracts, and round-trip fidelity guarantees for CineSphere Stage 4.4 and Stage 4.5.
 
 ---
 
 ## Overview
 
-CineSphere supports two import formats:
+CineSphere provides symmetric import and export capabilities across two formats:
 
-| Format | Endpoint                | Size Limit | Fidelity                          |
-| ------ | ----------------------- | ---------- | --------------------------------- |
-| JSON   | `POST /api/import/json` | 5 MB       | Full (entries, history, progress) |
-| CSV    | `POST /api/import/csv`  | 2 MB       | Flat (library entries only)       |
+| Format | Import Endpoint         | Export Endpoint        | Size Limit / Scope | Fidelity                          |
+| ------ | ----------------------- | ---------------------- | ------------------ | --------------------------------- |
+| JSON   | `POST /api/import/json` | `GET /api/export/json` | 5 MB Import / Full | Full (entries, history, progress) |
+| CSV    | `POST /api/import/csv`  | `GET /api/export/csv`  | 2 MB Import / Flat | Flat (6 core library fields only) |
 
-**Use JSON for complete backups.** CSV is a convenience format for simple library imports.
+**Use JSON for complete backups.** CSV is a convenience format for simple library exports, external spreadsheet inspection, and basic library restoration.
 
 ---
 
@@ -262,6 +262,86 @@ Both endpoints return HTTP `200 OK` with an `ImportResponse` body. Inspect `succ
 - When `success: false`, `errors` contains the structured list of validation errors.
 
 If the uploaded file is malformed (e.g. invalid JSON syntax), HTTP `400 Bad Request` is returned. If the file exceeds the size limit, HTTP `413 Payload Too Large` is returned.
+
+---
+
+## Data Export (Stage 4.5)
+
+CineSphere provides user-initiated data export endpoints to download personal tracking data for archival, portability, and migration.
+
+### Export Endpoints & Response Headers
+
+- **JSON Export:** `GET /api/export/json`
+  - `Content-Type: application/json; charset=utf-8`
+  - `Content-Disposition: attachment; filename="cinesphere-export.json"`
+  - `Cache-Control: no-store, no-cache, must-revalidate, private`
+  - `Pragma: no-cache`
+- **CSV Export:** `GET /api/export/csv`
+  - `Content-Type: text/csv; charset=utf-8`
+  - `Content-Disposition: attachment; filename="cinesphere-export.csv"`
+  - `Cache-Control: no-store, no-cache, must-revalidate, private`
+  - `Pragma: no-cache`
+
+### Transaction Isolation & Consistent Snapshot
+
+Prisma loads relational models using multiple sequential SQL queries under the hood. Under PostgreSQL's default `READ COMMITTED` level, each sequential query would execute against a different point-in-time snapshot, risking phantom records or inconsistent relational states if concurrent writes occur.
+
+To guarantee that export documents represent a **single, consistent point-in-time snapshot**, `ExportService` executes all read queries inside an interactive transaction with `REPEATABLE READ` isolation:
+
+```typescript
+await this.prisma.$transaction(
+  async (tx) => {
+    return tx.userLibraryEntry.findMany({
+      where: { userId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      include: {
+        movie: true,
+        tvShow: true,
+        viewingEvents: { orderBy: [{ watchedAt: 'asc' }, { id: 'asc' }] },
+        episodeProgress: {
+          include: { episode: true },
+          orderBy: [
+            { episode: { seasonNumber: 'asc' } },
+            { episode: { episodeNumber: 'asc' } },
+            { episodeId: 'asc' },
+          ],
+        },
+        seasonRatings: {
+          include: { season: true },
+          orderBy: [{ season: { seasonNumber: 'asc' } }, { seasonId: 'asc' }],
+        },
+      },
+    });
+  },
+  { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+);
+```
+
+### Zero Silent Data Loss Policy
+
+A data export must never silently discard or truncate personal tracking records.
+Because the CineSphere schema permits nullable `tmdbId` on certain catalogue entities, the export pipeline enforces strict integrity checks:
+
+- If any tracked movie, TV show, episode progress record, or season rating refers to an entity where `tmdbId` is missing or the relationship is broken, `ExportService` **immediately aborts the export** by throwing an `InternalServerErrorException` with diagnostic details identifying the corrupted record.
+- No partial or incomplete export is ever returned to the user.
+
+### JSON Export Format & Round-Trip Fidelity
+
+The JSON export format matches the `ExportDocument` shared contract and is 100% symmetric with the v1.0 importer:
+
+- Document metadata: `version: "1.0"`, `exportedAt` (ISO 8601 UTC).
+- Deterministic ordering: entries ordered by `createdAt ASC, id ASC`; viewing events by `watchedAt ASC, id ASC`; episode progress by `seasonNumber ASC, episodeNumber ASC, episodeId ASC`; season ratings by `seasonNumber ASC, seasonId ASC`.
+- Data conversion: Decimal values (`personalRating`) converted to standard JavaScript numbers; null values preserved; nullable timestamps formatted to strict ISO 8601.
+- **Round-Trip Fidelity:** Importing a JSON export back into a clean database restores every library entry, viewing event (with rewatch counts and notes), episode progress record, and season rating with exact fidelity.
+
+### CSV Export Format & Explicit Limitations
+
+The CSV export is a flat representation conforming to RFC 4180:
+
+- **Columns (strictly 6):** `tmdb_id,media_type,status,personal_rating,notes,created_at`
+- **Line Endings:** RFC 4180 CRLF (`\r\n`).
+- **Escaping:** Fields containing commas, double quotes, or newlines are quoted in `""`, with internal double quotes doubled (`""`).
+- **Explicit Round-Trip Limitation:** CSV exports contain **only** the 6 core library entry fields. When a CSV export is imported, it restores only the library entries and their personal ratings/notes. It **does not restore** movie viewing events, TV episode progress, or season ratings. The UI and documentation explicitly communicate this limitation so users do not mistake CSV for a full backup.
 
 ---
 

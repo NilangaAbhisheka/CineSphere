@@ -1,6 +1,6 @@
 // ==============================================================================
 // CineSphere — Import/Export Shared Types
-// Phase 4.4: Data Import
+// Phase 4.4–4.5: Data Import and Data Export
 // ==============================================================================
 
 // ── JSON Import Format ────────────────────────────────────────────────────────
@@ -98,4 +98,20 @@ export interface ImportResult {
 
 export interface ImportResponse extends ImportResult {
   success: boolean;
+}
+
+// ── Export Document Format ───────────────────────────────────────────────────
+
+/**
+ * Top-level JSON export document.
+ * Mirrors the ImportDocument format with mandatory exportedAt timestamp.
+ * Fully compatible with CineSphere JSON Importer v1.0.
+ */
+export interface ExportDocument {
+  /** Schema version — currently "1.0" */
+  version: '1.0';
+  /** ISO 8601 timestamp when the export was generated */
+  exportedAt: string;
+  /** Array of personal library entries with full tracking history */
+  entries: ImportEntry[];
 }
