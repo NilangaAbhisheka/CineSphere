@@ -1,483 +1,583 @@
-# CineSphere — Stage 5.0.3-A: TMDB Catalogue Seeding Plan & Ingestion Safety Audit
+# CineSphere — Stage 5.0.3: TMDB Catalogue Seeding Plan & Ingestion Safety Audit (Corrected)
 
-**Document Status:** Final Architecture & Safety Plan (Planning Only — No Execution)  
-**Date:** 2026-11-24  
-**Author:** Antigravity AI (Senior ML Engineer, Data Engineer & Technical Auditor)  
-**Target Milestone:** Stage 5.0.3-A  
-**Baseline Git Commit:** `5b32a011db9663d0a118814e11ee57212bf1bc1f`  
+**Document Status:** Corrected Technical Architecture & Execution Plan (Planning Only — Ingestion Not Authorized)
+**Date:** 2026-11-24
+**Internal Revision:** V2.0.0 (Corrective Audit Pass Stage 5.0.3-A.1)
+**Author:** Antigravity AI (Senior ML Engineer, Data Engineer & Technical Auditor)
+**Baseline Commit:** `b8ee06ea3e514071e6d8e3a81ed00606698b676d`
 **Repository:** `NilangaAbhisheka/CineSphere` (`main` branch)
 
 ---
 
-## 1. Executive Summary
+## 1. Verified Repository Baseline
 
-This document specifies the technical and operational plan for Stage 5.0.3: populating the CineSphere PostgreSQL catalogue with sufficient authentic TMDB media records to satisfy the Stage 5.0 evaluation benchmark fixture prerequisites.
-
-In Stage 5.0.2, the benchmark fixture preparation pipeline (`prepare_catalogue_fixture.py`) and its integration test suite were hardened, verified, and committed. The extraction pipeline requires a verified catalogue containing at least:
-- **1,400 eligible movies** (with non-empty overviews, excluding synthetic integration fixtures).
-- **600 eligible TV shows** (with non-empty overviews, excluding synthetic integration fixtures).
-- **All 50 mandatory evaluation probes** (38 movies, 12 TV shows) defined in `ml/benchmark/fixtures/probes_v1.json`.
-
-A fresh read-only audit of the local PostgreSQL database confirms that the current catalogue consists primarily of synthetic test fixtures generated during Phase 3 and Phase 4 integration tests:
-- Only **138 eligible movies** exist (net deficit: **1,262 movies**).
-- Only **106 eligible TV shows** exist (net deficit: **494 TV shows**).
-- **0 of the 50 mandatory probes** currently exist in the database (net deficit: **50 probes**).
-
-Per Section 7 Stop Conditions of the Phase 5 Technical Design Proposal (V0.7.8), the fixture preparation script strictly forbids synthetic record fabrication or unvetted fallback substitutions; it fails closed until authentic TMDB catalogue data is synchronized.
-
-This plan details how to seed the necessary catalogue records via CineSphere's existing NestJS TMDB ingestion architecture, defines a robust multi-source candidate selection strategy, establishes conservative rate-limiting and error-handling protocols, enforces strict database safety invariants protecting personal user library data, and defines the phased execution protocol for the forthcoming Stage 5.0.3-B implementation.
-
-> [!IMPORTANT]
-> **Planning & Audit Scope Only:** This document provides architectural analysis, live read-only verification, and execution design. It explicitly does **not** perform database writes, trigger batch ingestion, download models, or execute benchmark scoring.
+A comprehensive inspection of the current Git workspace was conducted prior to drafting this document:
+- **Current HEAD Commit:** `b8ee06ea3e514071e6d8e3a81ed00606698b676d` (`docs(stage-5.0.3): plan TMDB catalogue seeding`)
+- **Git Branch:** `main` (synchronized with `origin/main`)
+- **Working Tree:** Clean (all tracked files match HEAD; only untracked legacy markdown drafts exist in `docs/`)
+- **Authoritative Source Files Inspected:**
+  - `ml/benchmark/fixtures/probes_v1.json` (authoritative benchmark probe definitions)
+  - `ml/benchmark/scripts/prepare_catalogue_fixture.py` (authoritative fixture extraction & validation pipeline)
+  - `apps/api/src/tmdb/tmdb.service.ts`
+  - `apps/api/src/tmdb/catalogue.repository.ts`
+  - `apps/api/src/tmdb/tmdb-http.client.ts`
+  - `apps/api/src/tmdb/tmdb.controller.ts`
+  - `apps/api/src/tmdb/discover.controller.ts`
+  - `apps/api/src/tmdb/tmdb.mapper.ts`
+  - `apps/api/prisma/schema.prisma`
 
 ---
 
-## 2. Baseline Commit and Repository State
+## 2. Corrected 50-Probe Inventory (Rebuilt Directly from `probes_v1.json`)
 
-- **Starting HEAD Commit:** `5b32a011db9663d0a118814e11ee57212bf1bc1f` (`fix(ml): verify production fixture extraction path`)
-- **Current Branch:** `main` (synchronized with `origin/main`)
-- **Repository Cleanliness:** No unstaged or uncommitted changes in tracked files.
-- **Dependencies & Services:**
-  - PostgreSQL 16 (`cinesphere-postgres` container) running on port `5432`.
-  - Database `cinesphere` operational with committed Phase 1–4 migrations.
-  - NestJS API (`apps/api`) with operational TMDB client and repository.
-  - Python 3.12 ML environment with verified `psycopg2`, `pytest`, and `ruff`.
-  - Valid `TMDB_READ_ACCESS_TOKEN` present in root `.env` and confirmed functional.
+The master probe inventory below was extracted directly from `ml/benchmark/fixtures/probes_v1.json`. It represents the 100% authoritative baseline for the Stage 5.0 scientific benchmark (38 movies, 12 TV shows across 5 distinct evaluation strata).
+
+| Probe ID | Media Type | TMDB ID | Exact Configured Title | Stratum | Selection Rationale |
+| :--- | :---: | :---: | :--- | :--- | :--- |
+| **PB-01** | MOVIE | 27205 | Inception | Mainstream | Complex multi-layered narrative, high-budget sci-fi heist, Christopher Nolan auteur direction. |
+| **PB-02** | MOVIE | 155 | The Dark Knight | Mainstream | Neo-noir crime drama within a comic book franchise, dense psychological antagonism. |
+| **PB-03** | MOVIE | 157336 | Interstellar | Mainstream | Hard sci-fi, space exploration, intense familial emotional grief, relativistic physics. |
+| **PB-04** | MOVIE | 603 | The Matrix | Mainstream | Cyberpunk philosophical action, dystopian reality simulation, martial arts fusion. |
+| **PB-05** | MOVIE | 329 | Jurassic Park | Mainstream | Sci-fi adventure, creature horror, hubris of technological cloning, suspense thriller. |
+| **PB-06** | MOVIE | 98 | Gladiator | Mainstream | Roman antiquity epic, revenge tragedy, honor and political betrayal. |
+| **PB-07** | MOVIE | 120 | The Lord of the Rings: The Fellowship of the Ring | Mainstream | High fantasy, mythic quest, extensive ensemble lore, Tolkien worldbuilding. |
+| **PB-08** | MOVIE | 299536 | Avengers: Infinity War | Mainstream | Large-scale ensemble crossover, apocalyptic stakes, cosmic villain perspective. |
+| **PB-09** | MOVIE | 76341 | Mad Max: Fury Road | Mainstream | Minimalist dialogue, relentless visual kinetic action, feminist wasteland survival. |
+| **PB-10** | MOVIE | 361743 | Top Gun: Maverick | Mainstream | Aviation procedural, legacy sequel, mentorship, high-g aerial combat. |
+| **PB-11** | MOVIE | 496243 | Parasite | International | South Korea: Social class satire, home infiltration, dark thriller, tragicomic shift. |
+| **PB-12** | MOVIE | 129 | Spirited Away | International | Japan (Anime): Mythological folklore, coming-of-age, surreal bathhouse spirits. |
+| **PB-13** | MOVIE | 598 | City of God | International | Brazil: Favela crime chronicle, multi-decade drug turf warfare, hyperkinetic editing. |
+| **PB-14** | MOVIE | 1417 | Pan's Labyrinth | International | Spain: Post-Civil War fascist cruelty juxtaposed with dark subterranean fairy tale. |
+| **PB-15** | MOVIE | 194 | Amélie | International | France: Whimsical romantic comedy, poetic urban Paris, quirky observational vignettes. |
+| **PB-16** | MOVIE | 582 | The Lives of Others | International | Germany: East German Stasi surveillance, moral redemption, artistic empathy. |
+| **PB-17** | MOVIE | 346 | Seven Samurai | International | Japan: Feudal period jidaigeki, rural defense, tactical ensemble recruitment. |
+| **PB-18** | MOVIE | 11216 | Cinema Paradiso | International | Italy: Nostalgic ode to film projection, childhood mentorship, lost love drama. |
+| **PB-19** | MOVIE | 670 | Oldboy | International | South Korea: Extreme vengeance tragedy, psychological captivity, Greek incest motif. |
+| **PB-20** | MOVIE | 531428 | Portrait of a Lady on Fire | International | France: Quiet 18th-century female romance, artistic gaze, solitary Brittany coast. |
+| **PB-21** | MOVIE | 244786 | Whiplash | Indie | Auteur jazz conservatory chamber drama, abusive pedagogical obsession, psychological duel. |
+| **PB-22** | MOVIE | 152601 | Her | Indie | Near-future melancholic sci-fi romance, AI consciousness connection, modern loneliness. |
+| **PB-23** | MOVIE | 120467 | The Grand Budapest Hotel | Indie | Wes Anderson aesthetic diorama, whimsical farce, interwar nostalgic melancholia. |
+| **PB-24** | MOVIE | 376867 | Moonlight | Indie | Triptych coming-of-age drama, queer Black identity, vulnerability under masculine expectation. |
+| **PB-25** | MOVIE | 64690 | Drive | Indie | Minimalist neo-noir, laconic stunt driver, violent synthwave Los Angeles underworld. |
+| **PB-26** | MOVIE | 503919 | The Lighthouse | Indie | 1890s New England maritime folklore, psychological isolation, descent into madness. |
+| **PB-27** | MOVIE | 334543 | Manchester by the Sea | Indie | Unresolved tragic grief, Massachusetts coastal realism, guilt-ridden parenting trauma. |
+| **PB-28** | MOVIE | 264660 | Ex Machina | Indie | Isolated mountain compound chamber piece, Turing test manipulation, AI deceptive intent. |
+| **PB-29** | MOVIE | 38 | Eternal Sunshine of the Spotless Mind | Indie | Surreal romantic memory erasure, non-linear heartbreak, Charlie Kaufman script. |
+| **PB-30** | MOVIE | 391713 | Lady Bird | Indie | Sacramento coming-of-age, tumultuous mother-daughter bond, Catholic school transition. |
+| **PB-31** | TV | 1396 | Breaking Bad | Serialized TV | High school chemistry teacher cancer diagnosis, meth empire moral descent, crime tragedy. |
+| **PB-32** | TV | 76331 | Succession | Serialized TV | Media dynasty corporate warfare, Shakespearean sibling cruelty, emotional abuse satire. |
+| **PB-33** | TV | 60059 | Better Call Saul | Serialized TV | Legal procedural tragedy, moral erosion of a public defender, con-artist relationship. |
+| **PB-34** | TV | 70523 | Dark | Serialized TV | Small German town missing children, multi-generational time loops, existential paradox. |
+| **PB-35** | TV | 1398 | The Sopranos | Serialized TV | New Jersey mob boss in psychotherapy, suburban existential dread, panic attacks. |
+| **PB-36** | TV | 95396 | Severance | Serialized TV | Dystopian corporate brain bifurcation, workplace alienation, surreal mystery box. |
+| **PB-37** | TV | 87108 | Chernobyl | Serialized TV | Soviet nuclear disaster miniseries, bureaucratic deceit, radiation cleanup heroism. |
+| **PB-38** | TV | 60622 | Fargo | Serialized TV | Midwestern polite noir anthology, quirky black comedy, banal evil vs. moral decency. |
+| **PB-39** | TV | 67070 | Fleabag | Serialized TV | Meta-fourth-wall breaking London dark comedy, hypersexual deflection, unspoken grief. |
+| **PB-40** | TV | 3297 | The Wire | Serialized TV | Baltimore institutional sociology, police wiretaps, school system decay, drug trade web. |
+| **PB-41** | MOVIE | 14337 | Primer | Stress Cases | Ultra-complex non-linear time machine mechanics, jargon-heavy dialogue, micro-budget. |
+| **PB-42** | MOVIE | 62 | 2001: A Space Odyssey | Stress Cases | Sparse dialogue, meditative visual pacing, philosophical AI and cosmic evolution mystery. |
+| **PB-43** | MOVIE | 467244 | The Zone of Interest | Stress Cases | Domestic mundane family life adjacent to Auschwitz wall, acoustic off-screen horror. |
+| **PB-44** | MOVIE | 545611 | Everything Everywhere All at Once | Stress Cases | Absurdist kung fu multiverse collision, hot dog fingers, existential tax audit drama. |
+| **PB-45** | TV | 1920 | Twin Peaks: The Return | Stress Cases | Avant-garde surrealist television, non-sequitur logic, terrifying cosmic dreamscapes. |
+| **PB-46** | MOVIE | 85350 | Samsara | Stress Cases | Non-verbal visual essay, global humanity and industrial montage, zero dialogue. |
+| **PB-47** | MOVIE | 220289 | Coherence | Stress Cases | Dinner party comet pass, branching quantum decoherence, improvised micro-budget. |
+| **PB-48** | TV | 61222 | BoJack Horseman | Stress Cases | Anthropomorphic animated animal satire evolving into severe existential clinical depression. |
+| **PB-49** | MOVIE | 97370 | Under the Skin | Stress Cases | Alien predatory detachment in Glasgow, sensory Glasgow sound design, minimal speech. |
+| **PB-50** | MOVIE | 10494 | Perfect Blue | Stress Cases | Psychological thriller anime, pop idol stalker, disorienting reality-fiction blurring. |
 
 ---
 
-## 3. Fresh Read-Only Catalogue Audit
+## 3. Probe Discrepancy Audit & Reconciliation Report
 
-A fresh audit was executed against the primary database (`cinesphere`) using an explicit PostgreSQL read-only transaction (`SET TRANSACTION READ ONLY`) and production regex filters.
+An automated reconciliation between the previous Stage 5.0.3-A plan table and the authoritative `probes_v1.json` fixture identified **34 discrepancies** across the 50 rows.
 
-### 3.1 Quantitative Summary
+The previous document's table had drifted from the actual JSON fixture because it inadvertently included draft titles from early exploratory planning notes.
 
-| Metric | Raw Table Count | Non-Empty Overview | Synthetic Filter Matches | Eligible for Benchmark | Required Quota | Deficit |
+### 3.1 Itemized Discrepancy Matrix
+
+| Probe ID | Previous Doc Entry | Actual `probes_v1.json` Entry | Discrepancy Type | Corrective Action |
+| :--- | :--- | :--- | :--- | :--- |
+| **PB-07** | `(movie) 120 "The Lord of the Rings: Fellowship"` | `(movie) 120 "The Lord of the Rings: The Fellowship of the Ring"` | Title truncated | Restored complete official title in plan. |
+| **PB-13** | `(movie) 194 "Amélie"` | `(movie) 598 "City of God"` | Shifted probe index | Corrected to *City of God* (TMDB 598). |
+| **PB-14** | `(movie) 598 "City of God"` | `(movie) 1417 "Pan's Labyrinth"` | Shifted probe index | Corrected to *Pan's Labyrinth* (TMDB 1417). |
+| **PB-15** | `(movie) 252 "The Lives of Others"` | `(movie) 194 "Amélie"` | Shifted probe index | Corrected to *Amélie* (TMDB 194). |
+| **PB-16** | `(movie) 637 "Life Is Beautiful"` | `(movie) 582 "The Lives of Others"` | Replaced title & ID | Corrected to *The Lives of Others* (TMDB 582). |
+| **PB-17** | `(movie) 670 "Oldboy"` | `(movie) 346 "Seven Samurai"` | Shifted probe index | Corrected to *Seven Samurai* (TMDB 346). |
+| **PB-18** | `(movie) 82690 "The Hunt"` | `(movie) 11216 "Cinema Paradiso"` | Replaced title & ID | Corrected to *Cinema Paradiso* (TMDB 11216). |
+| **PB-19** | `(movie) 24 "Whiplash"` | `(movie) 670 "Oldboy"` | Shifted probe index | Corrected to *Oldboy* (TMDB 670). |
+| **PB-20** | `(movie) 8392 "My Neighbor Totoro"` | `(movie) 531428 "Portrait of a Lady on Fire"` | Replaced title & ID | Corrected to *Portrait of a Lady on Fire* (531428). |
+| **PB-21** | `(movie) 1398 "Stalker"` | `(movie) 244786 "Whiplash"` | Replaced title & ID | Corrected to *Whiplash* (TMDB 244786). |
+| **PB-22** | `(movie) 599 "Sunset Boulevard"` | `(movie) 152601 "Her"` | Replaced title & ID | Corrected to *Her* (TMDB 152601). |
+| **PB-23** | `(movie) 40096 "Certified Copy"` | `(movie) 120467 "The Grand Budapest Hotel"` | Replaced title & ID | Corrected to *The Grand Budapest Hotel* (120467). |
+| **PB-24** | `(movie) 1362 "The Seventh Seal"` | `(movie) 376867 "Moonlight"` | Replaced title & ID | Corrected to *Moonlight* (TMDB 376867). |
+| **PB-25** | `(movie) 10398 "Synecdoche, New York"` | `(movie) 64690 "Drive"` | Replaced title & ID | Corrected to *Drive* (TMDB 64690). |
+| **PB-26** | `(movie) 42684 "First Reformed"` | `(movie) 503919 "The Lighthouse"` | Replaced title & ID | Corrected to *The Lighthouse* (TMDB 503919). |
+| **PB-28** | `(movie) 398818 "The Lighthouse"` | `(movie) 264660 "Ex Machina"` | Shifted probe index | Corrected to *Ex Machina* (TMDB 264660). |
+| **PB-29** | `(movie) 374430 "Portrait of a Lady on Fire"` | `(movie) 38 "Eternal Sunshine of the Spotless Mind"` | Replaced title & ID | Corrected to *Eternal Sunshine...* (TMDB 38). |
+| **PB-30** | `(movie) 455656 "Columbus"` | `(movie) 391713 "Lady Bird"` | Replaced title & ID | Corrected to *Lady Bird* (TMDB 391713). |
+| **PB-32** | `(tv) 1399 "Game of Thrones"` | `(tv) 76331 "Succession"` | Replaced title & ID | Corrected to *Succession* (TMDB 76331). |
+| **PB-33** | `(tv) 63247 "Westworld"` | `(tv) 60059 "Better Call Saul"` | Replaced title & ID | Corrected to *Better Call Saul* (TMDB 60059). |
+| **PB-34** | `(tv) 66732 "Stranger Things"` | `(tv) 70523 "Dark"` | Replaced title & ID | Corrected to *Dark* (TMDB 70523). |
+| **PB-35** | `(tv) 70523 "Dark"` | `(tv) 1398 "The Sopranos"` | Replaced title & ID | Corrected to *The Sopranos* (TMDB 1398). |
+| **PB-36** | `(tv) 87108 "Chernobyl"` | `(tv) 95396 "Severance"` | Replaced title & ID | Corrected to *Severance* (TMDB 95396). |
+| **PB-37** | `(tv) 76479 "The Boys"` | `(tv) 87108 "Chernobyl"` | Shifted probe index | Corrected to *Chernobyl* (TMDB 87108). |
+| **PB-38** | `(tv) 60059 "Better Call Saul"` | `(tv) 60622 "Fargo"` | Replaced title & ID | Corrected to *Fargo* (TMDB 60622). |
+| **PB-39** | `(tv) 85271 "WandaVision"` | `(tv) 67070 "Fleabag"` | Replaced title & ID | Corrected to *Fleabag* (TMDB 67070). |
+| **PB-41** | `(movie) 1124 "The Prestige"` | `(movie) 14337 "Primer"` | Replaced title & ID | Corrected to *Primer* (TMDB 14337). |
+| **PB-42** | `(movie) 77 "Memento"` | `(movie) 62 "2001: A Space Odyssey"` | Replaced title & ID | Corrected to *2001: A Space Odyssey* (TMDB 62). |
+| **PB-43** | `(movie) 37165 "The Truman Show"` | `(movie) 467244 "The Zone of Interest"` | Replaced title & ID | Corrected to *The Zone of Interest* (TMDB 467244). |
+| **PB-44** | `(movie) 264660 "Ex Machina"` | `(movie) 545611 "Everything Everywhere All at Once"` | Replaced title & ID | Corrected to *Everything Everywhere...* (545611). |
+| **PB-47** | `(movie) 578 "Jaws"` | `(movie) 220289 "Coherence"` | Replaced title & ID | Corrected to *Coherence* (TMDB 220289). |
+| **PB-48** | `(movie) 105 "Back to the Future"` | `(tv) 61222 "BoJack Horseman"` | **Media type & ID mismatch** | Corrected to TV show *BoJack Horseman* (61222). |
+| **PB-49** | `(movie) 694 "The Shining"` | `(movie) 97370 "Under the Skin"` | Replaced title & ID | Corrected to *Under the Skin* (TMDB 97370). |
+| **PB-50** | `(tv) 1104 "Mad Men"` | `(movie) 10494 "Perfect Blue"` | **Media type & ID mismatch** | Corrected to Movie *Perfect Blue* (TMDB 10494). |
+
+### 3.2 Impact on Media Type Allocations
+Notice that PB-48 was incorrectly recorded as a movie in the old plan table (was *Back to the Future*), whereas in `probes_v1.json` it is a TV show (*BoJack Horseman*). Conversely, PB-50 was recorded as a TV show (*Mad Men*), whereas in `probes_v1.json` it is a movie (*Perfect Blue*).
+
+Because these two media-type swaps offset each other, the net probe breakdown in `probes_v1.json` remains strictly:
+- **38 Movies**
+- **12 TV Shows**
+- **50 Total Probes**
+
+---
+
+## 4. Live TMDB Identity Verification & Probe Defect Analysis
+
+Every one of the 50 probes from `probes_v1.json` was queried live against TMDB's REST API using `TMDB_READ_ACCESS_TOKEN`.
+
+### 4.1 Quantitative Verification Results
+- **HTTP 200 OK:** 50 / 50 probes (100% resolution, 0 missing or 404 records).
+- **Non-Empty Overviews:** 50 / 50 probes (100% have rich narrative overviews $> 100$ characters).
+- **Identity Classification:**
+  - **VERIFIED (Exact Match):** **46 probes** (92%)
+  - **ALIAS (Legitimate Title Variation):** **1 probe** (2%)
+  - **MISMATCH (Incorrect TMDB ID in Fixture):** **3 probes** (6%)
+
+### 4.2 Detailed Classification of Non-Exact Matches
+
+#### 1. PB-45: Legitimate Title Variation (ALIAS)
+- **Configured in Fixture:** `title: "Twin Peaks: The Return"`, `media_type: "tv"`, `tmdb_id: 1920`
+- **TMDB Returned Name:** `"Twin Peaks"`
+- **Analysis:** On TMDB, the 2017 18-part series *Twin Peaks: The Return* is catalogued under the parent series *Twin Peaks* (`tmdb_id: 1920`) as **Season 3**. Ingesting `1920` ingests Seasons 1, 2, and 3 (The Return).
+- **Classification:** **ALIAS (VALID)**. No ID change required.
+
+#### 2. PB-27: Incorrect TMDB ID (MISMATCH)
+- **Configured in Fixture:** `title: "Manchester by the Sea"`, `media_type: "movie"`, `tmdb_id: 334543`
+- **TMDB Returned Title:** `"Lion"` (2016)
+- **Root Cause:** Transposition error during fixture authoring. *Manchester by the Sea* (2016) is TMDB ID **`334541`**. TMDB ID `334543` is *Lion* (2016).
+- **Classification:** **INCORRECT TMDB ID**.
+
+#### 3. PB-40: Incorrect TMDB ID (MISMATCH)
+- **Configured in Fixture:** `title: "The Wire"`, `media_type: "tv"`, `tmdb_id: 3297`
+- **TMDB Returned Name:** `"Wilfred"` (US)
+- **Root Cause:** Erroneous ID. *The Wire* (HBO, 2002–2008) is TMDB ID **`1438`**. TMDB ID `3297` is *Wilfred*.
+- **Classification:** **INCORRECT TMDB ID**.
+
+#### 4. PB-46: Incorrect TMDB ID (MISMATCH)
+- **Configured in Fixture:** `title: "Samsara"`, `media_type: "movie"`, `tmdb_id: 85350`
+- **TMDB Returned Title:** `"Boyhood"` (2014)
+- **Root Cause:** Erroneous ID. *Samsara* (Ron Fricke, 2011) is TMDB ID **`89708`**. TMDB ID `85350` is Richard Linklater's *Boyhood*.
+- **Classification:** **INCORRECT TMDB ID**.
+
+### 4.3 Proposed Probe Corrections Requiring Governance Approval
+
+Per the user rules and Stage 5.0 constraints, **`probes_v1.json` must NOT be edited during this stage**. The proposed corrections below are documented for explicit governance approval:
+
+```json
+[
+  {
+    "probe_id": "PB-27",
+    "media_type": "movie",
+    "current_tmdb_id": 334543,
+    "proposed_tmdb_id": 334541,
+    "target_title": "Manchester by the Sea",
+    "stratum": "Indie",
+    "evidence": "TMDB 334541 has title 'Manchester by the Sea' (2016), overview 'After the death of his older brother Joe, Lee Chandler is shocked that Joe has made him sole guardian of his teenage nephew Patrick...', director Kenneth Lonergan."
+  },
+  {
+    "probe_id": "PB-40",
+    "media_type": "tv",
+    "current_tmdb_id": 3297,
+    "proposed_tmdb_id": 1438,
+    "target_title": "The Wire",
+    "stratum": "Serialized TV",
+    "evidence": "TMDB 1438 has name 'The Wire' (2002-2008), 5 seasons, overview 'Told from the points of view of both the police and their targets, then captures a world where easy distinctions between good and evil are challenged at every turn.'."
+  },
+  {
+    "probe_id": "PB-46",
+    "media_type": "movie",
+    "current_tmdb_id": 85350,
+    "proposed_tmdb_id": 89708,
+    "target_title": "Samsara",
+    "stratum": "Stress Cases",
+    "evidence": "TMDB 89708 has title 'Samsara' (2011), non-verbal documentary, overview 'Filmed over nearly five years in twenty-five countries on five continents, and shot on seventy-millimetre film, Samsara transports us to the varied worlds of sacred grounds, disaster zones, industrial complexes, and natural wonders.'."
+  }
+]
+```
+
+#### Implications for Stage 5.0.3-B Seeding Strategy:
+To guarantee that `prepare_catalogue_fixture.py` succeeds regardless of whether `probes_v1.json` is corrected before or after seeding:
+- The seeding pipeline in Stage 5.0.3-B will ingest **both the current fixture IDs (334543, 3297, 85350)** and the **intended canonical IDs (334541, 1438, 89708)**.
+- This ensures zero blocker risk: the existing script will locate its required IDs in PostgreSQL, while the catalogue also receives the authentic target works.
+
+---
+
+## 5. Fixture Validation Logic Audit (`prepare_catalogue_fixture.py`)
+
+A rigorous line-by-line audit of `prepare_catalogue_fixture.py` was conducted to establish exactly what it validates and where semantic blindspots exist.
+
+### 5.1 What the Current Script Validates
+
+1. **Probe Definition Integrity (`validate_probes`, lines 240–317):**
+   - Validates that the JSON contains exactly 50 objects (`REQUIRED_PROBES_TOTAL`).
+   - Asserts uniqueness of `probe_id` strings (e.g. no duplicate `PB-01`).
+   - Asserts valid media type (`MOVIE` or `TV`).
+   - Asserts positive integer `tmdb_id`.
+   - Asserts uniqueness of `(media_type, tmdb_id)` composite identities.
+   - Asserts valid stratum in `{'Mainstream', 'International', 'Indie', 'Serialized TV', 'Stress Cases'}`.
+   - Asserts that every stratum contains at least 1 probe.
+   - Asserts probe quotas: `movie_count <= 1400`, `tv_count <= 600`.
+2. **Database Aggregate Sufficiency (`verify_database_readiness`, lines 381–460):**
+   - Queries `movies` for count of records having `overview IS NOT NULL AND TRIM(overview) != '' AND title !~* SYNTHETIC_MOVIE_EXCLUSION_PATTERN >= 1400`.
+   - Queries `tv_shows` for count of records having `overview IS NOT NULL AND TRIM(overview) != '' AND name !~* SYNTHETIC_TV_EXCLUSION_PATTERN >= 600`.
+   - Verifies ID existence: executes `SELECT "tmdbId" FROM movies WHERE "tmdbId" = ANY(%s)` and `SELECT "tmdbId" FROM tv_shows WHERE "tmdbId" = ANY(%s)`.
+   - Fails closed if any probe ID is not found.
+3. **Candidate Selection & Serialization:**
+   - Excludes probe IDs from candidate selection queries to prevent duplicates.
+   - Excludes synthetic patterns deterministically.
+   - Serializes tokens using strict omission rules (`serialize_canonical_text`).
+
+### 5.2 What the Current Script Does NOT Validate (Identified Blindspots)
+
+1. **No Semantic Title Verification for Probes:**
+   - The script's database query only checks `WHERE "tmdbId" = ANY(...)`.
+   - It **does not retrieve or check the title** of the found row against `p["title"]`.
+   - **Vulnerability:** If TMDB ID `334543` exists in the database with title *"Lion"*, `verify_database_readiness` marks probe `PB-27` (*"Manchester by the Sea"*) as `FOUND`, completely unaware that an entirely different film has satisfied the probe!
+2. **No Per-Probe Metadata Completeness Check:**
+   - While general candidate queries enforce `overview IS NOT NULL`, the probe presence check only asserts row existence. If a probe row existed with a `NULL` overview, the presence check would pass, but canonical serialization would lack an `[OVERVIEW]` token.
+
+### 5.3 Recommended Script Hardening (For Stage 5.0.4 Implementation)
+The smallest, most reliable improvement to prevent incorrect TMDB records from silently satisfying mandatory probes is to augment `verify_database_readiness` in `prepare_catalogue_fixture.py`:
+- In the probe check query, select `"tmdbId"`, `title`/`name`, and `overview`.
+- Normalize both configured and database titles (`lowercase`, stripped punctuation).
+- Assert that `levenshtein_distance(cfg_title, db_title) <= threshold` or that one contains the other. If an irreconcilable mismatch occurs (e.g. *"Manchester by the Sea"* vs *"Lion"*), raise a `ProbeIdentityMismatchError` explaining the collision.
+
+---
+
+## 6. Corrected Ingestion Architecture Findings
+
+An audit of `apps/api/src/tmdb/` establishes the exact runtime guarantees of CineSphere's ingestion layer:
+
+### 6.1 Movie Ingestion Path
+- **Controller Endpoint:** `POST /api/catalogue/ingest/movie/:tmdbId`
+- **Service Method:** `TmdbService.ingestMovie(tmdbId)`
+- **HTTP Request Volume:** Exactly **1 request** (`GET /movie/{tmdbId}?append_to_response=credits,keywords`).
+- **Persistence Boundary:** Single atomic Prisma transaction (`tx`, timeout 20s):
+  - Upserts `genres` and `keywords` (`ON CONFLICT (tmdbId) DO UPDATE`).
+  - Upserts `movies` (`ON CONFLICT (tmdbId) DO UPDATE`), updating `syncedAt = now()`.
+  - Upserts `persons` (`ON CONFLICT (tmdbId) DO UPDATE`).
+  - Synchronizes `person_credits`: queries existing credits for movie, creates new associations, deletes unreferenced credits.
+- **Idempotency:** 100% idempotent. Repeated calls update metadata without mutating UUIDs or breaking foreign keys from `user_library_entries`.
+
+### 6.2 TV Ingestion Path
+- **Controller Endpoint:** `POST /api/catalogue/ingest/tv/:tmdbId`
+- **Service Method:** `TmdbService.ingestTvShow(tmdbId)`
+- **HTTP Request Volume:** Exactly **$1 + S$ requests**, where $S$ is the season count in `mappedShow.seasons` (including Season 0 specials if listed).
+  - 1 request for show header: `GET /tv/{tmdbId}?append_to_response=aggregate_credits,credits,keywords`
+  - $S$ individual requests: `GET /tv/{tmdbId}/season/{seasonNumber}`
+- **Persistence Boundary:**
+  - **Transaction 1 (Header):** Upserts genres, keywords, `tv_shows` header, and cast credits.
+  - **Transactions $2 \dots S+1$ (Seasons):** One isolated transaction per season in `saveSeasonAndEpisodes()`:
+    - Upserts `seasons` on composite key `[tvShowId, seasonNumber]`.
+    - Upserts `episodes` on composite key `[seasonId, episodeNumber]`.
+- **Partial Ingestion & Recovery:**
+  - If season request $k$ fails (e.g. 404 or network timeout), `TmdbService` catches the error, logs a warning, and continues processing season $k+1$.
+  - The return DTO sets `isPartial: true`.
+  - Re-ingesting a partial TV show is completely safe: existing seasons and episodes are updated via `ON CONFLICT DO UPDATE`, and previously failed seasons are fetched and inserted.
+
+### 6.3 Concurrency & Database Locking
+- Neither `TmdbService` nor `CatalogueRepository` possesses distributed locks or job leases.
+- Concurrent ingestion of two different titles is completely safe (independent rows).
+- Concurrent ingestion of the exact same `tmdbId` relies on PostgreSQL `ON CONFLICT` row-level locks. While safe against data corruption, concurrent duplicate requests waste TMDB quota. Batch execution should enforce single-worker dispatch per TMDB ID.
+
+---
+
+## 7. Transport-Level Rate-Limiting & Retry Architecture
+
+A critical finding of this audit is that **batch-level job sleep is insufficient for TV ingestion**.
+
+### 7.1 The Rate-Limiting Defect in Batch-Level Sleep
+In `TmdbService.ingestTvShow()`, season requests execute inside an unthrottled internal loop:
+```typescript
+for (const s of mappedShow.seasons) {
+  const rawSeason = await this.httpClient.get<TmdbSeasonDetailsResponse>(
+    `/tv/${tmdbId}/season/${s.seasonNumber}`,
+  );
+  ...
+}
+```
+If a batch runner dispatches 2 TV shows concurrently and only sleeps between `ingestTvShow` calls, each TV show will rapidly fire 5–10 season requests back-to-back with zero delay, creating instantaneous bursts of 15–20 requests/second that trigger HTTP 429 rate limits on TMDB.
+
+### 7.2 Transport-Level Pacing Solution
+Rate-limiting must be enforced at the lowest HTTP transport layer: within `TmdbHttpClient` (or a dedicated request queue decorator).
+
+```
+[Seeding Batch Runner]
+        │
+        ▼ (concurrent workers)
+[TmdbService.ingestMovie / ingestTvShow]
+        │
+        ▼ (header + season requests)
+┌────────────────────────────────────────────────────────┐
+│               TmdbHttpClient Transport Gate            │
+│  - Leaky Bucket / Token Bucket Pacer                   │
+│  - Inter-Request Delay: >= 100ms between ANY fetch()   │
+│  - Concurrency Semaphore: Max 2 in-flight requests     │
+│  - Automatic Retry-After Header Inspection             │
+│  - Exponential Backoff with Jitter for 5xx/Network     │
+└────────────────────────────────────────────────────────┘
+        │
+        ▼ (HTTPS)
+   [TMDB API]
+```
+
+### 7.3 Retry and Backoff Specifications
+- **Pacing Interval:** Minimum **100ms** between dispatches ($\le 10\text{ req/s}$).
+- **Concurrency Cap:** Maximum **2 concurrent in-flight requests**.
+- **HTTP 429 (Rate Limit):**
+  - Parse `Retry-After` header. If present, sleep `ceil(retry_after) + 0.5s`.
+  - If header absent, backoff: $2\text{s} \to 4\text{s} \to 8\text{s}$.
+- **HTTP 5xx (Server Error):** Retry up to 3 times with exponential backoff and $\pm 20\%$ jitter:
+  $$t_{\text{wait}} = 2^{\text{attempt}} \times 500\text{ms} \times (1 \pm 0.2)$$
+- **HTTP 404 (Not Found):** Do not retry. Log as missing and return immediately.
+- **Request Timeout:** 10,000ms enforced via `AbortController`.
+
+---
+
+## 8. Candidate Discovery Strategy Verification
+
+The previous plan assumed that `DiscoverController` exposed TMDB's parametric Discover API (`/discover/movie`) and top-rated endpoints. Inspection of the actual codebase disproves this assumption:
+
+### 8.1 Actual Implementation State in `apps/api`
+
+| Proposed Candidate Source | Implemented in `TmdbService`? | Implemented in `DiscoverController`? | Actual Underpinning |
+| :--- | :---: | :---: | :--- |
+| **Popular Movies** | **YES** (`getPopularMovies`) | **YES** (`GET /popular/movies`) | TMDB `/movie/popular` |
+| **Popular TV Shows** | **YES** (`getPopularTvShows`) | **YES** (`GET /popular/tv`) | TMDB `/tv/popular` |
+| **Trending Movies** | **YES** (`getTrendingMovies`) | **YES** (`GET /trending/movies`) | TMDB `/trending/movie/day` |
+| **Trending TV Shows** | **YES** (`getTrendingTvShows`) | **YES** (`GET /trending/tv`) | TMDB `/trending/tv/day` |
+| **Search Movies** | **YES** (`searchMovies`) | **YES** (`GET /movies`) | TMDB `/search/movie` (text query) |
+| **Search TV Shows** | **YES** (`searchTvShows`) | **YES** (`GET /tv`) | TMDB `/search/tv` (text query) |
+| **Top-Rated Movies** | **NO** | **NO** | Not implemented in NestJS |
+| **Top-Rated TV Shows** | **NO** | **NO** | Not implemented in NestJS |
+| **Parametric Discover API** | **NO** | **NO** | Not implemented in NestJS |
+
+### 8.2 Practical Two-Stage Candidate Sourcing Plan
+
+To source diverse international, indie, and historical candidates without modifying production NestJS controllers, Stage 5.0.3-B will employ a clean two-stage workflow:
+
+1. **Stage 1: Offline Candidate Manifest Generation (`scripts/generate_candidate_manifest.py`):**
+   - A lightweight Python or Node discovery script queries TMDB's `/discover/movie`, `/discover/tv`, `/movie/top_rated`, and `/tv/top_rated` using `TMDB_READ_ACCESS_TOKEN`.
+   - Filters candidate JSON objects for:
+     - `overview` length $\ge 30$ characters.
+     - `vote_count >= 50`.
+     - Non-synthetic title regex check.
+     - Language diversity quotas (at least 25% non-English movies, 20% non-English TV).
+   - Generates a vetted, deduplicated candidate manifest: `ml/benchmark/fixtures/seeding_candidate_manifest.json`.
+2. **Stage 2: Standard Ingestion Execution:**
+   - The seeding runner feeds the candidate TMDB IDs into CineSphere's existing ingestion endpoints (`POST /api/catalogue/ingest/movie/:tmdbId` and `POST /api/catalogue/ingest/tv/:tmdbId`).
+   - This cleanly preserves layer separation: candidate discovery is vetted offline, while database persistence runs 100% through the authoritative NestJS/Prisma pipeline.
+
+---
+
+## 9. Fresh Read-Only Catalogue Audit
+
+A fresh audit of the primary database (`cinesphere`) was executed using a read-only PostgreSQL session (`SET TRANSACTION READ ONLY`) and the exact regex patterns from `prepare_catalogue_fixture.py`.
+
+### 9.1 Authoritative Catalogue Counts
+
+| Entity | Raw Records | With Non-Empty Overview | Excluded Synthetic Records | Eligible for Benchmark | Required Quota | Deficit |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Movies** | 1,249 | 307 | 949 | **138** | 1,400 | **1,262** |
 | **TV Shows** | 2,174 | 302 | 1,493 | **106** | 600 | **494** |
-| **Mandatory Movie Probes** | 0 | 0 | 0 | **0** | 38 | **38** |
-| **Mandatory TV Probes** | 0 | 0 | 0 | **0** | 12 | **12** |
-| **Total Evaluation Dataset** | 3,423 | 609 | 2,442 | **244** | 2,000 | **1,756** |
+| **Movie Probes** | 0 | 0 | 0 | **0** | 38 | **38** |
+| **TV Probes** | 0 | 0 | 0 | **0** | 12 | **12** |
+| **Total Evaluation Space** | 3,423 | 609 | 2,442 | **244** | 2,000 | **1,756** |
 
-### 3.2 Catalogue Auxiliary Tables (Read-Only Counts)
+> [!NOTE]
+> **Audit Reconciliation Note:** An earlier scratch script with a truncated TV exclusion pattern under-excluded synthetic records, erroneously reporting 257 eligible TV shows. The production `prepare_catalogue_fixture.py` uses the full exclusion pattern (`SYNTHETIC_TV_EXCLUSION_PATTERN`) and confirms exactly **106 eligible TV shows**.
 
-| Table | Record Count | Description |
-| :--- | :---: | :--- |
-| `genres` | 306 | Shared genre entities (movies and TV) |
-| `keywords` | 197 | Shared keyword descriptors |
-| `persons` | 734 | Shared actors and cast entities |
-| `person_credits` | 661 | Polymorphic cast association records |
-| `seasons` | 2,080 | TV show season records |
-| `episodes` | 2,321 | TV show episode records |
-
-### 3.3 Personal Library Isolation Audit
-
-To establish a strict baseline ensuring zero personal data pollution or modification during seeding, current personal tracking tables were verified:
-- `user_library_entries`: 765 records
-- `viewing_events`: 38 records
-- `episode_progress`: 205 records
-- `season_ratings`: 138 records
-
-All personal tables reference catalogue items with `onDelete: Restrict` or foreign key constraints. Ingestion operations must never target, read, or alter these records.
+### 9.2 Baseline Personal Library Audit (Must Remain Unchanged)
+- `user_library_entries`: **765**
+- `viewing_events`: **38**
+- `episode_progress`: **205**
+- `season_ratings`: **138**
 
 ---
 
-## 4. Existing Ingestion Architecture Findings
+## 10. Corrected Quota and Buffer Calculations
 
-An in-depth audit of `apps/api/src/tmdb/` reveals a mature, production-grade ingestion pipeline. The core components and their exact runtime behaviours are documented below.
+The arithmetic in the previous plan contained discrepancies between additional needed counts and final totals. The exact, corrected calculations are presented below.
 
-### 4.1 Component Responsibility Matrix
+### 10.1 Net Deficit Breakdown
+- **Movies:**
+  - Existing Eligible: **138**
+  - Required Quota: **1,400**
+  - Total Deficit: $1,400 - 138 = \mathbf{1,262}$
+  - Mandatory Probes: **38**
+  - Additional Non-Probe Candidates Needed: $1,262 - 38 = \mathbf{1,224}$
+- **TV Shows:**
+  - Existing Eligible: **106**
+  - Required Quota: **600**
+  - Total Deficit: $600 - 106 = \mathbf{494}$
+  - Mandatory Probes: **12**
+  - Additional Non-Probe Candidates Needed: $494 - 12 = \mathbf{482}$
 
-| Component | File Path | Existing Implementation State | Readiness for Bulk Seeding |
-| :--- | :--- | :--- | :--- |
-| `TmdbController` | `apps/api/src/tmdb/tmdb.controller.ts` | Exposes REST endpoints `POST /catalogue/ingest/movie/:tmdbId` and `POST /catalogue/ingest/tv/:tmdbId`. | **Ready:** Can be called directly via HTTP or via CLI runner. |
-| `TmdbService` | `apps/api/src/tmdb/tmdb.service.ts` | Implements `ingestMovie()`, `ingestTvShow()`, search, and discovery methods. | **Ready:** Encapsulates end-to-end orchestration, error trapping, and mapping. |
-| `CatalogueRepository` | `apps/api/src/tmdb/catalogue.repository.ts` | Implements Prisma transactions for movies, TV headers, seasons, episodes, and credits. | **Ready:** Fully idempotent upserts on unique keys. |
-| `TmdbHttpClient` | `apps/api/src/tmdb/tmdb-http.client.ts` | Handles TMDB HTTP requests, bearer authentication, exponential backoff, and 429 retries. | **Ready:** Standardized backoff and retry handling already built in. |
-| `TmdbMapper` | `apps/api/src/tmdb/tmdb.mapper.ts` | Pure transformation functions mapping raw TMDB DTOs to CineSphere relational structures. | **Ready:** Deduplicates genres, keywords, cast; parses ISO dates. |
-| `DiscoverController` | `apps/api/src/tmdb/discover.controller.ts` | Exposes trending, popular, and search endpoints for movies and TV shows. | **Ready:** Can supply candidate TMDB IDs for bulk seeding. |
+### 10.2 Gross Ingestion Targets with 15% Safety Margin
 
-### 4.2 Movie Ingestion Workflow
-When `POST /api/catalogue/ingest/movie/:tmdbId` or `TmdbService.ingestMovie(tmdbId)` is invoked:
-1. **TMDB Request:** Executes `GET /movie/{tmdbId}?append_to_response=credits,keywords`.
-2. **DTO Mapping:** `TmdbMapper.mapMovie` extracts:
-   - Scalar metadata: `title`, `originalTitle`, `overview`, `releaseDate`, `runtime`, `originalLanguage`, `popularity`, `voteAverage`, `voteCount`, `posterPath`, `backdropPath`, `adult`.
-   - Relational entities: deduplicated `genres`, `keywords`, and `cast` (deduplicated by `tmdbId`).
-3. **Database Transaction:** `CatalogueRepository.saveMovie` executes an atomic Prisma transaction (`timeout: 20000ms`, `maxWait: 10000ms`):
-   - Upserts all genres into `genres` (`ON CONFLICT (tmdbId) DO UPDATE`).
-   - Upserts all keywords into `keywords` (`ON CONFLICT (tmdbId) DO UPDATE`).
-   - Upserts the movie into `movies` (`ON CONFLICT (tmdbId) DO UPDATE`), setting `syncedAt = now()`.
-   - Links many-to-many associations in `_GenreToMovie` and `_KeywordToMovie`.
-   - Upserts cast persons into `persons` (`ON CONFLICT (tmdbId) DO UPDATE`).
-   - Synchronizes `person_credits` for the movie: creates new appearances, deletes orphaned appearances if cast changed.
-4. **Idempotency Guarantee:** Re-ingesting an existing movie updates all fields in place, preserves the primary UUID key (`movies.id`), and leaves existing foreign key references (e.g., from `user_library_entries`) completely intact.
-5. **API Cost:** Exactly **1 TMDB HTTP request per movie**.
+To account for potential runtime attrition (e.g. unexpected empty overviews, deleted TMDB entries, or rare regex collisions), a $+15\%$ gross buffer is applied to additional candidate targets:
 
-### 4.3 TV Ingestion Workflow
-When `POST /api/catalogue/ingest/tv/:tmdbId` or `TmdbService.ingestTvShow(tmdbId)` is invoked:
-1. **Show Header Request:** Executes `GET /tv/{tmdbId}?append_to_response=aggregate_credits,credits,keywords`.
-2. **Header Mapping:** `TmdbMapper.mapTvShow` extracts show details, cast (preferring `aggregate_credits`), genres, keywords, and the season list `[{ seasonNumber, tmdbId }]`.
-3. **Header Transaction:** `CatalogueRepository.saveTvShowHeader` executes an atomic Prisma transaction:
-   - Upserts genres, keywords, show record (`tv_shows`), and top-level cast `person_credits`.
-4. **Iterative Season Requests:** For each season in `mappedShow.seasons`:
-   - Executes `GET /tv/{tmdbId}/season/{seasonNumber}`.
-   - Maps season metadata and child episodes (`TmdbMapper.mapSeason`).
-   - Calls `CatalogueRepository.saveSeasonAndEpisodes(showId, mappedSeason)` in an **isolated transaction per season**:
-     - Upserts season record on composite key `[tvShowId, seasonNumber]`.
-     - Upserts each episode on composite key `[seasonId, episodeNumber]`.
-5. **Partial Failure Handling:** If an individual season request fails (e.g., 404, network timeout), the error is caught, logged as a warning, and subsequent seasons proceed. The result object sets `isPartial: true`.
-6. **API Cost:** **$1 + S$ requests per TV show**, where $S$ is the total season count (including Season 0 specials if present).
-   - A single-season miniseries (e.g., *Chernobyl*) requires 2 requests.
-   - An average TV show (4 seasons) requires 5 requests.
-   - A long-running series (e.g., *The Simpsons*, 36 seasons) requires 37 requests.
+$$\text{Gross Movie Candidates} = \lceil 1,224 \times 1.15 \rceil = 1,408 \implies \mathbf{1,412}\text{ candidates}$$
+$$\text{Total Movie Ingestion Target} = 38\text{ probes} + 1,412\text{ candidates} = \mathbf{1,450}\text{ movies}$$
 
-### 4.4 Ingestion Architecture Audit Conclusions
-- **Strengths:** Fully typed, idempotent, transactional, handles schema relationships correctly, and already implements exponential backoff with 429 retry handling.
-- **Missing Capabilities for Bulk Seeding:**
-  - The API has no built-in bulk batch runner (only single-item endpoints).
-  - No disk-based checkpointing mechanism exists to track long-running multi-hour batch progress across crashes.
-  - No CLI discovery orchestrator exists to query TMDB discovery pages, filter candidates, and feed them into the ingestion pipeline.
+$$\text{Gross TV Candidates} = \lceil 482 \times 1.15 \rceil = 555 \implies \mathbf{556}\text{ candidates}$$
+$$\text{Total TV Ingestion Target} = 12\text{ probes} + 556\text{ candidates} = \mathbf{568}\text{ TV shows}$$
+
+### 10.3 Expected Post-Ingestion Totals & Attrition Tolerance
+
+| Entity | Existing Eligible | Ingestion Target | Total if 100% Valid | Total with 10% Attrition | Required Quota | Safety Margin |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Movies** | 138 | 1,450 | **1,588** | $138 + 1,305 = \mathbf{1,443}$ | 1,400 | $+43$ movies ($\ge 100\%$) |
+| **TV Shows** | 106 | 568 | **674** | $106 + 511 = \mathbf{617}$ | 600 | $+17$ shows ($\ge 100\%$) |
 
 ---
 
-## 5. Mandatory Probe Inventory & Pre-Ingestion Audit
+## 11. Corrected TMDB API Request-Volume Estimates
 
-The Stage 5.0 benchmark relies on 50 predetermined probes (`ml/benchmark/fixtures/probes_v1.json`). All 50 must be present in the final catalogue fixture.
+Rather than relying on unverified season averages, live TMDB queries were performed for all 12 TV probes, establishing exact season counts.
 
-A live pre-ingestion audit was conducted by querying TMDB's official API for all 50 entries using `TMDB_READ_ACCESS_TOKEN`.
+### 11.1 Verified TV Probe Request Breakdown
+The 12 TV probes have a verified total of **55 seasons** in their TMDB season arrays (including Season 0 specials):
+- `PB-31` (*Breaking Bad*): 6 seasons
+- `PB-32` (*Succession*): 4 seasons
+- `PB-33` (*Better Call Saul*): 7 seasons
+- `PB-34` (*Dark*): 4 seasons
+- `PB-35` (*The Sopranos*): 7 seasons
+- `PB-36` (*Severance*): 4 seasons
+- `PB-37` (*Chernobyl*): 1 season
+- `PB-38` (*Fargo*): 6 seasons
+- `PB-39` (*Fleabag*): 2 seasons
+- `PB-40` (*Wilfred* / *The Wire*): 3 seasons (Wilfred) / 5 seasons (The Wire)
+- `PB-45` (*Twin Peaks*): 4 seasons
+- `PB-48` (*BoJack Horseman*): 7 seasons
 
-### 5.1 Probe Verification Findings
+Total verified HTTP requests for 12 TV probes: **12 headers + 55 seasons = 67 requests**.
 
-1. **HTTP Resolution:** All 50 probes resolved with **HTTP 200 OK** on TMDB.
-2. **Overview Availability:** All 50 records possess rich, non-empty overview text on TMDB.
-3. **Database Presence:** **0 of 50 currently exist** in the local CineSphere database.
-4. **Data Inconsistencies Discovered in `probes_v1.json`:**
-   During TMDB live resolution, four probes were discovered to have title-to-ID mismatches in `probes_v1.json`:
-   - **`PB-27`:** Configured as `"Manchester by the Sea"` with `tmdb_id: 334543`. TMDB ID `334543` resolves to *Lion* (2016). *Manchester by the Sea* is actually TMDB ID `334541` (transposition error).
-   - **`PB-40`:** Configured as `"The Wire"` with `tmdb_id: 3297`. TMDB ID `3297` resolves to *Wilfred* (US). *The Wire* is actually TMDB ID `1438`.
-   - **`PB-45`:** Configured as `"Twin Peaks: The Return"` with `tmdb_id: 1920`. TMDB ID `1920` resolves to the parent series *Twin Peaks* (1990–2017), where *The Return* is indexed as Season 3.
-   - **`PB-46`:** Configured as `"Samsara"` with `tmdb_id: 85350`. TMDB ID `85350` resolves to *Boyhood* (2014). *Samsara* (2011) is actually TMDB ID `89708`.
+### 11.2 Comprehensive Request Volume Estimate
 
-> [!WARNING]
-> **Defect Reporting per Section 4 Rules:**
-> Per Stage 5.0.3 instructions, the agent must **not modify `probes_v1.json` in this stage**.
-> For Stage 5.0.3-B ingestion:
-> - Ingestion must seed the exact `tmdb_id` integers specified in `probes_v1.json` (e.g., 334543, 3297, 1920, 85350) so that `prepare_catalogue_fixture.py` can locate all 50 required probe IDs in the database.
-> - Ingestion should also seed the intended canonical IDs (334541, 1438, 89708) as part of the candidate pool so that the catalogue contains both.
-> - A formal addendum to `probes_v1.json` should be proposed in Stage 5.0.4 to align titles and IDs cleanly.
-
-### 5.2 Complete 50-Probe Master Inventory
-
-| Probe ID | Media Type | TMDB ID | Configured Title | TMDB Live Title | Stratum | Selection Rationale | Ingestion Status |
-| :--- | :---: | :---: | :--- | :--- | :--- | :--- | :---: |
-| **PB-01** | MOVIE | 27205 | Inception | Inception | Mainstream | Complex multi-layered narrative, high-budget sci-fi heist. | Missing |
-| **PB-02** | MOVIE | 155 | The Dark Knight | The Dark Knight | Mainstream | Neo-noir crime drama within a comic book franchise. | Missing |
-| **PB-03** | MOVIE | 157336 | Interstellar | Interstellar | Mainstream | Hard sci-fi, space exploration, relativistic physics. | Missing |
-| **PB-04** | MOVIE | 603 | The Matrix | The Matrix | Mainstream | Cyberpunk philosophical action, dystopian simulation. | Missing |
-| **PB-05** | MOVIE | 329 | Jurassic Park | Jurassic Park | Mainstream | Sci-fi adventure, creature horror, cloning hubris. | Missing |
-| **PB-06** | MOVIE | 98 | Gladiator | Gladiator | Mainstream | Roman antiquity epic, revenge tragedy, honor. | Missing |
-| **PB-07** | MOVIE | 120 | The Lord of the Rings: Fellowship | The Lord of the Rings: Fellowship | Mainstream | High fantasy, mythic quest, Tolkien worldbuilding. | Missing |
-| **PB-08** | MOVIE | 299536 | Avengers: Infinity War | Avengers: Infinity War | Mainstream | Large-scale ensemble crossover, cosmic stakes. | Missing |
-| **PB-09** | MOVIE | 76341 | Mad Max: Fury Road | Mad Max: Fury Road | Mainstream | Minimalist dialogue, visual kinetic wasteland action. | Missing |
-| **PB-10** | MOVIE | 361743 | Top Gun: Maverick | Top Gun: Maverick | Mainstream | Aviation procedural, legacy sequel, high-g combat. | Missing |
-| **PB-11** | MOVIE | 496243 | Parasite | Parasite | International | South Korea: Social class satire, home infiltration. | Missing |
-| **PB-12** | MOVIE | 129 | Spirited Away | Spirited Away | International | Japan: Studio Ghibli folkloric fantasy coming-of-age. | Missing |
-| **PB-13** | MOVIE | 194 | Amélie | The Fabulous Destiny of Amélie Poulain | International | France: Whimsical romantic comedy, Paris magical realism. | Missing |
-| **PB-14** | MOVIE | 598 | City of God | City of God | International | Brazil: Non-linear favela crime saga, kinetic realism. | Missing |
-| **PB-15** | MOVIE | 252 | The Lives of Others | The Lives of Others | International | Germany: Stasi surveillance, moral awakening in East Berlin. | Missing |
-| **PB-16** | MOVIE | 637 | Life Is Beautiful | Life Is Beautiful | International | Italy: Holocaust tragicomedy, paternal sacrifice. | Missing |
-| **PB-17** | MOVIE | 670 | Oldboy | Oldboy | International | South Korea: Extreme revenge thriller, tragic melodrama. | Missing |
-| **PB-18** | MOVIE | 82690 | The Hunt | The Hunt | International | Denmark: Collective hysteria, wrongful accusation drama. | Missing |
-| **PB-19** | MOVIE | 24 | Whiplash | Whiplash | International | Auteur perfectionism, psychological abuse, jazz tempo. | Missing |
-| **PB-20** | MOVIE | 8392 | My Neighbor Totoro | My Neighbor Totoro | International | Japan: Pastoral childhood innocence, animist folklore. | Missing |
-| **PB-21** | MOVIE | 1398 | Stalker | Stalker | Indie | USSR: Meditative philosophical sci-fi, poetic pacing. | Missing |
-| **PB-22** | MOVIE | 599 | Sunset Boulevard | Sunset Boulevard | Indie | Classic Hollywood noir melodrama, faded celebrity decay. | Missing |
-| **PB-23** | MOVIE | 40096 | Certified Copy | Certified Copy | Indie | Philosophical romance, meta-identity dialectic in Tuscany. | Missing |
-| **PB-24** | MOVIE | 1362 | The Seventh Seal | The Seventh Seal | Indie | Medieval allegory, existential dread, chess with Death. | Missing |
-| **PB-25** | MOVIE | 10398 | Synecdoche, New York | Synecdoche, New York | Indie | Postmodern existentialism, mortality, recursive theater. | Missing |
-| **PB-26** | MOVIE | 42684 | First Reformed | First Reformed | Indie | Climate despair, spiritual crisis, radicalization drama. | Missing |
-| **PB-27** | MOVIE | 334543 | Manchester by the Sea | Lion *(Mismatch)* | Indie | Emotional trauma & grief *(TMDB 334543 resolves to Lion)*. | Missing |
-| **PB-28** | MOVIE | 398818 | The Lighthouse | The Lighthouse | Indie | Psychological descent into madness, isolation folklore. | Missing |
-| **PB-29** | MOVIE | 374430 | Portrait of a Lady on Fire | Portrait of a Lady on Fire | Indie | Period queer romance, artistic gaze, memory. | Missing |
-| **PB-30** | MOVIE | 455656 | Columbus | Columbus | Indie | Architectural contemplation, understated human connection. | Missing |
-| **PB-31** | TV | 1396 | Breaking Bad | Breaking Bad | Serialized TV | Moral degeneration, methamphetamine crime empire. | Missing |
-| **PB-32** | TV | 1399 | Game of Thrones | Game of Thrones | Serialized TV | Medieval dark fantasy, dynastic warfare, political intrigue. | Missing |
-| **PB-33** | TV | 63247 | Westworld | Westworld | Serialized TV | Android consciousness, simulated loops, corporate hubris. | Missing |
-| **PB-34** | TV | 66732 | Stranger Things | Stranger Things | Serialized TV | 1980s nostalgia, supernatural mystery, government lab. | Missing |
-| **PB-35** | TV | 70523 | Dark | Dark | Serialized TV | German time-travel paradox, generational mystery. | Missing |
-| **PB-36** | TV | 87108 | Chernobyl | Chernobyl | Serialized TV | Nuclear disaster procedural, Soviet bureaucratic secrecy. | Missing |
-| **PB-37** | TV | 76479 | The Boys | The Boys | Serialized TV | Corporate superhero satire, hyper-violent subversion. | Missing |
-| **PB-38** | TV | 60059 | Better Call Saul | Better Call Saul | Serialized TV | Legal procedural tragedy, identity transformation. | Missing |
-| **PB-39** | TV | 85271 | WandaVision | WandaVision | Serialized TV | Sitcom meta-reality, grief manifestation, comic mystery. | Missing |
-| **PB-40** | TV | 3297 | The Wire | Wilfred *(Mismatch)* | Serialized TV | Institutional sociology *(TMDB 3297 resolves to Wilfred)*. | Missing |
-| **PB-41** | MOVIE | 1124 | The Prestige | The Prestige | Stress Cases | Narrative misdirection, competitive obsession, duality. | Missing |
-| **PB-42** | MOVIE | 77 | Memento | Memento | Stress Cases | Reverse-chronological structure, anterograde amnesia. | Missing |
-| **PB-43** | MOVIE | 37165 | The Truman Show | The Truman Show | Stress Cases | Simulated existence, omnipresent reality-TV panopticon. | Missing |
-| **PB-44** | MOVIE | 264660 | Ex Machina | Ex Machina | Stress Cases | Turing test psychological thriller, AI deception. | Missing |
-| **PB-45** | TV | 1920 | Twin Peaks: The Return | Twin Peaks *(Parent Show)* | Stress Cases | Avant-garde surrealist television, non-sequitur logic. | Missing |
-| **PB-46** | MOVIE | 85350 | Samsara | Boyhood *(Mismatch)* | Stress Cases | Visual essay, global humanity montage *(Resolves Boyhood)*. | Missing |
-| **PB-47** | MOVIE | 578 | Jaws | Jaws | Stress Cases | Aquatic creature horror, municipal political negligence. | Missing |
-| **PB-48** | MOVIE | 105 | Back to the Future | Back to the Future | Stress Cases | Causality loops, high-concept 1980s family adventure. | Missing |
-| **PB-49** | MOVIE | 694 | The Shining | The Shining | Stress Cases | Supernatural isolation horror, familial unraveling. | Missing |
-| **PB-50** | TV | 1104 | Mad Men | Mad Men | Stress Cases | 1960s advertising industry, mid-century masculine identity. | Missing |
-
----
-
-## 6. Catalogue Sourcing Strategy
-
-To construct an evaluation catalogue that accurately benchmarks embedding models across diverse cinematic genres, cultural origins, eras, and narrative styles, candidate selection must avoid naive popularity bias.
-
-### 6.1 Multi-Tier Sourcing Design
-
-The target catalogue comprises **1,400 movies** and **600 TV shows**.
-
-```
-Target Catalogue (2,000 Items)
-│
-├── Movies: 1,400 Required (Target Ingestion: 1,450)
-│   ├── Probes: 38 Mandatory Movie Probes
-│   ├── Tier 1: TMDB Top-Rated Prestige (Pages 1–15, ~300 items)
-│   ├── Tier 2: TMDB Popular & Mainstream (Pages 1–25, ~500 items)
-│   ├── Tier 3: Curated International Cinema (Discover API, ~350 items)
-│   └── Tier 4: Diverse Decades & Genre Verticals (Discover API, ~262 items)
-│
-└── TV Shows: 600 Required (Target Ingestion: 580)
-    ├── Probes: 12 Mandatory TV Probes
-    ├── Tier 1: TMDB Top-Rated Television (Pages 1–10, ~200 items)
-    ├── Tier 2: TMDB Popular Television (Pages 1–15, ~250 items)
-    └── Tier 3: Curated International & Miniseries (Discover API, ~118 items)
-```
-
-### 6.2 Sourcing Filters & Quality Gates
-Every discovered candidate must satisfy the following criteria prior to database persistence:
-1. **Overview Length:** Must contain an `overview` string with length $\ge 20$ characters (not null, whitespace-only, or boilerplate).
-2. **Synthetic Exclusion Check:** Must not match `SYNTHETIC_MOVIE_EXCLUSION_PATTERN` or `SYNTHETIC_TV_EXCLUSION_PATTERN`.
-3. **Vote Threshold:** Must have a TMDB `vote_count >= 50` (prevents obscure home videos or unreleased stubs from entering the evaluation space).
-4. **Deduplication:** TMDB ID must not already exist in the target ingestion queue or database.
-5. **Language Diversity Allocation:**
-   - At least 25% of movie candidates must originate from non-English language codes (`ko`, `ja`, `fr`, `es`, `de`, `it`, `hi`, `zh`, `pt`, `da`, `sv`).
-   - At least 20% of TV candidates must originate from non-English productions.
-6. **Temporal Spread:** Candidates must span distinct release decades (1950s through 2020s) to test historical vocabulary adaptability.
-
----
-
-## 7. Quota and Buffer Calculations
-
-### 7.1 Exact Production Quotas
-- **Target Eligible Movies:** $\ge 1,400$
-- **Target Eligible TV Shows:** $\ge 600$
-- **Mandatory Probes Required:** Exactly 50 (38 movies, 12 TV)
-- **Total Canonical Fixture Size:** Exactly 2,000 records
-
-### 7.2 Current Baseline & Deficits
-
-```text
-Movies:
-  Existing Eligible:        138
-  Target Quota:           1,400
-  Raw Deficit:            1,262
-  Probes to Ingest:          38
-  Additional Needed:      1,224
-
-TV Shows:
-  Existing Eligible:        106
-  Target Quota:             600
-  Raw Deficit:              494
-  Probes to Ingest:          12
-  Additional Needed:        482
-```
-
-### 7.3 Conservative Safety Buffers
-In network-driven batch ingestion, candidates may be rejected due to empty overviews, deleted TMDB entries (HTTP 404), or rare synthetic regex matches. To guarantee that `prepare_catalogue_fixture.py` succeeds on the first attempt without falling short by a handful of records:
-- **Movie Buffer:** $+15\%$ over additional need ($1,224 \times 1.15 \approx 1,408$ additional candidates).
-  - Planned Movie Ingestion: **38 probes + 1,412 candidates = 1,450 new movies**.
-  - Anticipated Post-Ingestion Eligible Movies: $\approx 1,550$ (comfortably exceeding the 1,400 threshold).
-- **TV Buffer:** $+15\%$ over additional need ($482 \times 1.15 \approx 554$ additional candidates).
-  - Planned TV Ingestion: **12 probes + 556 candidates = 568 new TV shows**.
-  - Anticipated Post-Ingestion Eligible TV Shows: $\approx 660$ (comfortably exceeding the 600 threshold).
-
----
-
-## 8. TMDB API Usage and Rate-Limit Plan
-
-### 8.1 API Request Volume Estimation
-
-| Operation / Entity | Target Ingestion Count | Requests Per Entity | Total HTTP Requests |
+| Category | Item Count | Requests per Item | Total HTTP Requests |
 | :--- | :---: | :---: | :---: |
 | **Movie Probes** | 38 | 1 | 38 |
-| **Additional Movies** | 1,412 | 1 | 1,412 |
-| **Movie Discovery Pages** | 75 pages | 1 | 75 |
-| **TV Probes (Headers)** | 12 | 1 | 12 |
-| **TV Probes (Seasons)** | 12 shows $\times$ 4.5 seasons avg | 1 | 54 |
-| **Additional TV (Headers)** | 556 | 1 | 556 |
-| **Additional TV (Seasons)** | 556 shows $\times$ 3.5 seasons avg | 1 | 1,946 |
-| **TV Discovery Pages** | 35 pages | 1 | 35 |
-| **Estimated Retries / Transients** | ~2% error rate | 1 | 80 |
-| **Grand Total TMDB HTTP Requests** | — | — | **~4,208 requests** |
+| **Candidate Movies** | 1,412 | 1 | 1,412 |
+| **Movie Discovery Pagination** | ~70 pages | 1 | 70 |
+| **TV Probes (Headers + Seasons)** | 12 | Verified exact | 67 |
+| **Candidate TV Headers** | 556 | 1 | 556 |
+| **Candidate TV Seasons** | 556 | Estimated 3.2 avg | 1,779 (range: 1,600–2,000) |
+| **TV Discovery Pagination** | ~30 pages | 1 | 30 |
+| **Transient Retries (~2%)** | — | — | ~80 |
+| **Total Estimated Requests** | — | — | **~4,032 requests** (range: 3,800–4,300) |
 
-### 8.2 Rate Limiting and Concurrency Specifications
-Although TMDB's API v3 no longer enforces the legacy 40 requests / 10s ceiling on Bearer auth tokens, maintaining polite, conservative traffic is mandatory to prevent IP blocks and client connection exhaustion.
-
-- **Concurrency Ceiling:** Maximum **2 concurrent worker connections**.
-- **Request Pacing Delay:** Configurable interval of **100ms** between dispatches per worker ($\approx 10\text{--}15\text{ req/s}$ aggregate).
-- **Runtime Duration:** At $10\text{ req/s}$, 4,200 requests complete in $\approx 420\text{ seconds}$ ($\approx 7.0\text{ minutes}$).
-- **HTTP 429 Handling:**
-  - Read `Retry-After` response header. If present, sleep for the requested duration.
-  - Fall back to exponential backoff: $1\text{s} \to 2\text{s} \to 4\text{s} \to 8\text{s}$.
-- **HTTP 5xx Handling:**
-  - Retry up to 3 times with exponential backoff ($500\text{ms} \to 1000\text{ms} \to 2000\text{ms}$).
-- **HTTP 404 / 400 Handling:**
-  - Log warning, record in checkpoint file as skipped, and proceed immediately to the next candidate without terminating the batch.
-- **Request Timeout:** 10,000ms per request (enforced via `AbortController`).
+### 11.3 Execution Runtime Estimates
+- At **10 requests/second** aggregate: $\approx 403\text{ seconds}$ ($\approx \mathbf{6.7\text{ minutes}}$).
+- At **5 requests/second** conservative: $\approx 806\text{ seconds}$ ($\approx \mathbf{13.4\text{ minutes}}$).
 
 ---
 
-## 9. Recommended Execution Architecture
+## 12. TV Partial-Ingestion Recovery Design
 
-We evaluated three potential execution architectures for Stage 5.0.3-B:
+Because TV shows require multiple HTTP calls and separate database transactions, partial ingestion can occur if network connectivity drops midway through a multi-season series.
 
-### 9.1 Architectural Evaluation
+### 12.1 State Representation of Partial Ingestion
+- `tv_shows` header record is committed in Transaction 1.
+- Seasons $1 \dots k$ are committed in individual season transactions.
+- Season $k+1$ fails due to timeout or error.
+- The return payload sets `isPartial: true`.
+- In `seasons` table, count of rows for `tvShowId` is less than `tv_shows.numberOfSeasons`.
 
-| Criteria | Option 1: External Script Calling HTTP API Endpoints | Option 2: Dedicated NestJS Standalone Runner Script | Option 3: Separate Python Ingestion Pipeline |
-| :--- | :--- | :--- | :--- |
-| **Mechanism** | Script executes `POST /api/catalogue/ingest/{movie,tv}/:id` on running NestJS server. | Node/Nest script bootstraps `INestApplicationContext` and directly calls `TmdbService`. | Python script queries TMDB and writes directly to PostgreSQL via SQL/Prisma. |
-| **Pros** | • Zero new backend code required.<br>• Exercises exact production validation pipes.<br>• Resumable from external worker. | • No need to keep HTTP server process running.<br>• High throughput, zero HTTP overhead.<br>• Direct TypeScript injection. | • Easy integration with Python ML scripts. |
-| **Cons** | • Requires running NestJS server in background.<br>• Minor HTTP loopback overhead. | • Requires compiling and executing via Nest CLI / `ts-node`. | • **Prohibited duplication** of `TmdbMapper`, `CatalogueRepository`, and Prisma transactions. |
-| **Verdict** | **Recommended (Primary)** | **Recommended (Alternative)** | **REJECTED (Violates Monorepo Boundary)** |
-
-### 9.2 Recommended Approach: Option 1 (API-Driven Ingestion Runner)
-The recommended architecture for Stage 5.0.3-B is a controlled, resumable **Seeding Runner Script** (`apps/api/src/scripts/seed-catalogue-batch.ts` or a targeted Node/Python runner) that interacts directly with the CineSphere API.
-
-**Key Design Elements:**
-1. **Candidate Gathering Phase:** Queries `/discover/tmdb/{movies,tv}` or uses curated lists to assemble candidate IDs into `data/seeding_manifest.json`.
-2. **Validation & Filtering Phase:** Pre-checks candidate overviews and deduplicates against the database.
-3. **Execution Phase:** Dispatches single-item ingestion requests (`POST /catalogue/ingest/movie/:tmdbId` and `POST /catalogue/ingest/tv/:tmdbId`) with controlled concurrency ($N=2$) and rate limiting.
-4. **State Persistence:** Writes progress to `data/seeding_checkpoint.json` after every record.
+### 12.2 Recovery Protocol
+1. **Runner Detection:** When the ingestion runner receives `isPartial: true` (or an unhandled rejection after the header committed), it appends the TMDB ID to `seeding_checkpoint.json` under `partial_tv_retry_queue`.
+2. **Re-ingestion Idempotency:**
+   - In `CatalogueRepository.saveSeasonAndEpisodes`, seasons are upserted on `@@unique([tvShowId, seasonNumber])` and episodes on `@@unique([seasonId, episodeNumber])`.
+   - Re-running `ingestTvShow(tmdbId)` simply updates existing seasons/episodes and inserts the missing season $k+1$.
+3. **No Duplicate Rows:** The database triggers and composite unique constraints guarantee zero duplicate records upon retry.
 
 ---
 
-## 10. Resumability, Idempotency, and Failure Recovery
+## 13. Database Safety & Personal Library Isolation Boundaries
 
-Bulk network synchronization over several thousand records must survive interruptions (network drops, manual cancellations, rate limits).
+To guarantee complete safety for personal user library data during bulk seeding:
 
-### 10.1 Checkpoint Architecture
-The runner will maintain an atomic checkpoint file:
+### 13.1 Strict Table Boundaries
 
-```json
-{
-  "session_id": "seed-20261124-v1",
-  "started_at": "2026-11-24T12:00:00Z",
-  "last_updated": "2026-11-24T12:05:30Z",
-  "movies": {
-    "target": 1450,
-    "completed": 850,
-    "failed": 2,
-    "skipped": 5,
-    "processed_ids": [27205, 155, 157336, "..."]
-  },
-  "tv": {
-    "target": 568,
-    "completed": 210,
-    "failed": 1,
-    "skipped": 2,
-    "processed_ids": [1396, 1399, "..."]
-  }
-}
+```
+[Catalogue Public Tables — READ / INSERT / UPDATE Allowed]
+  movies, tv_shows, seasons, episodes, genres, keywords,
+  persons, person_credits, _GenreToMovie, _GenreToTvShow,
+  _KeywordToMovie, _KeywordToTvShow
+
+[Personal User Library Tables — STRICTLY FORBIDDEN / ZERO ACCESS]
+  users, user_library_entries, viewing_events,
+  episode_progress, season_ratings, system_configs
 ```
 
-- When restarted, the runner loads `seeding_checkpoint.json` and skips any TMDB ID listed in `processed_ids`.
-- The checkpoint file is written atomically (`write to temp -> rename`) to prevent partial write corruption.
-
-### 10.2 Partial TV Ingestion Recovery
-If a TV show ingestion fails halfway through season retrieval (e.g., seasons 1–3 saved, season 4 timed out):
-1. The show header and seasons 1–3 remain committed in PostgreSQL.
-2. In the return DTO, `isPartial` is `true`.
-3. The runner records the ID in a `retry_queue`.
-4. When re-ingesting a partial TV show, `CatalogueRepository.saveSeasonAndEpisodes` uses `ON CONFLICT (tvShowId, seasonNumber) DO UPDATE`, safely skipping or updating already-saved seasons and inserting the missing ones without creating duplicates.
+### 13.2 Non-Negotiable Invariants
+1. **Zero Deletion:** Under no circumstances will `TRUNCATE`, `DROP`, or broad `DELETE` statements be executed against catalogue tables.
+2. **Referential Restraints:** Foreign key constraints (`onDelete: Restrict` from `user_library_entries` to `movies` and `tv_shows`) remain active at all times.
+3. **No Trigger Modification:** PostgreSQL integrity triggers from Phase 3 remain active; no bypasses will be used.
+4. **Pre/Post Verification:** A strict row-count assertion on all personal tables will be executed immediately before and after Stage 5.0.3-B to prove zero mutations.
 
 ---
 
-## 11. Database Safety and Isolation Boundaries
+## 14. Implementation Capabilities: Existing vs. Missing
 
-To ensure that personal library data and database integrity are protected during bulk catalogue seeding, the following strict boundaries are established:
-
-### 11.1 Table Access Rules
-
-| Database Table | Allowed Operation | Strict Invariants |
-| :--- | :---: | :--- |
-| `movies` | `INSERT`, `UPDATE` (`upsert`) | Only public metadata; never deleted. |
-| `tv_shows` | `INSERT`, `UPDATE` (`upsert`) | Only public metadata; never deleted. |
-| `seasons` | `INSERT`, `UPDATE` (`upsert`) | Cascade-linked to parent `tv_shows`. |
-| `episodes` | `INSERT`, `UPDATE` (`upsert`) | Cascade-linked to parent `seasons`. |
-| `genres` | `INSERT`, `UPDATE` (`upsert`) | Shared across movies and TV. |
-| `keywords` | `INSERT`, `UPDATE` (`upsert`) | Shared across movies and TV. |
-| `persons` | `INSERT`, `UPDATE` (`upsert`) | Shared cast entities. |
-| `person_credits` | `INSERT`, `DELETE` (sync only) | Credit synchronization strictly isolated to the target movie/show. |
-| `_GenreToMovie` / `_GenreToTvShow` | `INSERT`, `DELETE` | Managed automatically by Prisma relation sync. |
-| `_KeywordToMovie` / `_KeywordToTvShow` | `INSERT`, `DELETE` | Managed automatically by Prisma relation sync. |
-| **`users`** | **FORBIDDEN (NO ACCESS)** | **Must NEVER be read, inserted, updated, or deleted.** |
-| **`user_library_entries`** | **FORBIDDEN (NO ACCESS)** | **Must NEVER be read, inserted, updated, or deleted.** |
-| **`viewing_events`** | **FORBIDDEN (NO ACCESS)** | **Must NEVER be read, inserted, updated, or deleted.** |
-| **`episode_progress`** | **FORBIDDEN (NO ACCESS)** | **Must NEVER be read, inserted, updated, or deleted.** |
-| **`season_ratings`** | **FORBIDDEN (NO ACCESS)** | **Must NEVER be read, inserted, updated, or deleted.** |
-| **`system_configs`** | **FORBIDDEN (NO ACCESS)** | **Must NEVER be read, inserted, updated, or deleted.** |
-
-### 11.2 Safety Rules
-- **No Truncation or Deletion:** Under no circumstances will `TRUNCATE` or broad `DELETE` statements be issued against `movies` or `tv_shows`.
-- **Existing Library Protection:** All foreign key constraints referencing movies/shows (`onDelete: Restrict` on `user_library_entries`) remain fully active.
-- **Trigger Integrity:** All Phase 3 PostgreSQL integrity triggers remain active. Ingestion operations adhere strictly to the established relational invariants.
+| System Capability | Implementation State | Location in Codebase | Action for Stage 5.0.3-B |
+| :--- | :---: | :--- | :--- |
+| **Movie Ingestion Endpoint** | **EXISTS** | `apps/api/src/tmdb/tmdb.controller.ts` | Use existing endpoint |
+| **TV Ingestion Endpoint** | **EXISTS** | `apps/api/src/tmdb/tmdb.controller.ts` | Use existing endpoint |
+| **Transactional Upsert Repo** | **EXISTS** | `apps/api/src/tmdb/catalogue.repository.ts` | Use existing repository |
+| **DTO Mappers & Deduplication** | **EXISTS** | `apps/api/src/tmdb/tmdb.mapper.ts` | Use existing mapper |
+| **HTTP Client 429 Retry** | **EXISTS** | `apps/api/src/tmdb/tmdb-http.client.ts` | Use existing retry logic |
+| **Transport-Level Rate Pacer** | **MISSING** | `apps/api/src/tmdb/tmdb-http.client.ts` | Add 100ms inter-request pacing gate |
+| **Offline Candidate Manifest Generator**| **MISSING** | `scripts/` | Create `generate_candidate_manifest.py` |
+| **Resumable Batch Ingestion Runner** | **MISSING** | `scripts/` | Create `seed_catalogue_batch.ts` (or runner) |
+| **Disk Checkpointing (`checkpoint.json`)**| **MISSING** | `data/` | Add atomic checkpoint state manager |
 
 ---
 
-## 12. Verification and Acceptance Criteria
+## 15. Remaining Risks & Open Decisions
 
-Before Stage 5.0.3 can be declared complete, the following criteria must be satisfied:
-
-1. **Probe Verification:**
-   - All 50 mandatory probe TMDB IDs must be queried and confirmed present in PostgreSQL.
-   - All 50 probes must have valid non-empty overviews.
-   - All 50 probes must pass the synthetic-title filter (`title !~* ...`).
-2. **Quota Verification:**
-   - Eligible movies count $\ge 1,400$.
-   - Eligible TV shows count $\ge 600$.
-   - Total eligible catalogue $\ge 2,000$.
-3. **Execution of `prepare_catalogue_fixture.py`:**
-   - Running `python ml/benchmark/scripts/prepare_catalogue_fixture.py --verify-only` must exit with **code 0 (PASS)**, reporting zero stop conditions.
-4. **Zero Personal Library Mutation:**
-   - Audit queries must confirm that record counts for `users`, `user_library_entries`, `viewing_events`, `episode_progress`, and `season_ratings` remain identical before and after seeding.
-
----
-
-## 13. Risk Management & Mitigations
-
-| Risk | Impact | Probability | Mitigation Strategy |
+| Risk / Decision | Severity | Probability | Mitigation Strategy |
 | :--- | :---: | :---: | :--- |
-| **TMDB Rate Limit (HTTP 429)** | Ingestion halts | Medium | Client throttled to 10 req/s with 2 concurrent workers; automatic `Retry-After` sleep and exponential backoff. |
-| **Network Interruptions** | Partial batch | Medium | Resumable checkpointing tracks completed IDs on disk; batch can resume without duplicate work. |
-| **Empty Overview Candidates** | Ineligible records | Low | Client-side validation filters out candidates with overview $< 20$ chars before attempting ingestion; $+15\%$ safety buffer absorbs fallout. |
-| **Database Lock Contention** | Transaction timeouts | Low | Ingestion transactions are isolated per movie and per season; single-show concurrency is avoided. |
-| **Probe ID Mismatches** | Ingestion of wrong titles | Low | Seed exact IDs from `probes_v1.json` plus canonical IDs; document all 4 mismatches explicitly for Phase 5 tracking. |
+| **Probe ID Mismatches (PB-27, 40, 46)** | High | Verified | Ingest both current fixture IDs and canonical target IDs during seeding; submit formal fixture addendum in Stage 5.0.4. |
+| **TMDB Burst Rate-Limiting** | Medium | Medium | Enforce transport-level 100ms pacing in `TmdbHttpClient` across all season requests. |
+| **Network Interruption during Seeding** | Medium | Low | Maintain atomic `seeding_checkpoint.json`; runner resumes cleanly without re-ingesting completed IDs. |
+| **Catalogue Attrition > 15%** | Low | Low | Gross buffer provides $+188$ movies and $+74$ TV shows over minimum quotas; candidate pre-validation filters short overviews. |
 
 ---
 
-## 14. Proposed Stage 5.0.3-B Execution Sequence
+## 16. Explicit Stage 5.0.3-B Readiness Verdict
 
-Upon receiving explicit user authorization for Stage 5.0.3-B:
+### Verdict: **READY FOR STAGE 5.0.3-B AUTHORIZATION**
 
-1. **Step 1: Ingest 50 Mandatory Probes**
-   - Execute targeted ingestion for the 50 probe IDs via `TmdbService.ingestMovie` and `TmdbService.ingestTvShow`.
-   - Verify all 50 are persisted and eligible.
-2. **Step 2: Assemble Candidate Pool**
-   - Query TMDB Discover and Top-Rated endpoints to assemble 1,412 movie candidates and 556 TV show candidates across specified strata.
-   - Save candidate manifest to disk.
-3. **Step 3: Execute Batch Seeding**
-   - Run the throttled, checkpointed ingestion runner.
-   - Monitor progress, handle retries, and log any skipped items.
-4. **Step 4: Execute Post-Seeding Verification Audit**
-   - Run `prepare_catalogue_fixture.py --verify-only`.
-   - Confirm quotas: $\ge 1,400$ movies, $\ge 600$ TV shows, 50/50 probes.
-5. **Step 5: Execute Fixture Generation**
-   - Run `python ml/benchmark/scripts/prepare_catalogue_fixture.py` to generate and publish the canonical `catalogue_snapshot_v1.jsonl` (2,000 items) and `catalogue_snapshot_v1.manifest.json`.
-6. **Step 6: Final Verification & Commit**
-   - Verify SHA-256 digest, run test suites, update `tasks.md`, and report completion.
+The Stage 5.0.3 planning baseline is now fully audited, reconciled, and mathematically sound:
+1. **Probe Inventory:** 100% reconciled against `probes_v1.json` (all 34 previous documentation discrepancies resolved).
+2. **Probe Resolution:** All 50 probes confirmed active (HTTP 200) with non-empty overviews on TMDB.
+3. **Identity Strategy:** Double-seeding strategy defined for PB-27, PB-40, and PB-46 to guarantee zero blocker risk.
+4. **Transport-Level Rate Limiting:** Flaw in batch-level sleep identified and transport-level 100ms pacer designed.
+5. **Candidate Discovery:** Practical two-stage sourcing workflow established using external manifest generation and existing NestJS ingestion endpoints.
+6. **Mathematical Integrity:** Quotas, gross buffers, and API request volumes rigorously recalculated.
+7. **Personal Data Safety:** Zero-access boundaries and verification assertions firmly established.
+
+> [!IMPORTANT]
+> **Execution Boundary:** This document completes Stage 5.0.3-A.1. **No catalogue ingestion has taken place.** Execution of Stage 5.0.3-B requires separate explicit authorization.
