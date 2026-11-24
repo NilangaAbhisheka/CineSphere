@@ -13,11 +13,11 @@ Covers all required invariants and behavioral requirements:
 6. Exact canonical document serialization per Section 8.11.1 (Movie & TV).
 7. Strict null/empty/whitespace omission policy and non-canonical exclusions.
 8. Synthetic integration-test exclusion regex validation (positive & negative).
-9. Deterministic cast selection behavior and schema limitation handling.
-10. Genuine PostgreSQL session read-only enforcement (rejected writes).
-11. Fixture manifest compliance with Section 8.11.3.
-12. SHA-256 byte-for-byte digest calculation.
-13. Atomic staged publication with backup and rollback on failure.
+9. Deterministic cast SQL selection via real PostgreSQL execution.
+10. Genuine PostgreSQL session read-only enforcement on disposable test DB.
+11. Fixture manifest compliance with Section 8.11.3 using production functions.
+12. SHA-256 byte-for-byte digest via production write_jsonl_snapshot.
+13. Atomic staged publication with backup and rollback — genuine mid-publication failure.
 14. Personal library isolation (forbidden tables).
 """
 
@@ -26,6 +26,8 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
+import uuid
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -33,21 +35,77 @@ from unittest.mock import MagicMock, patch
 import pytest
 from ml.benchmark.scripts.prepare_catalogue_fixture import (
     ALLOWED_STRATA,
-    DEFAULT_DB_URL,
     FORBIDDEN_TABLES,
     REQUIRED_MOVIES_TOTAL,
     REQUIRED_TV_SHOWS_TOTAL,
     SYNTHETIC_MOVIE_EXCLUSION_PATTERN,
     SYNTHETIC_TV_EXCLUSION_PATTERN,
     InvalidProbeDefinitionError,
+    PublicationRollbackError,
+    build_manifest,
     calculate_additional_quotas,
     create_readonly_connection,
+    get_cast_selection_sql,
     prepare_catalogue_snapshot,
     publish_artifacts,
     serialize_canonical_text,
     validate_probes,
     verify_database_readiness,
+    write_jsonl_snapshot,
 )
+
+# ---------------------------------------------------------------------------
+# Test-database connection helper
+# ---------------------------------------------------------------------------
+
+
+def _get_test_db_url() -> str | None:
+    """Returns a safe disposable test DB URL that contains 'test' or 'e2e'.
+
+    Checks CINESPHERE_TEST_DATABASE_URL and CINESPHERE_E2E_DATABASE_URL first,
+    then falls back to the cinesphere_test database if reachable.
+    Never returns a URL pointing to the production 'cinesphere' dev database.
+    """
+    for env_var in ("CINESPHERE_TEST_DATABASE_URL", "CINESPHERE_E2E_DATABASE_URL"):
+        url = os.environ.get(env_var)
+        if url:
+            lower = url.lower()
+            if "test" not in lower and "e2e" not in lower:
+                raise RuntimeError(
+                    f"Environment variable {env_var}={url!r} does not point to a "
+                    "test/e2e database (URL must contain 'test' or 'e2e')."
+                )
+            return url
+
+    # Try the standard cinesphere_test database as a last resort
+    fallback = "postgresql://cinesphere_user:cinesphere_dev_password@localhost:5432/cinesphere_test"
+    return fallback
+
+
+def _connect_test_db():
+    """Connects to disposable test DB, or returns None if unavailable.
+
+    Never connects to the development 'cinesphere' database.
+    Caller must check for None and skip the test if the connection is unavailable.
+    """
+    try:
+        import psycopg2  # noqa: PLC0415
+    except ImportError:
+        return None
+
+    url = _get_test_db_url()
+    if url is None:
+        return None
+
+    lower = url.lower()
+    if "test" not in lower and "e2e" not in lower:
+        return None
+
+    try:
+        conn = psycopg2.connect(url.split("?")[0])
+        return conn
+    except Exception:
+        return None
 
 
 @pytest.fixture
@@ -611,6 +669,10 @@ def test_synthetic_record_exclusion_patterns():
         "Alien",
         "Arrival",
         "Heat",
+        # Critical false-positive guard: "The Test Movie" must NOT be excluded
+        "The Test Movie",
+        "A Test Movie",
+        "My Test Movie",
     ]
     for title in legitimate_movies:
         assert not re.search(SYNTHETIC_MOVIE_EXCLUSION_PATTERN, title, re.I), (
@@ -664,6 +726,10 @@ def test_synthetic_record_exclusion_patterns():
         "The Wire",
         "True Detective",
         "Breaking Bad",
+        # Critical false-positive guards: must NOT be excluded
+        "The Test Show",
+        "A Test Show",
+        "The Daily Test Series",
     ]
     for name in legitimate_tv:
         assert not re.search(SYNTHETIC_TV_EXCLUSION_PATTERN, name, re.I), (
@@ -672,36 +738,38 @@ def test_synthetic_record_exclusion_patterns():
 
 
 # ---------------------------------------------------------------------------
-# Test 18: Deterministic cast selection behavior
+# Test 18: Deterministic cast SQL selection via real PostgreSQL
 # ---------------------------------------------------------------------------
-def test_deterministic_cast_selection_behavior():
-    """Validates that cast selection ordering produces identical outputs regardless
+def test_deterministic_cast_selection_real_sql():
+    """Validates that the actual cast selection SQL, when executed against PostgreSQL,
+    selects the top-5 actors ordered by (name ASC, tmdbId ASC) deterministically,
+    regardless of insertion order.
 
-    of input record ordering on disk.
+    Uses a disposable test DB; skips with NOT VERIFIED if unavailable.
     """
-    # 10 actors in arbitrary orders
-    actors_batch_1 = [
-        {"name": "Zoe Saldana", "tmdbId": 8691},
-        {"name": "Chris Pratt", "tmdbId": 73457},
-        {"name": "Bradley Cooper", "tmdbId": 51329},
-        {"name": "Vin Diesel", "tmdbId": 12835},
-        {"name": "Dave Bautista", "tmdbId": 543530},
-        {"name": "Karen Gillan", "tmdbId": 543261},
-        {"name": "Michael Rooker", "tmdbId": 8516},
+    conn = _connect_test_db()
+    if conn is None:
+        pytest.skip("NOT VERIFIED — Disposable PostgreSQL integration environment unavailable.")
+
+    test_prefix = f"cast_test_{uuid.uuid4().hex[:8]}"
+    persons_table = f"{test_prefix}_persons"
+    credits_table = f"{test_prefix}_credits"
+    movies_table = f"{test_prefix}_movies"
+
+    # Test actors: 7 total, top-5 by name ASC, tmdbId ASC should be a deterministic set.
+    # Inserted in scrambled order to prove ordering is from SQL, not insertion.
+    actors = [
+        # (name, tmdbId)
+        ("Zoe Saldana", 8691),
+        ("Bradley Cooper", 51329),  # <- in top-5
+        ("Chris Pratt", 73457),  # <- in top-5
+        ("Dave Bautista", 543530),  # <- in top-5
+        ("Karen Gillan", 543261),  # <- in top-5
+        ("Michael Rooker", 8516),  # <- in top-5
+        ("Vin Diesel", 12835),
     ]
-
-    actors_batch_2 = list(reversed(actors_batch_1))
-
-    # Deterministic selection: ORDER BY name ASC, tmdbId ASC LIMIT 5
-    selected_1 = sorted(actors_batch_1, key=lambda a: (a["name"], a["tmdbId"]))[:5]
-    selected_2 = sorted(actors_batch_2, key=lambda a: (a["name"], a["tmdbId"]))[:5]
-
-    names_1 = [a["name"] for a in selected_1]
-    names_2 = [a["name"] for a in selected_2]
-
-    assert names_1 == names_2
-    assert len(names_1) == 5
-    assert names_1 == [
+    # Expected top-5 alphabetically
+    expected_names = [
         "Bradley Cooper",
         "Chris Pratt",
         "Dave Bautista",
@@ -709,134 +777,332 @@ def test_deterministic_cast_selection_behavior():
         "Michael Rooker",
     ]
 
-
-# ---------------------------------------------------------------------------
-# Test 19: Genuine PostgreSQL read-only enforcement
-# ---------------------------------------------------------------------------
-def test_postgres_readonly_enforcement():
-    """Verifies against PostgreSQL that session read-only rejects write attempts."""
-    try:
-        from psycopg2.errors import ReadOnlySqlTransaction
-    except ImportError:
-        pytest.skip("psycopg2 is not installed.")
-
-    try:
-        conn = create_readonly_connection(DEFAULT_DB_URL)
-    except Exception as e:
-        pytest.skip(f"Live PostgreSQL database is not reachable: {e}")
-
     try:
         with conn.cursor() as cur:
-            # 1. Verify read succeeds
-            cur.execute("SELECT count(*) FROM movies;")
-            count = cur.fetchone()[0]
-            assert isinstance(count, int)
+            cur.execute(
+                f"""
+                CREATE TEMP TABLE {persons_table} (
+                    id uuid PRIMARY KEY,
+                    "tmdbId" integer NOT NULL,
+                    name varchar NOT NULL
+                );
+                """
+            )
+            cur.execute(
+                f"""
+                CREATE TEMP TABLE {movies_table} (
+                    id uuid PRIMARY KEY
+                );
+                """
+            )
+            cur.execute(
+                f"""
+                CREATE TEMP TABLE {credits_table} (
+                    id uuid PRIMARY KEY,
+                    "personId" uuid NOT NULL,
+                    "movieId" uuid
+                );
+                """
+            )
 
-            # 2. Verify UPDATE fails with ReadOnlySqlTransaction
-            with pytest.raises(ReadOnlySqlTransaction):
-                cur.execute("UPDATE movies SET title = 'hacked' WHERE false;")
+            movie_id = str(uuid.uuid4())
+            cur.execute(f"INSERT INTO {movies_table} VALUES (%s);", (movie_id,))
 
-            # 3. Verify INSERT fails with ReadOnlySqlTransaction
-            with pytest.raises(ReadOnlySqlTransaction):
-                cur.execute("INSERT INTO movies (\"tmdbId\", title) VALUES (-999, 'hacked');")
+            # Insert actors in scrambled order
+            person_ids = {}
+            for _i, (name, tmdb_id) in enumerate(reversed(actors)):
+                pid = str(uuid.uuid4())
+                person_ids[name] = pid
+                cur.execute(
+                    f'INSERT INTO {persons_table} (id, "tmdbId", name) VALUES (%s, %s, %s);',
+                    (pid, tmdb_id, name),
+                )
+
+            for name, _ in actors:
+                cid = str(uuid.uuid4())
+                cur.execute(
+                    f'INSERT INTO {credits_table} (id, "personId", "movieId") VALUES (%s, %s, %s);',
+                    (cid, person_ids[name], movie_id),
+                )
+            conn.commit()
+
+            # Build the production cast selection SQL using the helper
+            cast_sql = get_cast_selection_sql(
+                'pc."movieId" = m.id',
+                table_alias="pc",
+            )
+            # Rewrite to use test temp tables
+            cast_sql_test = cast_sql.replace(
+                "FROM person_credits pc",
+                f"FROM {credits_table} pc",
+            ).replace(
+                'JOIN persons p ON pc."personId" = p.id',
+                f'JOIN {persons_table} p ON pc."personId" = p.id',
+            )
+
+            query = f"""
+                SELECT {cast_sql_test}
+                FROM {movies_table} m
+                WHERE m.id = %s;
+            """
+
+            # Execute twice to verify stability
+            cur.execute(query, (movie_id,))
+            result_1 = cur.fetchone()[0]
+
+            cur.execute(query, (movie_id,))
+            result_2 = cur.fetchone()[0]
+
+        assert result_1 is not None, "Cast selection returned NULL for a movie with actors."
+        assert len(result_1) == 5, f"Expected 5 cast members, got {len(result_1)}: {result_1}"
+        assert result_1 == expected_names, (
+            f"Cast order incorrect. Expected {expected_names}, got {list(result_1)}"
+        )
+        # Determinism check: same result on repeated execution
+        assert list(result_1) == list(result_2), (
+            "Cast selection is non-deterministic: repeated queries returned different results."
+        )
     finally:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         conn.close()
 
 
 # ---------------------------------------------------------------------------
-# Test 20: SHA-256 calculation matches actual output bytes
+# Test 19: Genuine PostgreSQL read-only enforcement on disposable test DB
 # ---------------------------------------------------------------------------
-def test_sha256_computation_exact_bytes(tmp_path: Path):
-    """Verifies generated sha256 matches the byte-for-byte hash of the JSONL file."""
-    test_file = tmp_path / "test_snapshot.jsonl"
-    lines = [
-        json.dumps({"id": 1, "name": "Item 1"}, ensure_ascii=False) + "\n",
-        json.dumps({"id": 2, "name": "Item 2"}, ensure_ascii=False) + "\n",
-    ]
-    with open(test_file, "w", encoding="utf-8", newline="\n") as f:
-        for line in lines:
-            f.write(line)
+def test_postgres_readonly_enforcement_disposable_db():
+    """Verifies that create_readonly_connection enforces read-only mode against
+    a real, isolated test database — not the development database.
 
-    hasher = hashlib.sha256()
-    with open(test_file, "rb") as f:
-        hasher.update(f.read())
-    expected_digest = hasher.hexdigest()
+    - SELECT must succeed.
+    - INSERT must fail with SQLSTATE 25006 (ReadOnlySqlTransaction).
+    - UPDATE must fail with SQLSTATE 25006 (ReadOnlySqlTransaction).
+    Reports NOT VERIFIED if the disposable test DB is unavailable.
+    """
+    try:
+        import psycopg2  # noqa: PLC0415
+        from psycopg2.errors import ReadOnlySqlTransaction  # noqa: PLC0415
+    except ImportError:
+        pytest.skip("psycopg2 is not installed.")
 
-    # Recompute line-by-line as in script
-    script_hasher = hashlib.sha256()
-    for line in lines:
-        script_hasher.update(line.encode("utf-8"))
-    assert script_hasher.hexdigest() == expected_digest
+    url = _get_test_db_url()
+    if url is None:
+        pytest.skip(
+            "NOT VERIFIED — CINESPHERE_TEST_DATABASE_URL / CINESPHERE_E2E_DATABASE_URL not set."
+        )
+
+    # Safety: refuse to run against non-test databases
+    if "test" not in url.lower() and "e2e" not in url.lower():
+        pytest.fail(
+            f"SAFETY: Test database URL '{url}' does not contain 'test' or 'e2e'. "
+            "Refusing to run read-only enforcement test against a non-test database."
+        )
+
+    # Create a fresh read-only connection using the PRODUCTION function
+    try:
+        conn = create_readonly_connection(url)
+    except Exception as e:
+        pytest.skip(f"NOT VERIFIED — Disposable test DB not reachable: {e}")
+
+    test_table = f"ro_test_{uuid.uuid4().hex[:8]}"
+    setup_conn = None
+    try:
+        # Setup: create an isolated test table using a separate writable connection
+        setup_conn = psycopg2.connect(url.split("?")[0])
+        with setup_conn.cursor() as sc:
+            sc.execute(f"""
+                CREATE TEMP TABLE {test_table} (id serial PRIMARY KEY, val text);
+                INSERT INTO {test_table} (val) VALUES ('probe_row');
+            """)
+        setup_conn.commit()
+
+        with conn.cursor() as cur:
+            # 1. SELECT must succeed
+            cur.execute("SELECT count(*) FROM movies;")  # noqa: S608
+            count = cur.fetchone()[0]
+            assert isinstance(count, int), "SELECT did not return an integer."
+
+            # 2. INSERT must fail with ReadOnlySqlTransaction (SQLSTATE 25006)
+            with pytest.raises(ReadOnlySqlTransaction):
+                cur.execute(
+                    'INSERT INTO movies ("tmdbId", title, "originalTitle") '
+                    "VALUES (-99999, '__ro_test__', '__ro_test__');"
+                )
+
+            # Reset connection state after the error
+            conn.rollback()
+
+            # 3. UPDATE must fail with ReadOnlySqlTransaction (SQLSTATE 25006)
+            with pytest.raises(ReadOnlySqlTransaction):
+                cur.execute("UPDATE movies SET title = '__hacked__' WHERE \"tmdbId\" = -99999;")
+
+    finally:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        conn.close()
+        if setup_conn:
+            try:
+                setup_conn.rollback()
+            except Exception:
+                pass
+            setup_conn.close()
 
 
 # ---------------------------------------------------------------------------
-# Test 21: Fixture manifest conformity with Section 8.11.3
+# Test 20: SHA-256 via production write_jsonl_snapshot
 # ---------------------------------------------------------------------------
-def test_manifest_schema_and_checksum_consistency(tmp_path: Path):
-    """Verifies that generated manifest conforms strictly to Section 8.11.3 field contract."""
-    jsonl_file = tmp_path / "catalogue_snapshot_v1.jsonl"
-    sha256_file = tmp_path / "catalogue_snapshot_v1.sha256"
-    manifest_file = tmp_path / "catalogue_snapshot_v1.manifest.json"
-
+def test_sha256_computation_via_production_function(tmp_path: Path):
+    """Verifies that write_jsonl_snapshot writes correct UTF-8 JSON lines and returns
+    a SHA-256 digest that matches the byte-for-byte hash of the file it wrote.
+    """
     records = [
-        {"media_type": "MOVIE", "tmdb_id": 101, "is_probe": True, "stratum": "Mainstream"},
-        {"media_type": "TV", "tmdb_id": 201, "is_probe": False, "stratum": None},
+        {
+            "media_type": "MOVIE",
+            "tmdb_id": 101,
+            "title": "Parasite",
+            "canonical_text": "한국어",
+        },
+        {
+            "media_type": "TV",
+            "tmdb_id": 202,
+            "title": "Squid Game",
+            "canonical_text": "오징어 게임",
+        },
     ]
 
-    hasher = hashlib.sha256()
-    with open(jsonl_file, "w", encoding="utf-8", newline="\n") as f:
-        for r in records:
-            line = json.dumps(r) + "\n"
-            f.write(line)
-            hasher.update(line.encode("utf-8"))
+    target_file = tmp_path / "catalogue_snapshot_v1.jsonl.tmp"
+    # Call production function
+    digest = write_jsonl_snapshot(records, target_file)
 
-    digest = hasher.hexdigest()
-    with open(sha256_file, "w", encoding="utf-8", newline="\n") as f:
-        f.write(f"{digest}  catalogue_snapshot_v1.jsonl\n")
+    assert target_file.exists(), "write_jsonl_snapshot did not create output file."
 
-    manifest_data = {
-        "fixture_filename": "catalogue_snapshot_v1.jsonl",
-        "record_count": len(records),
-        "movie_count": 1,
-        "tv_count": 1,
-        "probe_count": 1,
-        "sha256": digest,
-        "source_identity": "CineSphere PostgreSQL (catalogue tables)",
-        "selection_algorithm_version": "1.0.0-deterministic",
-        "serialization_version": "1.0.0-bracketed-tokens",
-        "generated_at": "2026-11-24T12:00:00Z",
-    }
-    with open(manifest_file, "w", encoding="utf-8") as f:
-        json.dump(manifest_data, f)
+    # Verify file is valid UTF-8 JSON lines
+    raw_bytes = target_file.read_bytes()
+    lines = raw_bytes.split(b"\n")
+    # Last element should be empty (file ends with \n)
+    assert lines[-1] == b"", "JSONL file does not end with a newline."
+    content_lines = [line for line in lines if line]
+    assert len(content_lines) == len(records), (
+        f"Expected {len(records)} lines, got {len(content_lines)}."
+    )
+    for i, (line, record) in enumerate(zip(content_lines, records, strict=False)):
+        parsed = json.loads(line.decode("utf-8"))
+        assert parsed["tmdb_id"] == record["tmdb_id"], f"Line {i}: tmdb_id mismatch."
+        # Verify non-ASCII is preserved (not escaped)
+        assert record["canonical_text"] in line.decode("utf-8"), (
+            f"Line {i}: canonical_text was incorrectly escaped (ensure_ascii=False violated)."
+        )
 
-    # Verify manifest fields per Section 8.11.3
-    with open(manifest_file, encoding="utf-8") as f:
-        loaded = json.load(f)
-
-    assert loaded["fixture_filename"] == "catalogue_snapshot_v1.jsonl"
-    assert loaded["record_count"] == 2
-    assert loaded["movie_count"] == 1
-    assert loaded["tv_count"] == 1
-    assert loaded["record_count"] == loaded["movie_count"] + loaded["tv_count"]
-    assert loaded["probe_count"] == 1
-    assert loaded["sha256"] == digest
-    assert loaded["source_identity"] == "CineSphere PostgreSQL (catalogue tables)"
-    assert loaded["selection_algorithm_version"] == "1.0.0-deterministic"
-    assert loaded["serialization_version"] == "1.0.0-bracketed-tokens"
-
-    # Verify sha256 file matches
-    with open(sha256_file, encoding="utf-8") as f:
-        checksum_content = f.read()
-    assert checksum_content.startswith(digest)
+    # Verify SHA-256 digest matches byte-for-byte hash of the written file
+    expected_digest = hashlib.sha256(raw_bytes).hexdigest()
+    assert digest == expected_digest, (
+        f"digest mismatch: function returned {digest!r}, file hash is {expected_digest!r}."
+    )
 
 
 # ---------------------------------------------------------------------------
-# Test 22: Publication rollback on failure preserves existing valid files
+# Test 21: Fixture manifest via production build_manifest + Section 8.11.3
 # ---------------------------------------------------------------------------
-def test_publish_artifacts_atomic_rollback_on_failure(tmp_path: Path):
-    """Verifies that if publication fails midway, previous valid artifacts are restored
+def test_manifest_schema_and_checksum_via_production_function(tmp_path: Path):
+    """Verifies that build_manifest produces a manifest strictly conforming to
+    Section 8.11.3: all required fields, correct types, cross-artifact consistency.
+    """
+    records = [
+        {
+            "media_type": "MOVIE",
+            "tmdb_id": 100 + i,
+            "is_probe": (i == 0),
+            "stratum": "Mainstream" if i == 0 else None,
+        }
+        for i in range(3)
+    ] + [
+        {
+            "media_type": "TV",
+            "tmdb_id": 200 + i,
+            "is_probe": False,
+            "stratum": None,
+        }
+        for i in range(2)
+    ]
 
-    and all temporary files are cleaned up.
+    target_file = tmp_path / "catalogue_snapshot_v1.jsonl.tmp"
+    digest = write_jsonl_snapshot(records, target_file)
+
+    # Call production build_manifest
+    manifest = build_manifest(
+        records=records,
+        digest=digest,
+        probe_movie_count=38,
+        additional_movies_quota=1362,
+        probe_tv_count=12,
+        additional_tv_quota=588,
+        generated_at="2026-11-24T07:00:00+00:00",
+    )
+
+    # Section 8.11.3: Required top-level fields
+    required_fields = [
+        "fixture_filename",
+        "record_count",
+        "movie_count",
+        "tv_count",
+        "probe_count",
+        "sha256",
+        "source_identity",
+        "selection_algorithm_version",
+        "serialization_version",
+        "generated_at",
+        "probes_by_stratum",
+        "selection_parameters",
+    ]
+    for field in required_fields:
+        assert field in manifest, f"Section 8.11.3: Required field '{field}' missing from manifest."
+
+    # Cross-artifact consistency: record_count == movie_count + tv_count
+    assert manifest["record_count"] == len(records), "record_count mismatch."
+    assert manifest["movie_count"] == 3, f"Expected 3 movies, got {manifest['movie_count']}."
+    assert manifest["tv_count"] == 2, f"Expected 2 TV shows, got {manifest['tv_count']}."
+    assert manifest["record_count"] == manifest["movie_count"] + manifest["tv_count"], (
+        "record_count != movie_count + tv_count."
+    )
+    assert manifest["probe_count"] == 1, f"Expected 1 probe, got {manifest['probe_count']}."
+
+    # SHA-256 field must match the actual digest
+    assert manifest["sha256"] == digest, "Manifest sha256 does not match the digest argument."
+
+    # Canonical string fields
+    assert manifest["fixture_filename"] == "catalogue_snapshot_v1.jsonl"
+    assert manifest["source_identity"] == "CineSphere PostgreSQL (catalogue tables)"
+    assert manifest["selection_algorithm_version"] == "1.0.0-deterministic"
+    assert manifest["serialization_version"] == "1.0.0-bracketed-tokens"
+    assert manifest["generated_at"] == "2026-11-24T07:00:00+00:00"
+
+    # probes_by_stratum: all allowed strata present
+    assert set(manifest["probes_by_stratum"].keys()) == ALLOWED_STRATA, (
+        "probes_by_stratum keys do not match ALLOWED_STRATA."
+    )
+
+    # selection_parameters present
+    sp = manifest["selection_parameters"]
+    assert sp["movie_probe_quota"] == 38
+    assert sp["movie_additional_quota"] == 1362
+    assert sp["tv_probe_quota"] == 12
+    assert sp["tv_additional_quota"] == 588
+    assert sp["synthetic_movie_exclusion_applied"] is True
+    assert sp["synthetic_tv_exclusion_applied"] is True
+
+
+# ---------------------------------------------------------------------------
+# Test 22a: Publication rollback — existing destinations restored (Scenario A)
+# ---------------------------------------------------------------------------
+def test_publish_artifacts_rollback_restores_existing_destinations(tmp_path: Path):
+    """Scenario A: All 3 destination files exist initially.
+    Failure injected after file 2 is replaced.
+    Verifies all 3 destinations are restored to original content.
     """
     out_dir = tmp_path / "fixtures"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -845,40 +1111,196 @@ def test_publish_artifacts_atomic_rollback_on_failure(tmp_path: Path):
     dest_2 = out_dir / "catalogue_snapshot_v1.sha256"
     dest_3 = out_dir / "catalogue_snapshot_v1.manifest.json"
 
-    # Write initial valid versions
-    dest_1.write_text("INITIAL_JSONL\n", encoding="utf-8")
-    dest_2.write_text("INITIAL_SHA\n", encoding="utf-8")
-    dest_3.write_text("INITIAL_MANIFEST\n", encoding="utf-8")
+    # Write original content to all destinations
+    dest_1.write_text("ORIGINAL_A\n", encoding="utf-8")
+    dest_2.write_text("ORIGINAL_B\n", encoding="utf-8")
+    dest_3.write_text("ORIGINAL_C\n", encoding="utf-8")
 
-    # Prepare temporary files
     tmp_1 = out_dir / "catalogue_snapshot_v1.jsonl.tmp"
     tmp_2 = out_dir / "catalogue_snapshot_v1.sha256.tmp"
     tmp_3 = out_dir / "catalogue_snapshot_v1.manifest.json.tmp"
+    tmp_1.write_text("NEW_A\n", encoding="utf-8")
+    tmp_2.write_text("NEW_B\n", encoding="utf-8")
+    tmp_3.write_text("NEW_C\n", encoding="utf-8")
 
-    tmp_1.write_text("NEW_JSONL\n", encoding="utf-8")
-    tmp_2.write_text("NEW_SHA\n", encoding="utf-8")
-    # Simulate tmp_3 missing to trigger publication failure in Phase 1
-    if tmp_3.exists():
-        tmp_3.unlink()
+    artifacts = [(tmp_1, dest_1), (tmp_2, dest_2), (tmp_3, dest_3)]
 
-    artifacts = [
-        (tmp_1, dest_1),
-        (tmp_2, dest_2),
-        (tmp_3, dest_3),
-    ]
+    call_count = [0]
+    original_replace = Path.replace
 
-    with pytest.raises(RuntimeError, match="Artifact publication failed"):
-        publish_artifacts(artifacts)
+    def failing_replace(self: Path, target: Path) -> Path:
+        # Only intercept moves of .tmp files (phase 3 publication moves)
+        # Allow backup moves (.old) and rollback restores (.old → final) to proceed freely.
+        if str(self).endswith(".tmp"):
+            call_count[0] += 1
+            if call_count[0] >= 3:
+                raise OSError("Injected failure on 3rd artifact replacement.")
+        return original_replace(self, target)
 
-    # Verify that initial valid versions remain untouched and uncorrupted
-    assert dest_1.read_text(encoding="utf-8") == "INITIAL_JSONL\n"
-    assert dest_2.read_text(encoding="utf-8") == "INITIAL_SHA\n"
-    assert dest_3.read_text(encoding="utf-8") == "INITIAL_MANIFEST\n"
+    with patch.object(Path, "replace", failing_replace):
+        with pytest.raises(RuntimeError, match="Artifact publication failed"):
+            publish_artifacts(artifacts)
 
-    # Verify temporary files were cleaned up
+    # All destinations must be restored to original content
+    assert dest_1.read_text(encoding="utf-8") == "ORIGINAL_A\n", "dest_1 not restored."
+    assert dest_2.read_text(encoding="utf-8") == "ORIGINAL_B\n", "dest_2 not restored."
+    assert dest_3.read_text(encoding="utf-8") == "ORIGINAL_C\n", "dest_3 not restored."
+
+    # No .tmp or .old files should remain
+    assert not tmp_1.exists(), ".tmp file for dest_1 not cleaned up."
+    assert not tmp_2.exists(), ".tmp file for dest_2 not cleaned up."
+    assert not tmp_3.exists(), ".tmp file for dest_3 not cleaned up."
+    assert not dest_1.with_name(dest_1.name + ".old").exists(), ".old backup not cleaned up."
+    assert not dest_2.with_name(dest_2.name + ".old").exists(), ".old backup not cleaned up."
+
+
+# ---------------------------------------------------------------------------
+# Test 22b: Publication rollback — nonexistent destinations removed (Scenario B)
+# ---------------------------------------------------------------------------
+def test_publish_artifacts_rollback_removes_newly_created_destinations(tmp_path: Path):
+    """Scenario B: Dest 1 exists, Dests 2 and 3 do not exist initially.
+    Failure injected after dest 2 is published (newly created).
+    Verifies dest 1 is restored, dest 2 is deleted, dest 3 never exists.
+    """
+    out_dir = tmp_path / "fixtures_b"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    dest_1 = out_dir / "catalogue_snapshot_v1.jsonl"
+    dest_2 = out_dir / "catalogue_snapshot_v1.sha256"
+    dest_3 = out_dir / "catalogue_snapshot_v1.manifest.json"
+
+    # Only dest_1 exists initially
+    dest_1.write_text("ORIGINAL_1\n", encoding="utf-8")
+    # dest_2 and dest_3 do NOT exist
+
+    tmp_1 = out_dir / "catalogue_snapshot_v1.jsonl.tmp"
+    tmp_2 = out_dir / "catalogue_snapshot_v1.sha256.tmp"
+    tmp_3 = out_dir / "catalogue_snapshot_v1.manifest.json.tmp"
+    tmp_1.write_text("NEW_1\n", encoding="utf-8")
+    tmp_2.write_text("NEW_2\n", encoding="utf-8")
+    tmp_3.write_text("NEW_3\n", encoding="utf-8")
+
+    artifacts = [(tmp_1, dest_1), (tmp_2, dest_2), (tmp_3, dest_3)]
+
+    call_count = [0]
+    original_replace = Path.replace
+
+    def failing_replace(self: Path, target: Path) -> Path:
+        # Only intercept moves of .tmp files (phase 3 publication moves)
+        # Allow backup moves (.old) and rollback restores (.old → final) to proceed freely.
+        if str(self).endswith(".tmp"):
+            call_count[0] += 1
+            if call_count[0] >= 3:
+                raise OSError("Injected failure on 3rd artifact replacement.")
+        return original_replace(self, target)
+
+    with patch.object(Path, "replace", failing_replace):
+        with pytest.raises(RuntimeError, match="Artifact publication failed"):
+            publish_artifacts(artifacts)
+
+    # dest_1 must be restored to original content
+    assert dest_1.read_text(encoding="utf-8") == "ORIGINAL_1\n", "dest_1 not restored."
+    # dest_2 was newly created (didn't exist before) — must be deleted on rollback
+    assert not dest_2.exists(), "dest_2 (newly created, non-existing initially) must be deleted."
+    # dest_3 was never touched — must not exist
+    assert not dest_3.exists(), "dest_3 must not exist."
+
+
+# ---------------------------------------------------------------------------
+# Test 22c: Publication success — all destinations updated, no .tmp/.old remain
+# ---------------------------------------------------------------------------
+def test_publish_artifacts_clean_success(tmp_path: Path):
+    """Scenario C: Clean publication success. All destinations are updated with new content.
+    No .tmp or .old files remain after successful publication.
+    """
+    out_dir = tmp_path / "fixtures_c"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    dest_1 = out_dir / "catalogue_snapshot_v1.jsonl"
+    dest_2 = out_dir / "catalogue_snapshot_v1.sha256"
+    dest_3 = out_dir / "catalogue_snapshot_v1.manifest.json"
+
+    dest_1.write_text("OLD_A\n", encoding="utf-8")
+    # dest_2 and dest_3 do not exist
+
+    tmp_1 = out_dir / "catalogue_snapshot_v1.jsonl.tmp"
+    tmp_2 = out_dir / "catalogue_snapshot_v1.sha256.tmp"
+    tmp_3 = out_dir / "catalogue_snapshot_v1.manifest.json.tmp"
+    tmp_1.write_text("NEW_A\n", encoding="utf-8")
+    tmp_2.write_text("NEW_B\n", encoding="utf-8")
+    tmp_3.write_text("NEW_C\n", encoding="utf-8")
+
+    artifacts = [(tmp_1, dest_1), (tmp_2, dest_2), (tmp_3, dest_3)]
+    publish_artifacts(artifacts)  # Must not raise
+
+    # All destinations must have new content
+    assert dest_1.read_text(encoding="utf-8") == "NEW_A\n"
+    assert dest_2.read_text(encoding="utf-8") == "NEW_B\n"
+    assert dest_3.read_text(encoding="utf-8") == "NEW_C\n"
+
+    # No .tmp files remain
     assert not tmp_1.exists()
     assert not tmp_2.exists()
     assert not tmp_3.exists()
+
+    # No .old backup files remain
+    assert not dest_1.with_name(dest_1.name + ".old").exists()
+
+
+# ---------------------------------------------------------------------------
+# Test 22d: Publication rollback failure — PublicationRollbackError raised
+# ---------------------------------------------------------------------------
+def test_publish_artifacts_rollback_failure_raises_composite_error(tmp_path: Path):
+    """Scenario D: Publication fails AND rollback also encounters an error.
+    Verifies PublicationRollbackError is raised with both original error and rollback
+    errors reported — no silent swallowing of rollback exceptions.
+    """
+    out_dir = tmp_path / "fixtures_d"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    dest_1 = out_dir / "catalogue_snapshot_v1.jsonl"
+    dest_2 = out_dir / "catalogue_snapshot_v1.sha256"
+    dest_3 = out_dir / "catalogue_snapshot_v1.manifest.json"
+
+    dest_1.write_text("ORIGINAL_A\n", encoding="utf-8")
+    dest_2.write_text("ORIGINAL_B\n", encoding="utf-8")
+    dest_3.write_text("ORIGINAL_C\n", encoding="utf-8")
+
+    tmp_1 = out_dir / "catalogue_snapshot_v1.jsonl.tmp"
+    tmp_2 = out_dir / "catalogue_snapshot_v1.sha256.tmp"
+    tmp_3 = out_dir / "catalogue_snapshot_v1.manifest.json.tmp"
+    tmp_1.write_text("NEW_A\n", encoding="utf-8")
+    tmp_2.write_text("NEW_B\n", encoding="utf-8")
+    tmp_3.write_text("NEW_C\n", encoding="utf-8")
+
+    artifacts = [(tmp_1, dest_1), (tmp_2, dest_2), (tmp_3, dest_3)]
+
+    publication_replace_count = [0]
+    original_replace = Path.replace
+
+    def combined_failing_replace(self: Path, target: Path) -> Path:
+        # Phase 3: .tmp → final_path moves: fail on 3rd publication
+        if str(self).endswith(".tmp"):
+            publication_replace_count[0] += 1
+            if publication_replace_count[0] >= 3:
+                raise OSError("Injected publication failure.")
+        # Rollback restores: .old → final_path moves: always fail
+        elif str(self).endswith(".old"):
+            raise OSError("Injected rollback failure.")
+        return original_replace(self, target)
+
+    with patch.object(Path, "replace", combined_failing_replace):
+        with pytest.raises(PublicationRollbackError) as exc_info:
+            publish_artifacts(artifacts)
+
+    err = exc_info.value
+    assert isinstance(err, PublicationRollbackError), (
+        "Expected PublicationRollbackError when both publication and rollback fail."
+    )
+    assert err.original_error is not None, "original_error must be set on PublicationRollbackError."
+    assert len(err.rollback_errors) > 0, (
+        "rollback_errors must be non-empty when rollback itself fails."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -930,7 +1352,7 @@ def test_personal_library_tables_never_queried():
         source_code = f.read()
 
     # Inspect all executable functions and SQL queries (after constant definitions)
-    code_start = source_code.find("def serialize_canonical_text")
+    code_start = source_code.find("def get_cast_selection_sql")
     assert code_start != -1
     executable_source = source_code[code_start:]
 

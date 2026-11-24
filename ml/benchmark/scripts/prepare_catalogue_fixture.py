@@ -46,6 +46,18 @@ except ImportError:
     RealDictCursor = None
 
 
+class PublicationRollbackError(Exception):
+    """Raised when an error occurs during artifact publication AND rollback encounters errors."""
+
+    def __init__(self, original_error: Exception, rollback_errors: list[Exception]) -> None:
+        self.original_error = original_error
+        self.rollback_errors = rollback_errors
+        super().__init__(
+            f"Artifact publication failed ({original_error}) AND rollback encountered errors: "
+            f"{[str(e) for e in rollback_errors]}"
+        )
+
+
 class MissingMandatoryProbesError(Exception):
     """Raised when one or more predefined benchmark probes are missing from the database."""
 
@@ -103,9 +115,9 @@ FORBIDDEN_TABLES = {
 # Designed to never exclude legitimate titles (e.g. 'The Lego Movie', 'The Daily Show').
 SYNTHETIC_MOVIE_EXCLUSION_PATTERN = (
     r"^(Test|Integration|Detailed|Concurrent|Ingestion|On-Demand|Recent|Rollback|"
-    r"Ownership|Stats|CSV|Notes|Invalid Date|Import|Viewing Event|Duplicate)\s+.*Movie|"
-    r"Test\s+Movie|"
-    r"^E-[0-9]+[a-z]?\s+Movie|"
+    r"Ownership|Stats|CSV|Notes|Invalid Date|Import|Viewing Event|Duplicate)\s+.*Movie\b|"
+    r"^Test\s+Movie\b|"
+    r"^E-[0-9]+[a-z]?\s+Movie\b|"
     r"^\[E2E\]|"
     r"^(Initial Title|Updated Title|Duplicate|Tagged Movie|Library Movie Excluded|"
     r"Inception (Alpha|Beta|Null Popularity)|Interstellar Gamma)$"
@@ -113,9 +125,9 @@ SYNTHETIC_MOVIE_EXCLUSION_PATTERN = (
 
 SYNTHETIC_TV_EXCLUSION_PATTERN = (
     r"^(Test|Integration|Detailed|Concurrent|Ingestion|On-Demand|Recent|Rollback|"
-    r"Ownership|Stats|CSV|CW|Import|Specials|Viewing Event|Duplicate)\s+.*(Show|Series|TV)|"
-    r"Test\s+(Show|Series)|"
-    r"^E-[0-9]+[a-z]?\s+(Show|Series|TV)|"
+    r"Ownership|Stats|CSV|CW|Import|Specials|Viewing Event|Duplicate)\s+.*(Show|Series|TV)\b|"
+    r"^Test\s+(Show|Series)\b|"
+    r"^E-[0-9]+[a-z]?\s+(Show|Series|TV)\b|"
     r"^\[E2E\]|^TV Hierarchy|"
     r"^(Show Alpha|Show Beta|Show [A-Za-z0-9]+|TV Show [A-Za-z0-9]+|Completed Show|"
     r"Fully Watched Show|Null WatchedAt Show|Tagged Show|TV Show Missing (Season|Episode)|"
@@ -445,6 +457,27 @@ def _extract_year(val: Any) -> int | None:
     return None
 
 
+def get_cast_selection_sql(media_filter: str, table_alias: str = "pc") -> str:
+    """Returns the deterministic SQL subquery expression for selecting top-5 cast members.
+
+    Ordering:
+    Subquery: ORDER BY p.name ASC, p."tmdbId" ASC LIMIT 5
+    Outer: ORDER BY sub.name ASC, sub."tmdbId" ASC
+    """
+    return f"""COALESCE(
+                        (SELECT array_agg(sub.name ORDER BY sub.name ASC, sub."tmdbId" ASC)
+                         FROM (
+                             SELECT p.name, p."tmdbId"
+                             FROM person_credits {table_alias}
+                             JOIN persons p ON {table_alias}."personId" = p.id
+                             WHERE {media_filter}
+                             ORDER BY p.name ASC, p."tmdbId" ASC
+                             LIMIT 5
+                         ) sub),
+                        ARRAY[]::varchar[]
+                    ) as cast"""
+
+
 def fetch_full_metadata(
     conn: Any,
     movie_tmdb_ids: list[int],
@@ -490,18 +523,7 @@ def fetch_full_metadata(
                          WHERE km."B" = m.id),
                         ARRAY[]::varchar[]
                     ) as keywords,
-                    COALESCE(
-                        (SELECT array_agg(sub.name ORDER BY sub.name ASC, sub."tmdbId" ASC)
-                         FROM (
-                             SELECT p.name, p."tmdbId"
-                             FROM person_credits pc
-                             JOIN persons p ON pc."personId" = p.id
-                             WHERE pc."movieId" = m.id
-                             ORDER BY p.name ASC, p."tmdbId" ASC
-                             LIMIT 5
-                         ) sub),
-                        ARRAY[]::varchar[]
-                    ) as cast
+                    {get_cast_selection_sql('pc."movieId" = m.id')}
                 FROM movies m
                 WHERE m."tmdbId" = ANY(%s);
                 """,
@@ -580,18 +602,7 @@ def fetch_full_metadata(
                          WHERE kt."B" = t.id),
                         ARRAY[]::varchar[]
                     ) as keywords,
-                    COALESCE(
-                        (SELECT array_agg(sub.name ORDER BY sub.name ASC, sub."tmdbId" ASC)
-                         FROM (
-                             SELECT p.name, p."tmdbId"
-                             FROM person_credits pc
-                             JOIN persons p ON pc."personId" = p.id
-                             WHERE pc."tvShowId" = t.id
-                             ORDER BY p.name ASC, p."tmdbId" ASC
-                             LIMIT 5
-                         ) sub),
-                        ARRAY[]::varchar[]
-                    ) as cast
+                    {get_cast_selection_sql('pc."tvShowId" = t.id')}
                 FROM tv_shows t
                 WHERE t."tmdbId" = ANY(%s);
                 """,
@@ -664,63 +675,205 @@ def create_readonly_connection(db_url: str) -> Any:
     return conn
 
 
+def write_jsonl_snapshot(records: list[dict[str, Any]], target_path: Path) -> str:
+    """Writes records line-by-line as UTF-8 JSON lines and returns SHA-256 digest."""
+    sha256_hasher = hashlib.sha256()
+    with open(target_path, "w", encoding="utf-8", newline="\n") as f:
+        for rec in records:
+            line = json.dumps(rec, ensure_ascii=False) + "\n"
+            f.write(line)
+            sha256_hasher.update(line.encode("utf-8"))
+    return sha256_hasher.hexdigest()
+
+
+def build_manifest(
+    records: list[dict[str, Any]],
+    digest: str,
+    probe_movie_count: int,
+    additional_movies_quota: int,
+    probe_tv_count: int,
+    additional_tv_quota: int,
+    generated_at: str | None = None,
+) -> dict[str, Any]:
+    """Constructs manifest dictionary conforming to Section 8.11.3 specification."""
+    if generated_at is None:
+        generated_at = datetime.now(UTC).isoformat()
+
+    return {
+        "fixture_filename": "catalogue_snapshot_v1.jsonl",
+        "record_count": len(records),
+        "movie_count": len([r for r in records if r["media_type"] == "MOVIE"]),
+        "tv_count": len([r for r in records if r["media_type"] == "TV"]),
+        "probe_count": len([r for r in records if r.get("is_probe")]),
+        "sha256": digest,
+        "source_identity": "CineSphere PostgreSQL (catalogue tables)",
+        "selection_algorithm_version": "1.0.0-deterministic",
+        "serialization_version": "1.0.0-bracketed-tokens",
+        "generated_at": generated_at,
+        "probes_by_stratum": {
+            stratum: len([r for r in records if r.get("stratum") == stratum])
+            for stratum in sorted(ALLOWED_STRATA)
+        },
+        "selection_parameters": {
+            "movie_overview_required": True,
+            "tv_overview_required": True,
+            "movie_probe_quota": probe_movie_count,
+            "movie_additional_quota": additional_movies_quota,
+            "tv_probe_quota": probe_tv_count,
+            "tv_additional_quota": additional_tv_quota,
+            "candidate_sort_order": [
+                "popularity DESC NULLS LAST",
+                "voteCount DESC NULLS LAST",
+                "date DESC NULLS LAST",
+                "tmdbId ASC",
+            ],
+            "final_sort_order": ["media_type ASC", "tmdb_id ASC"],
+            "synthetic_movie_exclusion_applied": True,
+            "synthetic_tv_exclusion_applied": True,
+        },
+    }
+
+
+def stage_fixture_artifacts(
+    records: list[dict[str, Any]],
+    output_dir: Path,
+    probe_movie_count: int,
+    additional_movies_quota: int,
+    probe_tv_count: int,
+    additional_tv_quota: int,
+) -> tuple[list[tuple[Path, Path]], str, dict[str, Any]]:
+    """Stages temporary fixture artifacts (.tmp) before publication.
+
+    Returns:
+    (artifacts, digest, manifest)
+    where artifacts is a list of (tmp_path, final_path) tuples.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    jsonl_path = output_dir / "catalogue_snapshot_v1.jsonl"
+    sha256_path = output_dir / "catalogue_snapshot_v1.sha256"
+    manifest_path = output_dir / "catalogue_snapshot_v1.manifest.json"
+
+    tmp_jsonl = output_dir / "catalogue_snapshot_v1.jsonl.tmp"
+    tmp_sha256 = output_dir / "catalogue_snapshot_v1.sha256.tmp"
+    tmp_manifest = output_dir / "catalogue_snapshot_v1.manifest.json.tmp"
+
+    digest = write_jsonl_snapshot(records, tmp_jsonl)
+
+    with open(tmp_sha256, "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{digest}  catalogue_snapshot_v1.jsonl\n")
+
+    manifest = build_manifest(
+        records=records,
+        digest=digest,
+        probe_movie_count=probe_movie_count,
+        additional_movies_quota=additional_movies_quota,
+        probe_tv_count=probe_tv_count,
+        additional_tv_quota=additional_tv_quota,
+    )
+    with open(tmp_manifest, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(manifest, f, indent=2, ensure_ascii=False)
+
+    artifacts = [
+        (tmp_jsonl, jsonl_path),
+        (tmp_sha256, sha256_path),
+        (tmp_manifest, manifest_path),
+    ]
+    return artifacts, digest, manifest
+
+
 def publish_artifacts(artifacts: list[tuple[Path, Path]]) -> None:
     """Publishes temporary artifacts to final destinations with rollback support.
 
     For each (tmp_path, final_path) pair:
-    1. Verifies all tmp_paths exist before beginning publication.
-    2. Creates backups of existing final_paths (.old).
-    3. Moves tmp_paths to final_paths.
-    4. If any replacement fails, restores backups and removes remaining tmp_paths.
-    5. On complete success, unlinks the backup files.
-
-    Note: Filesystems (POSIX/NTFS) do not provide multi-file transactional atomicity
-    across distinct renames. This implementation provides staged two-phase replacement
-    with backup and rollback to prevent split-state publication.
+    1. Preflight check: verifies all tmp_paths exist before beginning publication.
+    2. Records which destinations initially exist: initial_dest_exists[final_path].
+    3. Moves existing final_paths to temporary backup files (.old).
+    4. Moves tmp_paths to final_paths.
+    5. If any failure occurs during backup or replacement:
+       - Restores all backed-up files (.old -> final_path).
+       - Deletes any final_paths that did NOT exist initially but were created during replacement.
+       - Cleans up leftover .tmp and remaining .old files.
+       - If rollback itself encounters errors, raises PublicationRollbackError.
+       - If rollback succeeds cleanly, raises RuntimeError detailing the original error.
+    6. On complete success: unlinks all backup files (.old).
     """
-    backups: list[tuple[Path, Path]] = []
-    replaced: list[tuple[Path, Path]] = []
+    initial_dest_exists: dict[Path, bool] = {}
+    backups: dict[Path, Path] = {}
+    replaced_finals: list[Path] = []
+    rollback_errors: list[Exception] = []
+
+    # Phase 1: Preflight check - verify all tmp files exist
+    for tmp_path, _ in artifacts:
+        if not tmp_path.exists():
+            for t, _ in artifacts:
+                try:
+                    if t.exists():
+                        t.unlink()
+                except Exception:
+                    pass
+            raise RuntimeError(
+                f"Artifact publication failed and was rolled back: "
+                f"Temporary artifact {tmp_path} does not exist."
+            )
 
     try:
-        # Phase 1: Verify all tmp files exist
-        for tmp_path, _ in artifacts:
-            if not tmp_path.exists():
-                raise FileNotFoundError(f"Temporary artifact {tmp_path} does not exist.")
-
-        # Phase 2: Back up existing target files
+        # Phase 2: Record initial existence and create backups of existing final files
         for _, final_path in artifacts:
-            if final_path.exists():
+            exists = final_path.exists()
+            initial_dest_exists[final_path] = exists
+            if exists:
                 bak_path = final_path.with_name(final_path.name + ".old")
                 if bak_path.exists():
                     bak_path.unlink()
                 final_path.replace(bak_path)
-                backups.append((bak_path, final_path))
+                backups[final_path] = bak_path
 
         # Phase 3: Move tmp files to final destinations
         for tmp_path, final_path in artifacts:
             tmp_path.replace(final_path)
-            replaced.append((tmp_path, final_path))
+            replaced_finals.append(final_path)
 
         # Phase 4: Clean up backups on complete success
-        for bak_path, _ in backups:
+        for bak_path in backups.values():
             if bak_path.exists():
                 bak_path.unlink()
 
     except Exception as e:
-        # Rollback: restore any replaced files from backups
-        for bak_path, final_path in backups:
+        # Rollback procedure:
+        # 1. For destinations that existed initially: restore from backup
+        for final_path, bak_path in backups.items():
             try:
                 if bak_path.exists():
                     bak_path.replace(final_path)
-            except Exception:
-                pass
-        # Clean up any leftover temporary files
+            except Exception as rb_err:
+                rollback_errors.append(rb_err)
+
+        # 2. For destinations that did NOT exist initially but were replaced/created in Phase 3:
+        # delete them so partial files are not left behind.
+        for final_path in replaced_finals:
+            if not initial_dest_exists.get(final_path, False):
+                try:
+                    if final_path.exists():
+                        final_path.unlink()
+                except Exception as rb_err:
+                    rollback_errors.append(rb_err)
+
+        # 3. Clean up any leftover temporary files (.tmp) and remaining backups (.old)
         for tmp_path, _ in artifacts:
             try:
                 if tmp_path.exists():
                     tmp_path.unlink()
             except Exception:
                 pass
+        for bak_path in backups.values():
+            try:
+                if bak_path.exists():
+                    bak_path.unlink()
+            except Exception:
+                pass
+
+        if rollback_errors:
+            raise PublicationRollbackError(e, rollback_errors) from e
         raise RuntimeError(f"Artifact publication failed and was rolled back: {e}") from e
 
 
@@ -975,80 +1128,23 @@ def prepare_catalogue_snapshot(
         records.sort(key=lambda r: (r["media_type"], r["tmdb_id"]))
 
         # 7. Write Output Files via Staged Publication with Rollback Support
-        output_dir.mkdir(parents=True, exist_ok=True)
-        jsonl_path = output_dir / "catalogue_snapshot_v1.jsonl"
-        sha256_path = output_dir / "catalogue_snapshot_v1.sha256"
-        manifest_path = output_dir / "catalogue_snapshot_v1.manifest.json"
-
-        tmp_jsonl = output_dir / "catalogue_snapshot_v1.jsonl.tmp"
-        tmp_sha256 = output_dir / "catalogue_snapshot_v1.sha256.tmp"
-        tmp_manifest = output_dir / "catalogue_snapshot_v1.manifest.json.tmp"
-
-        print(f"\nWriting {len(records)} records to {tmp_jsonl}...")
-        sha256_hasher = hashlib.sha256()
+        artifacts, digest, manifest = stage_fixture_artifacts(
+            records=records,
+            output_dir=output_dir,
+            probe_movie_count=len(probe_movie_ids),
+            additional_movies_quota=additional_movies_needed,
+            probe_tv_count=len(probe_tv_ids),
+            additional_tv_quota=additional_tv_needed,
+        )
+        tmp_files = [tmp for tmp, _ in artifacts]
 
         try:
-            with open(tmp_jsonl, "w", encoding="utf-8", newline="\n") as f:
-                for rec in records:
-                    line = json.dumps(rec, ensure_ascii=False) + "\n"
-                    f.write(line)
-                    sha256_hasher.update(line.encode("utf-8"))
+            print(f"\nStaged {len(records)} records. SHA-256: {digest}")
+            publish_artifacts(artifacts)
 
-            digest = sha256_hasher.hexdigest()
-            print(f"[OK] Wrote temporary JSONL snapshot. SHA-256: {digest}")
-
-            with open(tmp_sha256, "w", encoding="utf-8", newline="\n") as f:
-                f.write(f"{digest}  catalogue_snapshot_v1.jsonl\n")
-
-            manifest = {
-                "fixture_filename": "catalogue_snapshot_v1.jsonl",
-                "record_count": len(records),
-                "movie_count": len([r for r in records if r["media_type"] == "MOVIE"]),
-                "tv_count": len([r for r in records if r["media_type"] == "TV"]),
-                "probe_count": len([r for r in records if r["is_probe"]]),
-                "sha256": digest,
-                "source_identity": "CineSphere PostgreSQL (catalogue tables)",
-                "selection_algorithm_version": "1.0.0-deterministic",
-                "serialization_version": "1.0.0-bracketed-tokens",
-                "generated_at": datetime.now(UTC).isoformat(),
-                "probes_by_stratum": {
-                    stratum: len([r for r in records if r.get("stratum") == stratum])
-                    for stratum in sorted(ALLOWED_STRATA)
-                },
-                "selection_parameters": {
-                    "movie_overview_required": True,
-                    "tv_overview_required": True,
-                    "movie_probe_quota": len(probe_movie_ids),
-                    "movie_additional_quota": additional_movies_needed,
-                    "tv_probe_quota": len(probe_tv_ids),
-                    "tv_additional_quota": additional_tv_needed,
-                    "candidate_sort_order": [
-                        "popularity DESC NULLS LAST",
-                        "voteCount DESC NULLS LAST",
-                        "date DESC NULLS LAST",
-                        "tmdbId ASC",
-                    ],
-                    "final_sort_order": ["media_type ASC", "tmdb_id ASC"],
-                    "synthetic_movie_exclusion_applied": True,
-                    "synthetic_tv_exclusion_applied": True,
-                },
-            }
-
-            with open(tmp_manifest, "w", encoding="utf-8", newline="\n") as f:
-                json.dump(manifest, f, indent=2, ensure_ascii=False)
-
-            # Staged publication with backup and rollback
-            publish_artifacts(
-                [
-                    (tmp_jsonl, jsonl_path),
-                    (tmp_sha256, sha256_path),
-                    (tmp_manifest, manifest_path),
-                ]
-            )
-
-            print(f"[OK] Published {jsonl_path}")
-            print(f"[OK] Published {sha256_path}")
-            print(f"[OK] Published {manifest_path}")
+            print(f"[OK] Published {artifacts[0][1]}")
+            print(f"[OK] Published {artifacts[1][1]}")
+            print(f"[OK] Published {artifacts[2][1]}")
 
             print("\n" + "=" * 80)
             print("STAGE 5.0 BENCHMARK DATASET PREPARATION COMPLETED SUCCESSFULLY")
@@ -1057,7 +1153,7 @@ def prepare_catalogue_snapshot(
 
         finally:
             # Clean up any leftover temporary files on failure
-            for tmp_file in [tmp_jsonl, tmp_sha256, tmp_manifest]:
+            for tmp_file in tmp_files:
                 if tmp_file.exists():
                     try:
                         tmp_file.unlink()
