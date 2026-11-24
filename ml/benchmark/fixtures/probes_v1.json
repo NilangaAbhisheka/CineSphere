@@ -1,0 +1,452 @@
+[
+  {
+    "probe_id": "PB-01",
+    "media_type": "movie",
+    "tmdb_id": 27205,
+    "title": "Inception",
+    "stratum": "Mainstream",
+    "selection_rationale": "Complex multi-layered narrative, high-budget sci-fi heist, Christopher Nolan auteur direction.",
+    "evaluation_notes": "Tests ability to retrieve cerebral, structure-heavy sci-fi over generic action/heist films."
+  },
+  {
+    "probe_id": "PB-02",
+    "media_type": "movie",
+    "tmdb_id": 155,
+    "title": "The Dark Knight",
+    "stratum": "Mainstream",
+    "selection_rationale": "Neo-noir crime drama within a comic book franchise, dense psychological antagonism.",
+    "evaluation_notes": "Tests tone and psychological conflict matching vs. superficial superhero action."
+  },
+  {
+    "probe_id": "PB-03",
+    "media_type": "movie",
+    "tmdb_id": 157336,
+    "title": "Interstellar",
+    "stratum": "Mainstream",
+    "selection_rationale": "Hard sci-fi, space exploration, intense familial emotional grief, relativistic physics.",
+    "evaluation_notes": "Tests scientific exploration themes intertwined with intimate human relationship dynamics."
+  },
+  {
+    "probe_id": "PB-04",
+    "media_type": "movie",
+    "tmdb_id": 603,
+    "title": "The Matrix",
+    "stratum": "Mainstream",
+    "selection_rationale": "Cyberpunk philosophical action, dystopian reality simulation, martial arts fusion.",
+    "evaluation_notes": "Tests philosophical sci-fi and simulated reality matching vs. standard gunplay/action."
+  },
+  {
+    "probe_id": "PB-05",
+    "media_type": "movie",
+    "tmdb_id": 329,
+    "title": "Jurassic Park",
+    "stratum": "Mainstream",
+    "selection_rationale": "Sci-fi adventure, creature horror, hubris of technological cloning, suspense thriller.",
+    "evaluation_notes": "Tests bio-ethical thriller and survival suspense matching vs. fantasy creature features."
+  },
+  {
+    "probe_id": "PB-06",
+    "media_type": "movie",
+    "tmdb_id": 98,
+    "title": "Gladiator",
+    "stratum": "Mainstream",
+    "selection_rationale": "Roman antiquity epic, revenge tragedy, honor and political betrayal.",
+    "evaluation_notes": "Tests historical revenge and swords-and-sandals epic matching vs. fantasy warfare."
+  },
+  {
+    "probe_id": "PB-07",
+    "media_type": "movie",
+    "tmdb_id": 120,
+    "title": "The Lord of the Rings: The Fellowship of the Ring",
+    "stratum": "Mainstream",
+    "selection_rationale": "High fantasy, mythic quest, extensive ensemble lore, Tolkien worldbuilding.",
+    "evaluation_notes": "Tests mythic quest and high fantasy narrative semantics vs. modern urban fantasy."
+  },
+  {
+    "probe_id": "PB-08",
+    "media_type": "movie",
+    "tmdb_id": 299536,
+    "title": "Avengers: Infinity War",
+    "stratum": "Mainstream",
+    "selection_rationale": "Large-scale ensemble crossover, apocalyptic stakes, cosmic villain perspective.",
+    "evaluation_notes": "Tests ensemble narrative and tragic cliffhanger resolution matching."
+  },
+  {
+    "probe_id": "PB-09",
+    "media_type": "movie",
+    "tmdb_id": 76341,
+    "title": "Mad Max: Fury Road",
+    "stratum": "Mainstream",
+    "selection_rationale": "Minimalist dialogue, relentless visual kinetic action, feminist wasteland survival.",
+    "evaluation_notes": "Tests kinetic pacing, vehicular combat, and post-apocalyptic narrative tone."
+  },
+  {
+    "probe_id": "PB-10",
+    "media_type": "movie",
+    "tmdb_id": 361743,
+    "title": "Top Gun: Maverick",
+    "stratum": "Mainstream",
+    "selection_rationale": "Aviation procedural, legacy sequel, mentorship, high-g aerial combat.",
+    "evaluation_notes": "Tests legacy sequel and military aviation drama matching."
+  },
+  {
+    "probe_id": "PB-11",
+    "media_type": "movie",
+    "tmdb_id": 496243,
+    "title": "Parasite",
+    "stratum": "International",
+    "selection_rationale": "South Korea: Social class satire, home infiltration, dark thriller, tragicomic shift.",
+    "evaluation_notes": "Tests dark socioeconomic satire and architectural suspense in non-English cinema."
+  },
+  {
+    "probe_id": "PB-12",
+    "media_type": "movie",
+    "tmdb_id": 129,
+    "title": "Spirited Away",
+    "stratum": "International",
+    "selection_rationale": "Japan (Anime): Mythological folklore, coming-of-age, surreal bathhouse spirits.",
+    "evaluation_notes": "Tests Shinto animism, liminal fantasy, and Studio Ghibli narrative resonance."
+  },
+  {
+    "probe_id": "PB-13",
+    "media_type": "movie",
+    "tmdb_id": 598,
+    "title": "City of God",
+    "stratum": "International",
+    "selection_rationale": "Brazil: Favela crime chronicle, multi-decade drug turf warfare, hyperkinetic editing.",
+    "evaluation_notes": "Tests realistic urban poverty crime docudrama matching across languages."
+  },
+  {
+    "probe_id": "PB-14",
+    "media_type": "movie",
+    "tmdb_id": 1417,
+    "title": "Pan's Labyrinth",
+    "stratum": "International",
+    "selection_rationale": "Spain: Post-Civil War fascist cruelty juxtaposed with dark subterranean fairy tale.",
+    "evaluation_notes": "Tests historical trauma intertwined with dark mythological escapism."
+  },
+  {
+    "probe_id": "PB-15",
+    "media_type": "movie",
+    "tmdb_id": 194,
+    "title": "Amélie",
+    "stratum": "International",
+    "selection_rationale": "France: Whimsical romantic comedy, poetic urban Paris, quirky observational vignettes.",
+    "evaluation_notes": "Tests stylized whimsical romanticism and idiosyncratic comedic tone."
+  },
+  {
+    "probe_id": "PB-16",
+    "media_type": "movie",
+    "tmdb_id": 582,
+    "title": "The Lives of Others",
+    "stratum": "International",
+    "selection_rationale": "Germany: East German Stasi surveillance, moral redemption, artistic empathy.",
+    "evaluation_notes": "Tests cold war espionage, voyeuristic intimacy, and moral awakening themes."
+  },
+  {
+    "probe_id": "PB-17",
+    "media_type": "movie",
+    "tmdb_id": 346,
+    "title": "Seven Samurai",
+    "stratum": "International",
+    "selection_rationale": "Japan: Feudal period jidaigeki, rural defense, tactical ensemble recruitment.",
+    "evaluation_notes": "Tests foundational archetypal team recruitment and sacrificial honor narratives."
+  },
+  {
+    "probe_id": "PB-18",
+    "media_type": "movie",
+    "tmdb_id": 11216,
+    "title": "Cinema Paradiso",
+    "stratum": "International",
+    "selection_rationale": "Italy: Nostalgic ode to film projection, childhood mentorship, lost love drama.",
+    "evaluation_notes": "Tests meta-cinematic romantic nostalgia and small-town Italian cultural identity."
+  },
+  {
+    "probe_id": "PB-19",
+    "media_type": "movie",
+    "tmdb_id": 670,
+    "title": "Oldboy",
+    "stratum": "International",
+    "selection_rationale": "South Korea: Extreme vengeance tragedy, psychological captivity, Greek incest motif.",
+    "evaluation_notes": "Tests extreme psychological horror, vengeance, and transgressive shock drama."
+  },
+  {
+    "probe_id": "PB-20",
+    "media_type": "movie",
+    "tmdb_id": 531428,
+    "title": "Portrait of a Lady on Fire",
+    "stratum": "International",
+    "selection_rationale": "France: Quiet 18th-century female romance, artistic gaze, solitary Brittany coast.",
+    "evaluation_notes": "Tests restrained historical queer romance, gaze dynamics, and sparse dialogue."
+  },
+  {
+    "probe_id": "PB-21",
+    "media_type": "movie",
+    "tmdb_id": 244786,
+    "title": "Whiplash",
+    "stratum": "Indie",
+    "selection_rationale": "Auteur jazz conservatory chamber drama, abusive pedagogical obsession, psychological duel.",
+    "evaluation_notes": "Tests intense psychological pressure and toxic artistic perfectionism."
+  },
+  {
+    "probe_id": "PB-22",
+    "media_type": "movie",
+    "tmdb_id": 152601,
+    "title": "Her",
+    "stratum": "Indie",
+    "selection_rationale": "Near-future melancholic sci-fi romance, AI consciousness connection, modern loneliness.",
+    "evaluation_notes": "Tests soft philosophical sci-fi and existential romantic alienation."
+  },
+  {
+    "probe_id": "PB-23",
+    "media_type": "movie",
+    "tmdb_id": 120467,
+    "title": "The Grand Budapest Hotel",
+    "stratum": "Indie",
+    "selection_rationale": "Wes Anderson aesthetic diorama, whimsical farce, interwar nostalgic melancholia.",
+    "evaluation_notes": "Tests highly stylized geometric framing, deadpan comedy, and elegiac nostalgia."
+  },
+  {
+    "probe_id": "PB-24",
+    "media_type": "movie",
+    "tmdb_id": 376867,
+    "title": "Moonlight",
+    "stratum": "Indie",
+    "selection_rationale": "Triptych coming-of-age drama, queer Black identity, vulnerability under masculine expectation.",
+    "evaluation_notes": "Tests poetic naturalistic drama, identity struggle, and lyrical pacing."
+  },
+  {
+    "probe_id": "PB-25",
+    "media_type": "movie",
+    "tmdb_id": 64690,
+    "title": "Drive",
+    "stratum": "Indie",
+    "selection_rationale": "Minimalist neo-noir, laconic stunt driver, violent synthwave Los Angeles underworld.",
+    "evaluation_notes": "Tests stylized silence, synthwave mood, and sudden explosive violence matching."
+  },
+  {
+    "probe_id": "PB-26",
+    "media_type": "movie",
+    "tmdb_id": 503919,
+    "title": "The Lighthouse",
+    "stratum": "Indie",
+    "selection_rationale": "1890s New England maritime folklore, psychological isolation, descent into madness.",
+    "evaluation_notes": "Tests folk horror, psychological isolation, and literary archaic prose."
+  },
+  {
+    "probe_id": "PB-27",
+    "media_type": "movie",
+    "tmdb_id": 334543,
+    "title": "Manchester by the Sea",
+    "stratum": "Indie",
+    "selection_rationale": "Unresolved tragic grief, Massachusetts coastal realism, guilt-ridden parenting trauma.",
+    "evaluation_notes": "Tests raw emotional realism and unhealed trauma over dramatic catharsis tropes."
+  },
+  {
+    "probe_id": "PB-28",
+    "media_type": "movie",
+    "tmdb_id": 264660,
+    "title": "Ex Machina",
+    "stratum": "Indie",
+    "selection_rationale": "Isolated mountain compound chamber piece, Turing test manipulation, AI deceptive intent.",
+    "evaluation_notes": "Tests intellectual chamber drama, claustrophobia, and AI ethics deception."
+  },
+  {
+    "probe_id": "PB-29",
+    "media_type": "movie",
+    "tmdb_id": 38,
+    "title": "Eternal Sunshine of the Spotless Mind",
+    "stratum": "Indie",
+    "selection_rationale": "Surreal romantic memory erasure, non-linear heartbreak, Charlie Kaufman script.",
+    "evaluation_notes": "Tests non-linear memory manipulation, surrealism, and tragicomic relationship deconstruction."
+  },
+  {
+    "probe_id": "PB-30",
+    "media_type": "movie",
+    "tmdb_id": 391713,
+    "title": "Lady Bird",
+    "stratum": "Indie",
+    "selection_rationale": "Sacramento coming-of-age, tumultuous mother-daughter bond, Catholic school transition.",
+    "evaluation_notes": "Tests observational teenage domestic realism and maternal conflict dynamics."
+  },
+  {
+    "probe_id": "PB-31",
+    "media_type": "tv",
+    "tmdb_id": 1396,
+    "title": "Breaking Bad",
+    "stratum": "Serialized TV",
+    "selection_rationale": "High school chemistry teacher cancer diagnosis, meth empire moral descent, crime tragedy.",
+    "evaluation_notes": "Tests serialized moral corruption arcs and high-stakes criminal tradecraft."
+  },
+  {
+    "probe_id": "PB-32",
+    "media_type": "tv",
+    "tmdb_id": 76331,
+    "title": "Succession",
+    "stratum": "Serialized TV",
+    "selection_rationale": "Media dynasty corporate warfare, Shakespearean sibling cruelty, emotional abuse satire.",
+    "evaluation_notes": "Tests corporate boardroom Machiavellian satire and dysfunctional wealth trauma."
+  },
+  {
+    "probe_id": "PB-33",
+    "media_type": "tv",
+    "tmdb_id": 60059,
+    "title": "Better Call Saul",
+    "stratum": "Serialized TV",
+    "selection_rationale": "Legal procedural tragedy, moral erosion of a public defender, con-artist relationship.",
+    "evaluation_notes": "Tests tragic character degeneration, legal procedural depth, and meticulous pacing."
+  },
+  {
+    "probe_id": "PB-34",
+    "media_type": "tv",
+    "tmdb_id": 70523,
+    "title": "Dark",
+    "stratum": "Serialized TV",
+    "selection_rationale": "Small German town missing children, multi-generational time loops, existential paradox.",
+    "evaluation_notes": "Tests complex non-linear time travel family webs and German-language sci-fi gloom."
+  },
+  {
+    "probe_id": "PB-35",
+    "media_type": "tv",
+    "tmdb_id": 1398,
+    "title": "The Sopranos",
+    "stratum": "Serialized TV",
+    "selection_rationale": "New Jersey mob boss in psychotherapy, suburban existential dread, panic attacks.",
+    "evaluation_notes": "Tests psychological mafia deconstruction and mundane suburban neurosis."
+  },
+  {
+    "probe_id": "PB-36",
+    "media_type": "tv",
+    "tmdb_id": 95396,
+    "title": "Severance",
+    "stratum": "Serialized TV",
+    "selection_rationale": "Dystopian corporate brain bifurcation, workplace alienation, surreal mystery box.",
+    "evaluation_notes": "Tests dystopian corporate satire, identity fracture, and retro-futuristic thriller tropes."
+  },
+  {
+    "probe_id": "PB-37",
+    "media_type": "tv",
+    "tmdb_id": 87108,
+    "title": "Chernobyl",
+    "stratum": "Serialized TV",
+    "selection_rationale": "Soviet nuclear disaster miniseries, bureaucratic deceit, radiation cleanup heroism.",
+    "evaluation_notes": "Tests historical industrial catastrophe, Soviet institutional failure, and docudrama tension."
+  },
+  {
+    "probe_id": "PB-38",
+    "media_type": "tv",
+    "tmdb_id": 60622,
+    "title": "Fargo",
+    "stratum": "Serialized TV",
+    "selection_rationale": "Midwestern polite noir anthology, quirky black comedy, banal evil vs. moral decency.",
+    "evaluation_notes": "Tests Coen-esque regional black comedy and violent suburban criminal blunders."
+  },
+  {
+    "probe_id": "PB-39",
+    "media_type": "tv",
+    "tmdb_id": 67070,
+    "title": "Fleabag",
+    "stratum": "Serialized TV",
+    "selection_rationale": "Meta-fourth-wall breaking London dark comedy, hypersexual deflection, unspoken grief.",
+    "evaluation_notes": "Tests direct address comedy masking deep guilt, grief, and intimate confession."
+  },
+  {
+    "probe_id": "PB-40",
+    "media_type": "tv",
+    "tmdb_id": 3297,
+    "title": "The Wire",
+    "stratum": "Serialized TV",
+    "selection_rationale": "Baltimore institutional sociology, police wiretaps, school system decay, drug trade web.",
+    "evaluation_notes": "Tests institutional sociopolitical realism and non-judgmental macro-systemic decay."
+  },
+  {
+    "probe_id": "PB-41",
+    "media_type": "movie",
+    "tmdb_id": 14337,
+    "title": "Primer",
+    "stratum": "Stress Cases",
+    "selection_rationale": "Ultra-complex non-linear time machine mechanics, jargon-heavy dialogue, micro-budget.",
+    "evaluation_notes": "Tests temporal mechanics comprehension vs. superficial sci-fi action confusion."
+  },
+  {
+    "probe_id": "PB-42",
+    "media_type": "movie",
+    "tmdb_id": 62,
+    "title": "2001: A Space Odyssey",
+    "stratum": "Stress Cases",
+    "selection_rationale": "Sparse dialogue, meditative visual pacing, philosophical AI and cosmic evolution mystery.",
+    "evaluation_notes": "Tests abstract non-verbal narrative mapping vs. standard sci-fi pulp action."
+  },
+  {
+    "probe_id": "PB-43",
+    "media_type": "movie",
+    "tmdb_id": 467244,
+    "title": "The Zone of Interest",
+    "stratum": "Stress Cases",
+    "selection_rationale": "Domestic mundane family life adjacent to Auschwitz wall, acoustic off-screen horror.",
+    "evaluation_notes": "Tests severe tonal dissonance (idyllic domesticity vs. genocide ambient audio)."
+  },
+  {
+    "probe_id": "PB-44",
+    "media_type": "movie",
+    "tmdb_id": 545611,
+    "title": "Everything Everywhere All at Once",
+    "stratum": "Stress Cases",
+    "selection_rationale": "Absurdist kung fu multiverse collision, hot dog fingers, existential tax audit drama.",
+    "evaluation_notes": "Tests multi-genre collision (absurd comedy + martial arts + immigrant family trauma)."
+  },
+  {
+    "probe_id": "PB-45",
+    "media_type": "tv",
+    "tmdb_id": 1920,
+    "title": "Twin Peaks: The Return",
+    "stratum": "Stress Cases",
+    "selection_rationale": "Avant-garde surrealist television, non-sequitur logic, terrifying cosmic dreamscapes.",
+    "evaluation_notes": "Tests David Lynch surrealism vs. conventional murder mystery police procedurals."
+  },
+  {
+    "probe_id": "PB-46",
+    "media_type": "movie",
+    "tmdb_id": 85350,
+    "title": "Samsara",
+    "stratum": "Stress Cases",
+    "selection_rationale": "Non-verbal visual essay, global humanity and industrial montage, zero dialogue.",
+    "evaluation_notes": "Tests semantic clustering without narrative plot lines, cast anchors, or dialogue text."
+  },
+  {
+    "probe_id": "PB-47",
+    "media_type": "movie",
+    "tmdb_id": 220289,
+    "title": "Coherence",
+    "stratum": "Stress Cases",
+    "selection_rationale": "Dinner party comet pass, branching quantum decoherence, improvised micro-budget.",
+    "evaluation_notes": "Tests quantum parallel reality chamber piece vs. conventional horror/slasher."
+  },
+  {
+    "probe_id": "PB-48",
+    "media_type": "tv",
+    "tmdb_id": 61222,
+    "title": "BoJack Horseman",
+    "stratum": "Stress Cases",
+    "selection_rationale": "Anthropomorphic animated animal satire evolving into severe existential clinical depression.",
+    "evaluation_notes": "Tests cartoon animation format vs. heavy psychological addiction/suicide drama."
+  },
+  {
+    "probe_id": "PB-49",
+    "media_type": "movie",
+    "tmdb_id": 97370,
+    "title": "Under the Skin",
+    "stratum": "Stress Cases",
+    "selection_rationale": "Alien predatory detachment in Glasgow, sensory Glasgow sound design, minimal speech.",
+    "evaluation_notes": "Tests alien body horror and sensory dread vs. conventional alien invasion tropes."
+  },
+  {
+    "probe_id": "PB-50",
+    "media_type": "movie",
+    "tmdb_id": 10494,
+    "title": "Perfect Blue",
+    "stratum": "Stress Cases",
+    "selection_rationale": "Psychological thriller anime, pop idol stalker, disorienting reality-fiction blurring.",
+    "evaluation_notes": "Tests animated medium vs. intense psychological Hitchcockian adult thriller themes."
+  }
+]

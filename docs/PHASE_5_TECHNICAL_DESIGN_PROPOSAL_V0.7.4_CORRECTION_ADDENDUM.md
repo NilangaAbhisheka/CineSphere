@@ -64,7 +64,7 @@
    - [8.2: Candidate Retrieval, Query Exclusion & Multi-Model Candidate Pooling](#82-candidate-retrieval-query-exclusion--multi-model-candidate-pooling)
    - [8.3: 4-Point Likert Scale Concrete Rubric & Fractional Aggregation](#83-4-point-likert-scale-concrete-rubric--fractional-aggregation)
    - [8.4: Inter-Rater Reliability (Weighted Cohen's Kappa) & Adjudication](#84-inter-rater-reliability-weighted-cohens-kappa--adjudication)
-   - [8.5: Mathematical Formulations: Recall@10, Macro Pooled Recall@10, MRR & ILD](#85-mathematical-formulations-recall10-macro-pooled-recall10-mrr--ild)
+   - [8.5: Mathematical Formulations: Recall@10, Macro Pooled Recall@10, MRR@10 & ILD](#85-mathematical-formulations-recall10-macro-pooled-recall10-mrr--ild)
    - [8.6: Stratified Bootstrap Resampling & 95% Confidence Intervals](#86-stratified-bootstrap-resampling--95-confidence-intervals)
    - [8.7: Hardware Profiling Methodology: Warmup, Latency & Thread Pinning](#87-hardware-profiling-methodology-warmup-latency--thread-pinning)
    - [8.8: Three Tiers of Reproducibility & Isolated Environment Manifests](#88-three-tiers-of-reproducibility--isolated-environment-manifests)
@@ -900,7 +900,7 @@ Consensus grade is the arithmetic mean: $g = (g_1 + g_2) / 2$. Candidates with $
 - Inter-rater agreement calculated via Linear-Weighted Cohen's Kappa: $\kappa_w \ge 0.70$.
 - Any candidate with $|g_1 - g_2| \ge 2$ is reviewed in a joint adjudication session with the project owner.
 
-### 8.5: Mathematical Formulations: Recall@10, Macro Pooled Recall@10, MRR & ILD
+### 8.5: Mathematical Formulations: Recall@10, Macro Pooled Recall@10, MRR@10 & ILD
 
 The evaluation uses four mathematically explicit metrics computed over the consensus relevance grades $g(c) = (g_1(c) + g_2(c)) / 2$:
 
@@ -910,16 +910,16 @@ $$\text{Recall@10}(q) = \frac{\big| \{ c \in \text{Top10}_{m, q} \mid g(c) \ge 1
 $$\text{MacroPooledRecall@10}_m = \frac{1}{|Q_\text{eval}|} \sum_{q \in Q_\text{eval}} \text{Recall@10}_m(q)$$
 where $\text{PooledRelevant}_q = \{ c \in \text{Pool}_q \mid g(c) \ge 1.5 \}$. If $|\text{PooledRelevant}_q| = 0$, the probe is excluded from the recall denominator to avoid division by zero.
 
-#### 2. Mean Reciprocal Rank (MRR)
-Measures how high in the ranked recommendation list the first relevant item appears:
-- **Relevance Threshold:** A candidate $c$ is defined as relevant if and only if its consensus grade meets the established threshold: $g(c) \ge 1.5$ (i.e. Grade 2 Substantively Relevant or Grade 3 Highly Relevant).
-- **First Relevant Rank ($\operatorname{rank}_q$):** Let $(c_1, c_2, \dots, c_K)$ be the model's top-$K$ candidates ($K = 10$) ordered by descending cosine similarity. The rank of the first relevant candidate is:
-  $$\operatorname{rank}_q = \min \big( \{ k \in \{1, 2, \dots, K\} \mid g(c_k) \ge 1.5 \} \cup \{ \infty \} \big)$$
-- **Reciprocal Rank ($RR(q)$):**
-  $$RR(q) = \begin{cases} \frac{1}{\operatorname{rank}_q}, & \text{if } \operatorname{rank}_q \le K \\[6pt] 0, & \text{if } \operatorname{rank}_q = \infty \text{ (no relevant candidate in top-}K\text{)} \end{cases}$$
-- **Mean Reciprocal Rank ($MRR_m$):** Computed across the full evaluation universe $Q_\text{eval}$ ($|Q_\text{eval}| = 50$):
-  $$MRR_m = \frac{1}{|Q_\text{eval}|} \sum_{q \in Q_\text{eval}} RR_m(q)$$
-- **Candidate Pool Governance:** Each model scores the identical blinded candidate pool $\text{Pool}_q$ using its own vector space. Probes where a model places zero relevant candidates in its top-10 are assigned $RR_m(q) = 0$.
+#### 2. Mean Reciprocal Rank at 10 (MRR@10)
+Because retrieval candidate evaluation is truncated to the top-10 ranked results, the metric is formally designated as **MRR@10** (not unqualified MRR):
+- **Relevance Threshold & Consensus Mechanics:** A candidate $c$ is defined as relevant if and only if its consensus grade meets the established threshold: $g(c) \ge 1.5$. Note that because the consensus grade is the arithmetic mean $g(c) = (g_1(c) + g_2(c)) / 2$, a score of $1.5$ does **not** imply that both evaluators assigned Grade 2 or Grade 3; it also naturally results when one evaluator assigns Grade 1 (Weakly Related) and the other assigns Grade 2 (Substantively Relevant), or when grades are 0 and 3. Any candidate satisfying $g(c) \ge 1.5$ qualifies as relevant.
+- **First Relevant Rank ($\operatorname{rank}_q$):** Let $(c_1, c_2, \dots, c_{10})$ be the model's top-10 candidates ordered by descending cosine similarity. The rank of the first relevant candidate within the top-10 is:
+  $$\operatorname{rank}_q = \min \big( \{ k \in \{1, 2, \dots, 10\} \mid g(c_k) \ge 1.5 \} \cup \{ \infty \} \big)$$
+- **Reciprocal Rank ($RR@10(q)$):**
+  $$RR@10(q) = \begin{cases} \frac{1}{\operatorname{rank}_q}, & \text{if } \operatorname{rank}_q \le 10 \\[6pt] 0, & \text{if } \operatorname{rank}_q = \infty \text{ (no relevant candidate in top-10)} \end{cases}$$
+- **Mean Reciprocal Rank at 10 ($MRR@10_m$):** Computed across the full evaluation universe $Q_\text{eval}$ ($|Q_\text{eval}| = 50$):
+  $$MRR@10_m = \frac{1}{|Q_\text{eval}|} \sum_{q \in Q_\text{eval}} RR@10_m(q)$$
+- **Candidate Pool Governance:** Each model scores the identical blinded candidate pool $\text{Pool}_q$ using its own vector space. Probes where a model places zero relevant candidates in its top-10 are assigned $RR@10_m(q) = 0$.
 
 #### 3. Intra-List Diversity (ILD)
 Measures the semantic dispersion among the top-10 recommended candidates to detect over-clustering and echo-chamber collapse:
@@ -934,12 +934,23 @@ Bootstrap resampling is **stratified**:
 4. Report empirical 95% Confidence Interval: $[\text{Quantile}_{0.025}(\theta^*), \text{Quantile}_{0.975}(\theta^*)]$.
 
 ### 8.7: Hardware Profiling Methodology: Warmup, Latency & Thread Pinning
-- **Warmup:** 5 warmup batches of 32 items.
+- **Warmup:** 5 warmup batches of 32 items (or single items for Model C).
 - **Repetitions:** 10 independent iterations over the 50 probes.
 - **Latency:** Monotonic timer `time.perf_counter_ns()` reporting p50, p95, p99 per query in ms.
-- **Throughput:** Items/sec across 1,000 items with batch size $B=32$.
-- **Thread Pinning:** Single-socket execution with `torch.set_num_threads(4)`.
-- **Memory Consumption:** Peak Resident Set Size (RSS in MB) via `psutil`.
+- **Throughput:** Items/sec across 1,000 items with batch size $B=32$ (Models A & B) and $B=1$ (Model C).
+- **Thread Pinning:** Single-socket CPU execution with `torch.set_num_threads(4)` for baseline models.
+- **Memory Consumption:** Peak Resident Set Size (RSS in MB) via `psutil` for CPU; peak allocated and reserved VRAM via `torch.cuda.max_memory_allocated()` for GPU.
+
+#### 8.7.1: Device-Specific Performance Reporting & Cross-Hardware Boundaries
+To maintain rigorous scientific validity, the evaluation methodology enforces strict separation between quality and performance comparisons:
+1. **Retrieval Quality Metrics (Recall@10, MRR@10, ILD):** Directly comparable across all candidate models because all models evaluate against the **identical common candidate pool** $\text{Pool}_q$ using adjudicated human consensus relevance labels.
+2. **Computational Performance Metrics (Throughput & Latency):** **Never directly comparable across different hardware devices.** Models A and B execute on host CPU (Intel Core i5-13420H), whereas Model C executes on host GPU (NVIDIA RTX 3050 6 GB). Performance reports must present throughput, latency, and resource utilization in separate, device-specific tables explicitly documenting:
+   - Device type (`CPU` vs `CUDA:0`)
+   - Execution precision (`FP32` vs `BF16`)
+   - Batch size ($B=32$ vs $B=1$)
+   - Context length ($L$)
+   - Execution environment (`.venv-baseline` vs `.venv-nemotron`)
+3. **No Cross-Device Speed Claims:** Under no circumstances may Model C on GPU be claimed as "faster" than Model A or B on CPU as an algorithmic advantage, nor may CPU execution of lightweight models be cited to disparage GPU throughput.
 
 ### 8.8: Three Tiers of Reproducibility & Environment Manifest
 To maintain scientific rigor without claiming unattainable bit-for-bit exactness across heterogeneous hardware:
@@ -1074,9 +1085,28 @@ To evaluate `nvidia/Nemotron-3.5-Embed-1B-BF16` alongside `all-MiniLM-L6-v2` and
 7. **CPU Fallback Analysis:** Loading Nemotron on CPU via PyTorch AVX2 consumes ~3.5 GB of system RAM (out of 16 GB), but single-item inference latency on an i5-13420H averages 1.5 to 2.5 seconds per document. Generating embeddings for a 2,000-item catalogue snapshot on CPU would require approximately **50 to 80 minutes** of sustained 100% CPU utilization, compared to **25 seconds** for MiniLM. CPU fallback is therefore classified as scientifically possible but operationally impractical.
 
 > [!CAUTION]
-> **Hardware Feasibility Verdict for Nemotron-3.5-Embed-1B on RTX 3050 (6 GB):**  
+> **Hardware Feasibility Classification for Nemotron-3.5-Embed-1B on RTX 3050 (6 GB):**  
 > **BORDERLINE / REQUIRES PREFLIGHT (STRICT BATCH-SIZE-1 INFERENCE ONLY; NVFP4 NOT USABLE ON AMPERE; CPU FALLBACK IMPRACTICAL)**  
-> Nemotron-3.5-Embed-1B-BF16 is technically loadable and executable on the user's RTX 3050 6 GB GPU only under strict constraints: batch size strictly restricted to $B = 1$, sequence length capped at 512 tokens, and running with SDPA on Windows native or within WSL2. The quantized NVFP4 variant cannot run on Ampere hardware.
+>
+> **Explicit Evidence & Feasibility Boundaries:**
+> 1. **Verified Hardware Facts (Host System):**
+>    - Host CPU: Intel Core i5-13420H (8 cores: 4P+4E, 12 threads).
+>    - Host System RAM: 16 GB DDR5.
+>    - Host GPU: NVIDIA GeForce RTX 3050 Laptop GPU (6.00 GB dedicated VRAM, Ampere architecture, Compute Capability 8.6).
+>    - Architectural Limitation: The RTX 3050 does **not** possess FP4 Tensor Cores (exclusive to Blackwell CC 10.0+). The `Nemotron-3.5-Embed-1B-NVFP4` checkpoint is verified as hardware-incompatible and disqualified from local evaluation.
+> 2. **Estimated Requirements (Theoretical & Published):**
+>    - Model Weights: ~3.10 GB in BF16 precision.
+>    - CUDA Context & Framework Base: ~0.40 GB.
+>    - Windows Desktop Window Manager (DWM) Overhead: ~0.60 GB – 1.20 GB.
+>    - Net Available VRAM for PyTorch: ~4.80 GB – 5.40 GB.
+>    - Peak Inference VRAM at $B=1$ (Length 512): Estimated at 3.85 GB – 4.50 GB (leaving ~0.90 GB – 1.50 GB headroom).
+>    - Peak Inference VRAM at $B \ge 4$: Estimated to exceed 5.80 GB, causing CUDA Out-of-Memory.
+> 3. **Untested Assumptions (Preflight Required):**
+>    - Model weights have **not** been downloaded to the host machine.
+>    - BF16 model loading has **not** been empirically executed on this PC.
+>    - Batch-size-1 inference latency and peak VRAM allocation have **not** been measured.
+>    - Native Windows SDPA (`scaled_dot_product_attention`) memory stability under extended inference has **not** been benchmarked.
+>    - Model C remains an unverified candidate until the safe 5-step preflight script (`ml/benchmark/preflight_nemotron.py`) is explicitly authorized and run.
 
 #### 8.10.3: Safe 5-Step Hardware Feasibility Preflight Protocol
 Before authorizing full Stage 5.0 candidate evaluation for Model C, the operator must execute the following isolated preflight script in `ml/benchmark/`:
@@ -1156,49 +1186,50 @@ if __name__ == "__main__":
 
 ### 8.11: Catalogue Fixture Preparation & Verification Protocol
 
-#### 8.11.1: Current Status & Gap Identification
-- **Current Repository Status:** `ml/benchmark/fixtures/catalogue_snapshot_v1.jsonl` **does not exist** in the repository.
-- **Specification Boundary:** A fixture preparation plan is distinct from an existing fixture. The benchmark cannot be executed until this pinned data acquisition procedure is formally run by the project owner or authorized runner.
+#### 8.11.1: Tripartite Canonical Text Serialization Taxonomy
+To prevent conflation between application runtime code, offline evaluation tooling, and future production designs, the proposal strictly distinguishes three serialization contexts:
+1. **Existing Application Serialization (Current Implementation Status):**  
+   Inspection of the repository confirms that `apps/api/src/tmdb/tmdb.mapper.ts` maps TMDB HTTP payloads into relational Prisma models (`Movie`, `TvShow`, `Genre`, `Keyword`, `Person`, `PersonCredit`). However, **no canonical text serializer is currently implemented in application code**. Neither NestJS nor `ml/` currently executes a function that concatenates multi-table metadata into an embedding string.
+2. **Stage 5.0 Benchmark Serialization (Evaluation Tooling):**  
+   A deterministic, benchmark-specific Python serializer implemented in `ml/benchmark/scripts/prepare_catalogue_fixture.py` for generating the evaluation dataset. It uses an explicit bracketed token format and enforces strict null-omission rules:
+   - *Movie Format:* `"[TITLE] {title} [ORIGINAL_TITLE] {originalTitle} [YEAR] {year} [GENRES] {genres} [DIRECTOR] {directors} [CAST] {topCast} [KEYWORDS] {keywords} [OVERVIEW] {overview} [TAGLINE] {tagline}"`
+   - *TV Show Format:* `"[TITLE] {name} [ORIGINAL_TITLE] {originalName} [FIRST_AIR_YEAR] {year} [GENRES] {genres} [CREATOR] {creators} [CAST] {topCast} [KEYWORDS] {keywords} [OVERVIEW] {overview} [TAGLINE] {tagline}"`
+   - *Strict Null/Omission Policy:* If any contributing metadata field is `NULL`, empty, or whitespace-only, its bracketed label and value are **completely omitted** from the string. Literal strings `"null"`, `"undefined"`, or empty tokens like `"[TAGLINE] "` are never emitted.
+   - *Non-Canonical Exclusions:* Scalar fields `popularity`, `voteAverage`, `voteCount`, `posterPath`, `backdropPath`, `status`, and `runtime` are excluded from the canonical text.
+3. **Future Production Serialization (Stage 5.1+ Design):**  
+   The eventual production recommendation engine will implement a dedicated canonical text serializer in NestJS (`CanonicalTextService` or `VectorRepository`), maintaining synchronized revision hashing and database trigger invalidation. This is **strictly specified for future phases and is not implemented today**.
 
-#### 8.11.2: Exact Reproducible Preparation Protocol
-The catalogue snapshot fixture must be created via a standalone, deterministic export script: `ml/benchmark/scripts/prepare_catalogue_fixture.py`.
-
-1. **Source of Catalogue Records:**
-   - Sourced from the CineSphere PostgreSQL database (or TMDB API daily exports) containing the top 2,000 tracked media items:
-     - 1,400 Movies (stratified across top popularity, award-winners, and diverse international genres).
-     - 600 TV Shows (multi-season serialized dramas, anthologies, comedies, and foreign-language series).
-   - In accordance with project non-goals and privacy invariants, the benchmark fixture contains **zero personal watch history, zero user ratings, and zero private notes**. All records are public domain metadata.
-2. **Deterministic Record Sorting & Deduplication:**
-   - Records must be sorted deterministically before output:
+#### 8.11.2: Deterministic Selection Algorithm & Authoritative Source
+1. **Authoritative Source:** The **CineSphere PostgreSQL database** (`movies` and `tv_shows` tables) is designated as the sole authoritative source for benchmark evaluation data. TMDB daily export dumps and the local database are **not** interchangeable.
+   - *Source Audit Finding:* Inspection of the local PostgreSQL instance indicates that the database currently contains 1,249 movies (925 synthetic test fixtures, 324 non-test records) and 2,174 TV shows (1,467 test fixtures, 707 non-test records), with **0 of the 50 predefined probes present**. Because the database cannot currently supply the required 1,400 movies and 50 probes, dataset generation is formally **blocked** until a real catalogue seeding step is performed. The preparation script must fail closed rather than silently switching sources.
+2. **Exact Selection & Reservation Algorithm:**
+   When the source catalogue is populated, the dataset preparation script executes the following deterministic 4-step algorithm:
+   - **Step 1 (Probe Reservation):** Query and reserve the **50 predefined evaluation probes** (`PB-01` to `PB-50`: 39 movies, 11 TV shows) from `ml/benchmark/fixtures/probes_v1.json` by matching `(media_type, tmdbId)`. If any probe is missing from the database, the script **fails closed and aborts immediately**. Probes must never be silently substituted.
+   - **Step 2 (Remaining Movie Selection):** From the remaining movies excluding the 39 reserved movie probes, select exactly **1,361 movies** where `overview IS NOT NULL AND length(overview) > 0` and title does not match integration test patterns, sorted deterministically by:
+     `ORDER BY popularity DESC NULLS LAST, "voteCount" DESC NULLS LAST, "releaseDate" DESC NULLS LAST, "tmdbId" ASC`
+   - **Step 3 (Remaining TV Show Selection):** From the remaining TV shows excluding the 11 reserved TV probes, select exactly **589 TV shows** where `overview IS NOT NULL AND length(overview) > 0` and name does not match integration test patterns, sorted deterministically by:
+     `ORDER BY popularity DESC NULLS LAST, "voteCount" DESC NULLS LAST, "firstAirDate" DESC NULLS LAST, "tmdbId" ASC`
+   - **Step 4 (Final Record Ordering):** Combine the 50 reserved probes and 1,950 selected titles (exact total: 2,000 records; exactly 1,400 movies and 600 TV shows). Sort the final fixture deterministically:
      `ORDER BY media_type ASC, tmdb_id ASC`
-   - Explicit deduplication on composite key `(media_type, tmdb_id)`.
-3. **Canonical Text Synthesis:**
-   - Canonical text strings for each item are serialized using the authoritative CineSphere canonical format:
-     - *Movie Format:* `"[TITLE] {title} [ORIGINAL_TITLE] {originalTitle} [YEAR] {year} [GENRES] {genres} [DIRECTOR] {directors} [CAST] {topCast} [KEYWORDS] {keywords} [OVERVIEW] {overview} [TAGLINE] {tagline}"`
-     - *TV Show Format:* `"[TITLE] {name} [ORIGINAL_TITLE] {originalName} [FIRST_AIR_YEAR] {year} [GENRES] {genres} [CREATOR] {creators} [CAST] {topCast} [KEYWORDS] {keywords} [OVERVIEW] {overview} [TAGLINE] {tagline}"`
-   - Missing fields are omitted cleanly without emitting `null` or `undefined` literals.
-4. **JSONL Schema Specification:**
-   Each line in `catalogue_snapshot_v1.jsonl` must conform strictly to the following UTF-8 JSON schema:
-   ```json
-   {
-     "media_type": "movie",
-     "tmdb_id": 27205,
-     "title": "Inception",
-     "original_title": "Inception",
-     "release_date": "2010-07-15",
-     "genres": ["Action", "Science Fiction", "Adventure"],
-     "directors": ["Christopher Nolan"],
-     "cast": ["Leonardo DiCaprio", "Joseph Gordon-Levitt", "Elliot Page", "Tom Hardy"],
-     "keywords": ["dream", "subconscious", "heist", "mind control"],
-     "overview": "Cobb, a skilled thief who commits corporate espionage by infiltrating the subconscious of his targets...",
-     "tagline": "Your mind is the scene of the crime.",
-     "canonical_text": "[TITLE] Inception [ORIGINAL_TITLE] Inception [YEAR] 2010 [GENRES] Action, Science Fiction, Adventure [DIRECTOR] Christopher Nolan [CAST] Leonardo DiCaprio, Joseph Gordon-Levitt, Elliot Page, Tom Hardy [KEYWORDS] dream, subconscious, heist, mind control [OVERVIEW] Cobb, a skilled thief... [TAGLINE] Your mind is the scene of the crime."
-   }
-   ```
-5. **Fixture Checksum Pinning & Verification:**
-   - Upon generation, compute the SHA-256 cryptographic digest of `catalogue_snapshot_v1.jsonl`:
-     `sha256sum ml/benchmark/fixtures/catalogue_snapshot_v1.jsonl > ml/benchmark/fixtures/catalogue_snapshot_v1.sha256`
-   - Any runner executing Stage 5.0 must verify `sha256sum --check catalogue_snapshot_v1.sha256` prior to running candidate embeddings. Any hash mismatch fails closed immediately.
+   - **Step 5 (Composite Identity Deduplication):** Enforce strict uniqueness on composite key `(media_type, tmdb_id)`. Duplicate identities abort generation.
+
+#### 8.11.3: Supporting Evaluation Artifacts Specification
+The evaluation package generates three coordinated artifacts under `ml/benchmark/fixtures/`:
+1. **`catalogue_snapshot_v1.jsonl`:** The primary evaluation fixture containing exactly 2,000 UTF-8 JSON lines (1,400 movies, 600 TV shows, including all 50 probes), with deterministic canonical text.
+2. **`catalogue_snapshot_v1.manifest.json`:** Machine-readable provenance manifest recording:
+   - `fixture_filename`: `"catalogue_snapshot_v1.jsonl"`
+   - `record_count`: `2000`
+   - `movie_count`: `1400`
+   - `tv_count`: `600`
+   - `probe_count`: `50`
+   - `sha256`: Cryptographic digest of `catalogue_snapshot_v1.jsonl`
+   - `source_identity`: `"CineSphere PostgreSQL (catalogue tables)"`
+   - `selection_algorithm_version`: `"1.0.0-deterministic"`
+   - `serialization_version`: `"1.0.0-bracketed-tokens"`
+   - `generated_at`: ISO 8601 timestamp
+3. **`probes_v1.json`:** Standalone probe definition artifact containing all 50 probes (`PB-01` to `PB-50`). To guarantee scientific integrity:
+   - Contains only probe identifiers, media types, TMDB IDs, titles, strata, selection rationales, and evaluation notes.
+   - **Strictly isolated from blinded candidate grading sheets:** No relevance labels, evaluator scores, or model identities are contained in this file or exposed to candidate retrieval scripts.
 
 ---
 
@@ -1207,7 +1238,7 @@ The catalogue snapshot fixture must be created via a standalone, deterministic e
 ### 9.1: Stage 5.0 Standalone Model Evaluation & Validation Scope
 Stage 5.0 is an **isolated scientific evaluation phase** scoped exclusively to `ml/benchmark/`.
 - **Authorized Activities upon Owner Approval:**
-  1. Initialize Python virtual environment in `ml/benchmark/.venv`.
+  1. Initialize isolated Python virtual environments in `ml/benchmark/.venv-baseline` (for Models A and B) and `ml/benchmark/.venv-nemotron` (for Model C).
   2. Install pinned dependencies from Section 8.8.
   3. Load pinned fixtures: `catalogue_snapshot_v1.jsonl` and 50 probes.
   4. Execute benchmark runs for Model A, Model B, and Model C (upon successful preflight).
@@ -2248,7 +2279,7 @@ The repository was audited to establish what is currently implemented versus wha
 | **Metadata Revision Tracking** | `metadata_revision` column & triggers | **REQUIRES FUTURE MIGRATION** | Proposed in Phase 5; columns do not exist in current schema; triggers not yet applied |
 | **Scalar Tagline & Status** | `movies.tagline`, `movies.status`, `tv_shows.tagline` | **REQUIRES FUTURE MIGRATION** | Required for canonical text invalidation; must be added in Phase 5 migration |
 | **Coordination Table & Cutover** | `embedding_coordination`, `execute_model_cutover` | **SPECIFIED FOR PHASE 5+** | Fully specified DDL and PL/pgSQL; not executed against database |
-| **Benchmark Suite & Probes** | `ml/tests/benchmark/` | **NOT EXECUTED** | 50-probe evaluation protocol mathematically specified; offline benchmark run not yet executed |
+| **Benchmark Suite & Probes** | `ml/benchmark/` | **NOT EXECUTED** | 50-probe evaluation protocol mathematically specified; offline benchmark run not yet executed |
 
 3. **Recommendation Engine LLM Independence:**
    - *Documentation Inspection:* `AGENTS.md` (Section 3.2) explicitly mandates that the recommendation scoring formula $\text{Score} = 0.35S + 0.25P + 0.20M + 0.10Q + 0.10N$ is completely independent of LLMs. Ollama is strictly an optional auxiliary enhancement.
@@ -2262,6 +2293,7 @@ The repository was audited to establish what is currently implemented versus wha
 1. **C6 Fail-Closed L2 Lock Acquisition:** `CORRECTED — SPECIFIED (trg_fn_acquire_coordination_share_lock and all coordination callers check FOUND; raise COORDINATION_LOCK_FAILED if singleton id=1 is missing)`
 2. **C6 All Media Catalogue DML Coordination:** `CORRECTED — SPECIFIED (statement triggers on movies and tv_shows cover BEFORE INSERT OR UPDATE OR DELETE, preventing v_total_elig drift during cutover; decoupled from BEFORE UPDATE revision bumps)`
 3. **C6 Transactional Privileged Maintenance Barrier:** `CORRECTED — EXECUTABLE PL/pgSQL & SESSION-BOUNDED (valid DO $$ blocks inside enclosing transaction; GET DIAGNOSTICS = ROW_COUNT requires exactly 3 leases on acquisition and release; session-local connection boundary defined; multi-connection pg_restore prohibited without cold maintenance window; tested against PostgreSQL 16)`
+4. **Stage 5.0 Benchmark Specification & MRR@10:** `CORRECTED — FULLY SPECIFIED (MRR@10 formulated with exact first-rank rank_q and consensus grade mechanics; tripartite serialization taxonomy defined; deterministic selection algorithm specified; 50 candidate probes enumerated; isolated environments .venv-baseline and .venv-nemotron reconciled; dataset generation blocked pending catalogue seeding)`
 4. **C6 TV Junction-Table Names:** `CORRECTED — REPOSITORY INSPECTED (unified _GenreToTvShow and _KeywordToTvShow across all DDL and inventories; column "B" media parent semantics confirmed)`
 5. **C4 Safe Watermark Parsing & Reconciliation:** `CORRECTED — SPECIFIED (raw string-to-jsonb exception wrapping; identical [2000-01-01, now+5m] date bounds; 1-based pagination consistency; status allowlist; atomic readback)`
 6. **Cross-Document Architecture Reconciliation:** `CORRECTED — RECONCILED (NestJS Prisma application runtime vs. Python psycopg2 offline batch execution aligned with ARCHITECTURE.md; implementation evidence matrix established)`
