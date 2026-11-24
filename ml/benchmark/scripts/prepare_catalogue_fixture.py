@@ -95,62 +95,120 @@ FORBIDDEN_TABLES = {
     "users",
 }
 
+# ---------------------------------------------------------------------------
+# Synthetic Integration-Test Exclusion Regex Patterns
+# ---------------------------------------------------------------------------
+# Prevents integration-test fixtures (from phase3/phase4 tests) from polluting
+# the Stage 5.0 benchmark catalogue. Validated against actual database records.
+# Designed to never exclude legitimate titles (e.g. 'The Lego Movie', 'The Daily Show').
+SYNTHETIC_MOVIE_EXCLUSION_PATTERN = (
+    r"^(Test|Integration|Detailed|Concurrent|Ingestion|On-Demand|Recent|Rollback|"
+    r"Ownership|Stats|CSV|Notes|Invalid Date|Import|Viewing Event|Duplicate)\s+.*Movie|"
+    r"Test\s+Movie|"
+    r"^E-[0-9]+[a-z]?\s+Movie|"
+    r"^\[E2E\]|"
+    r"^(Initial Title|Updated Title|Duplicate|Tagged Movie|Library Movie Excluded|"
+    r"Inception (Alpha|Beta|Null Popularity)|Interstellar Gamma)$"
+)
+
+SYNTHETIC_TV_EXCLUSION_PATTERN = (
+    r"^(Test|Integration|Detailed|Concurrent|Ingestion|On-Demand|Recent|Rollback|"
+    r"Ownership|Stats|CSV|CW|Import|Specials|Viewing Event|Duplicate)\s+.*(Show|Series|TV)|"
+    r"Test\s+(Show|Series)|"
+    r"^E-[0-9]+[a-z]?\s+(Show|Series|TV)|"
+    r"^\[E2E\]|^TV Hierarchy|"
+    r"^(Show Alpha|Show Beta|Show [A-Za-z0-9]+|TV Show [A-Za-z0-9]+|Completed Show|"
+    r"Fully Watched Show|Null WatchedAt Show|Tagged Show|TV Show Missing (Season|Episode)|"
+    r"Breaking Cosmos|Better Call Cosmos)$"
+)
+
 
 def serialize_canonical_text(
+    media_type: str,
     title: str,
-    year: int | None,
-    genres: list[str],
-    directors: list[str],
-    cast: list[str],
-    overview: str | None,
-    keywords: list[str],
+    original_title: str | None = None,
+    year: int | None = None,
+    genres: list[str] | None = None,
+    directors: list[str] | None = None,
+    creators: list[str] | None = None,
+    cast: list[str] | None = None,
+    keywords: list[str] | None = None,
+    overview: str | None = None,
+    tagline: str | None = None,
 ) -> str:
+    """Serializes metadata into benchmark canonical text format per Section 8.11.1.
+
+    Movie Format:
+    "[TITLE] {title} [ORIGINAL_TITLE] {originalTitle} [YEAR] {year} [GENRES] {genres}
+     [DIRECTOR] {directors} [CAST] {topCast} [KEYWORDS] {keywords}
+     [OVERVIEW] {overview} [TAGLINE] {tagline}"
+
+    TV Show Format:
+    "[TITLE] {name} [ORIGINAL_TITLE] {originalName} [FIRST_AIR_YEAR] {year} [GENRES] {genres}
+     [CREATOR] {creators} [CAST] {topCast} [KEYWORDS] {keywords}
+     [OVERVIEW] {overview} [TAGLINE] {tagline}"
+
+    Strict null/omission policy:
+    - If any field is NULL, empty, or whitespace-only, its bracketed label and value
+      are completely omitted from the output.
+    - No literal 'null', 'None', 'undefined', or empty tokens like '[TAGLINE] ' are emitted.
+    - Tokens are space-separated. Collection values are joined with ', '.
+
+    Schema limitations:
+    - person_credits does not store job/department, so directors and creators are empty.
+    - movies and tv_shows do not have a tagline column in the current schema.
+    - These unavailable fields naturally evaluate to omitted under the strict omission policy.
     """
-    Serializes metadata into benchmark canonical text format per Section 8.11.
+    media_upper = (media_type or "").strip().upper()
+    tokens: list[str] = []
 
-    Format:
-    Title: {title}
-    Year: {year}
-    Genres: {genre1, genre2}
-    Directors: {name1, name2}
-    Cast: {name1, name2, ...}
-    Overview: {overview}
-    Keywords: {kw1, kw2}
+    def _add_token(label: str, val: str | None) -> None:
+        if val is not None:
+            clean_val = val.strip()
+            if clean_val:
+                tokens.append(f"[{label}] {clean_val}")
 
-    Strict null/empty omission policy:
-    If a field is null, empty string, or empty list, its entire line is omitted.
-    No placeholders like 'None' or 'N/A' are emitted.
-    """
-    lines: list[str] = []
+    def _add_list_token(label: str, items: list[str] | None) -> None:
+        if items:
+            clean_items = [item.strip() for item in items if item and item.strip()]
+            if clean_items:
+                tokens.append(f"[{label}] {', '.join(clean_items)}")
 
-    clean_title = (title or "").strip()
-    if clean_title:
-        lines.append(f"Title: {clean_title}")
+    # 1. Title
+    _add_token("TITLE", title)
 
+    # 2. Original Title / Original Name
+    _add_token("ORIGINAL_TITLE", original_title)
+
+    # 3. Year
     if year is not None:
-        lines.append(f"Year: {year}")
+        if media_upper == "TV":
+            tokens.append(f"[FIRST_AIR_YEAR] {year}")
+        else:
+            tokens.append(f"[YEAR] {year}")
 
-    clean_genres = [g.strip() for g in genres if g and g.strip()]
-    if clean_genres:
-        lines.append(f"Genres: {', '.join(clean_genres)}")
+    # 4. Genres
+    _add_list_token("GENRES", genres)
 
-    clean_directors = [d.strip() for d in directors if d and d.strip()]
-    if clean_directors:
-        lines.append(f"Directors: {', '.join(clean_directors)}")
+    # 5. Director / Creator
+    if media_upper == "TV":
+        _add_list_token("CREATOR", creators)
+    else:
+        _add_list_token("DIRECTOR", directors)
 
-    clean_cast = [c.strip() for c in cast if c and c.strip()]
-    if clean_cast:
-        lines.append(f"Cast: {', '.join(clean_cast)}")
+    # 6. Cast
+    _add_list_token("CAST", cast)
 
-    clean_overview = (overview or "").strip()
-    if clean_overview:
-        lines.append(f"Overview: {clean_overview}")
+    # 7. Keywords
+    _add_list_token("KEYWORDS", keywords)
 
-    clean_keywords = [k.strip() for k in keywords if k and k.strip()]
-    if clean_keywords:
-        lines.append(f"Keywords: {', '.join(clean_keywords)}")
+    # 8. Overview
+    _add_token("OVERVIEW", overview)
 
-    return "\n".join(lines)
+    # 9. Tagline
+    _add_token("TAGLINE", tagline)
+
+    return " ".join(tokens)
 
 
 def validate_probes(probes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int, int]:
@@ -298,36 +356,41 @@ def verify_database_readiness(
     conn: Any,
     probes: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """
-    Performs data sufficiency and probe presence verification against PostgreSQL.
+    """Performs data sufficiency and probe presence verification against PostgreSQL.
+
+    Excludes synthetic integration-test fixtures from counts.
     Returns audit statistics dictionary or raises fail-closed exceptions.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        # 1. Check movie count with non-empty overview
+        # 1. Check movie count with non-empty overview excluding synthetic records
         cur.execute(
             """
             SELECT
                 COUNT(*) as total_movies,
                 COUNT(*) FILTER (
-                WHERE overview IS NOT NULL AND TRIM(overview) != ''
-            ) as movies_with_overview
+                    WHERE overview IS NOT NULL AND TRIM(overview) != ''
+                      AND title !~* %s
+                ) as movies_with_overview
             FROM movies;
-            """
+            """,
+            (SYNTHETIC_MOVIE_EXCLUSION_PATTERN,),
         )
         movie_stats = cur.fetchone()
         total_movies = movie_stats["total_movies"]
         movies_with_overview = movie_stats["movies_with_overview"]
 
-        # 2. Check TV show count with non-empty overview
+        # 2. Check TV show count with non-empty overview excluding synthetic records
         cur.execute(
             """
             SELECT
                 COUNT(*) as total_tv_shows,
                 COUNT(*) FILTER (
-                WHERE overview IS NOT NULL AND TRIM(overview) != ''
-            ) as tv_shows_with_overview
+                    WHERE overview IS NOT NULL AND TRIM(overview) != ''
+                      AND name !~* %s
+                ) as tv_shows_with_overview
             FROM tv_shows;
-            """
+            """,
+            (SYNTHETIC_TV_EXCLUSION_PATTERN,),
         )
         tv_stats = cur.fetchone()
         total_tv_shows = tv_stats["total_tv_shows"]
@@ -388,7 +451,14 @@ def fetch_full_metadata(
     tv_tmdb_ids: list[int],
     probes_map: dict[tuple[str, int], dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Fetches full metadata, genres, keywords, and credits for selected items."""
+    """Fetches full metadata, genres, keywords, and credits for selected items.
+
+    Deterministic cast selection:
+    Selects up to 5 cast members ordered by (p.name ASC, p.tmdbId ASC) inside the
+    subquery before applying LIMIT 5, and aggregates them preserving that order.
+    Note: The current person_credits schema does not store TMDB billing order or
+    job/department columns; directors and creators are unresolvable and omitted.
+    """
     records: list[dict[str, Any]] = []
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -400,6 +470,7 @@ def fetch_full_metadata(
                     m.id,
                     m."tmdbId",
                     m.title,
+                    m."originalTitle",
                     m.overview,
                     m."releaseDate",
                     m.popularity,
@@ -420,14 +491,15 @@ def fetch_full_metadata(
                         ARRAY[]::varchar[]
                     ) as keywords,
                     COALESCE(
-                        (SELECT array_agg(p.name ORDER BY p.name)
+                        (SELECT array_agg(sub.name ORDER BY sub.name ASC, sub."tmdbId" ASC)
                          FROM (
-                             SELECT DISTINCT p.name
+                             SELECT p.name, p."tmdbId"
                              FROM person_credits pc
                              JOIN persons p ON pc."personId" = p.id
                              WHERE pc."movieId" = m.id
+                             ORDER BY p.name ASC, p."tmdbId" ASC
                              LIMIT 5
-                         ) p),
+                         ) sub),
                         ARRAY[]::varchar[]
                     ) as cast
                 FROM movies m
@@ -442,16 +514,20 @@ def fetch_full_metadata(
                 genres = list(row["genres"]) if row.get("genres") else []
                 keywords = list(row["keywords"]) if row.get("keywords") else []
                 cast = list(row["cast"]) if row.get("cast") else []
-                directors: list[str] = []  # person_credits does not store job/department
+                directors: list[str] = []  # Schema limitation: person_credits lacks job info
 
                 canonical_text = serialize_canonical_text(
+                    media_type="MOVIE",
                     title=row["title"],
+                    original_title=row.get("originalTitle"),
                     year=year,
                     genres=genres,
                     directors=directors,
+                    creators=[],
                     cast=cast,
-                    overview=row["overview"],
+                    overview=row.get("overview"),
                     keywords=keywords,
+                    tagline=None,
                 )
 
                 records.append(
@@ -459,15 +535,16 @@ def fetch_full_metadata(
                         "media_type": "MOVIE",
                         "tmdb_id": tmdb_id,
                         "title": row["title"],
+                        "original_title": row.get("originalTitle"),
                         "year": year,
                         "genres": genres,
                         "directors": directors,
                         "cast": cast,
-                        "overview": row["overview"],
+                        "overview": row.get("overview"),
                         "keywords": keywords,
-                        "popularity": row["popularity"],
-                        "vote_average": row["voteAverage"],
-                        "vote_count": row["voteCount"],
+                        "popularity": row.get("popularity"),
+                        "vote_average": row.get("voteAverage"),
+                        "vote_count": row.get("voteCount"),
                         "canonical_text": canonical_text,
                         "is_probe": probe_info is not None,
                         "probe_id": probe_info["probe_id"] if probe_info else None,
@@ -483,6 +560,7 @@ def fetch_full_metadata(
                     t.id,
                     t."tmdbId",
                     t.name as title,
+                    t."originalName",
                     t.overview,
                     t."firstAirDate",
                     t.popularity,
@@ -503,14 +581,15 @@ def fetch_full_metadata(
                         ARRAY[]::varchar[]
                     ) as keywords,
                     COALESCE(
-                        (SELECT array_agg(p.name ORDER BY p.name)
+                        (SELECT array_agg(sub.name ORDER BY sub.name ASC, sub."tmdbId" ASC)
                          FROM (
-                             SELECT DISTINCT p.name
+                             SELECT p.name, p."tmdbId"
                              FROM person_credits pc
                              JOIN persons p ON pc."personId" = p.id
                              WHERE pc."tvShowId" = t.id
+                             ORDER BY p.name ASC, p."tmdbId" ASC
                              LIMIT 5
-                         ) p),
+                         ) sub),
                         ARRAY[]::varchar[]
                     ) as cast
                 FROM tv_shows t
@@ -525,16 +604,20 @@ def fetch_full_metadata(
                 genres = list(row["genres"]) if row.get("genres") else []
                 keywords = list(row["keywords"]) if row.get("keywords") else []
                 cast = list(row["cast"]) if row.get("cast") else []
-                directors: list[str] = []
+                creators: list[str] = []  # Schema limitation: person_credits lacks job info
 
                 canonical_text = serialize_canonical_text(
+                    media_type="TV",
                     title=row["title"],
+                    original_title=row.get("originalName"),
                     year=year,
                     genres=genres,
-                    directors=directors,
+                    directors=[],
+                    creators=creators,
                     cast=cast,
-                    overview=row["overview"],
+                    overview=row.get("overview"),
                     keywords=keywords,
+                    tagline=None,
                 )
 
                 records.append(
@@ -542,15 +625,16 @@ def fetch_full_metadata(
                         "media_type": "TV",
                         "tmdb_id": tmdb_id,
                         "title": row["title"],
+                        "original_title": row.get("originalName"),
                         "year": year,
                         "genres": genres,
-                        "directors": directors,
+                        "creators": creators,
                         "cast": cast,
-                        "overview": row["overview"],
+                        "overview": row.get("overview"),
                         "keywords": keywords,
-                        "popularity": row["popularity"],
-                        "vote_average": row["voteAverage"],
-                        "vote_count": row["voteCount"],
+                        "popularity": row.get("popularity"),
+                        "vote_average": row.get("voteAverage"),
+                        "vote_count": row.get("voteCount"),
                         "canonical_text": canonical_text,
                         "is_probe": probe_info is not None,
                         "probe_id": probe_info["probe_id"] if probe_info else None,
@@ -561,14 +645,93 @@ def fetch_full_metadata(
     return records
 
 
+def create_readonly_connection(db_url: str) -> Any:
+    """Establishes a PostgreSQL connection with session-level read-only enforcement.
+
+    Sets:
+    - conn.set_session(readonly=True, autocommit=True)
+    - SET default_transaction_read_only = on
+    Guarantees that write attempts (INSERT, UPDATE, DELETE, DDL) fail immediately
+    with ReadOnlySqlTransaction at the database engine level.
+    """
+    if psycopg2 is None:
+        raise ImportError("psycopg2 is not installed. Please install psycopg2-binary.")
+    clean_db_url = db_url.split("?schema=")[0] if "?schema=" in db_url else db_url
+    conn = psycopg2.connect(clean_db_url)
+    conn.set_session(readonly=True, autocommit=True)
+    with conn.cursor() as cur:
+        cur.execute("SET default_transaction_read_only = on;")
+    return conn
+
+
+def publish_artifacts(artifacts: list[tuple[Path, Path]]) -> None:
+    """Publishes temporary artifacts to final destinations with rollback support.
+
+    For each (tmp_path, final_path) pair:
+    1. Verifies all tmp_paths exist before beginning publication.
+    2. Creates backups of existing final_paths (.old).
+    3. Moves tmp_paths to final_paths.
+    4. If any replacement fails, restores backups and removes remaining tmp_paths.
+    5. On complete success, unlinks the backup files.
+
+    Note: Filesystems (POSIX/NTFS) do not provide multi-file transactional atomicity
+    across distinct renames. This implementation provides staged two-phase replacement
+    with backup and rollback to prevent split-state publication.
+    """
+    backups: list[tuple[Path, Path]] = []
+    replaced: list[tuple[Path, Path]] = []
+
+    try:
+        # Phase 1: Verify all tmp files exist
+        for tmp_path, _ in artifacts:
+            if not tmp_path.exists():
+                raise FileNotFoundError(f"Temporary artifact {tmp_path} does not exist.")
+
+        # Phase 2: Back up existing target files
+        for _, final_path in artifacts:
+            if final_path.exists():
+                bak_path = final_path.with_name(final_path.name + ".old")
+                if bak_path.exists():
+                    bak_path.unlink()
+                final_path.replace(bak_path)
+                backups.append((bak_path, final_path))
+
+        # Phase 3: Move tmp files to final destinations
+        for tmp_path, final_path in artifacts:
+            tmp_path.replace(final_path)
+            replaced.append((tmp_path, final_path))
+
+        # Phase 4: Clean up backups on complete success
+        for bak_path, _ in backups:
+            if bak_path.exists():
+                bak_path.unlink()
+
+    except Exception as e:
+        # Rollback: restore any replaced files from backups
+        for bak_path, final_path in backups:
+            try:
+                if bak_path.exists():
+                    bak_path.replace(final_path)
+            except Exception:
+                pass
+        # Clean up any leftover temporary files
+        for tmp_path, _ in artifacts:
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except Exception:
+                pass
+        raise RuntimeError(f"Artifact publication failed and was rolled back: {e}") from e
+
+
 def prepare_catalogue_snapshot(
     db_url: str,
     probes_file: Path,
     output_dir: Path,
     verify_only: bool = False,
 ) -> int:
-    """
-    Main orchestration routine.
+    """Main orchestration routine.
+
     Returns 0 on success, 1 on fail-closed stop conditions or errors.
     """
     if psycopg2 is None:
@@ -617,11 +780,7 @@ def prepare_catalogue_snapshot(
     # 2. Connect to Database (Read-Only)
     conn = None
     try:
-        clean_db_url = db_url.split("?schema=")[0] if "?schema=" in db_url else db_url
-        conn = psycopg2.connect(clean_db_url)
-        conn.set_session(readonly=True, autocommit=True)
-        with conn.cursor() as cur:
-            cur.execute("SET TRANSACTION READ ONLY;")
+        conn = create_readonly_connection(db_url)
         print("[OK] Connected to PostgreSQL in strict READ-ONLY mode.")
     except Exception as e:
         print(f"[FAIL] Database connection failed: {e}", file=sys.stderr)
@@ -710,13 +869,14 @@ def prepare_catalogue_snapshot(
         print("\n--- Executing Deterministic Candidate Selection ---")
 
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Additional Movies
+            # Additional Movies (excluding probes and synthetic test records)
             cur.execute(
                 """
                 SELECT "tmdbId"
                 FROM movies
                 WHERE overview IS NOT NULL AND TRIM(overview) != ''
                   AND NOT ("tmdbId" = ANY(%s))
+                  AND title !~* %s
                 ORDER BY
                     popularity DESC NULLS LAST,
                     "voteCount" DESC NULLS LAST,
@@ -724,17 +884,22 @@ def prepare_catalogue_snapshot(
                     "tmdbId" ASC
                 LIMIT %s;
                 """,
-                (probe_movie_ids, additional_movies_needed),
+                (
+                    probe_movie_ids,
+                    SYNTHETIC_MOVIE_EXCLUSION_PATTERN,
+                    additional_movies_needed,
+                ),
             )
             selected_additional_movie_ids = [row["tmdbId"] for row in cur.fetchall()]
 
-            # Additional TV Shows
+            # Additional TV Shows (excluding probes and synthetic test records)
             cur.execute(
                 """
                 SELECT "tmdbId"
                 FROM tv_shows
                 WHERE overview IS NOT NULL AND TRIM(overview) != ''
                   AND NOT ("tmdbId" = ANY(%s))
+                  AND name !~* %s
                 ORDER BY
                     popularity DESC NULLS LAST,
                     "voteCount" DESC NULLS LAST,
@@ -742,7 +907,11 @@ def prepare_catalogue_snapshot(
                     "tmdbId" ASC
                 LIMIT %s;
                 """,
-                (probe_tv_ids, additional_tv_needed),
+                (
+                    probe_tv_ids,
+                    SYNTHETIC_TV_EXCLUSION_PATTERN,
+                    additional_tv_needed,
+                ),
             )
             selected_additional_tv_ids = [row["tmdbId"] for row in cur.fetchall()]
 
@@ -805,7 +974,7 @@ def prepare_catalogue_snapshot(
         # 6. Final Deterministic Sort: ORDER BY media_type ASC, tmdb_id ASC
         records.sort(key=lambda r: (r["media_type"], r["tmdb_id"]))
 
-        # 7. Write Output Files Atomically (via .tmp files to avoid leaving partial artifacts)
+        # 7. Write Output Files via Staged Publication with Rollback Support
         output_dir.mkdir(parents=True, exist_ok=True)
         jsonl_path = output_dir / "catalogue_snapshot_v1.jsonl"
         sha256_path = output_dir / "catalogue_snapshot_v1.sha256"
@@ -832,13 +1001,16 @@ def prepare_catalogue_snapshot(
                 f.write(f"{digest}  catalogue_snapshot_v1.jsonl\n")
 
             manifest = {
-                "dataset_version": "v1.0.0",
-                "snapshot_filename": "catalogue_snapshot_v1.jsonl",
-                "sha256": digest,
-                "total_records": len(records),
-                "movie_records": len([r for r in records if r["media_type"] == "MOVIE"]),
-                "tv_show_records": len([r for r in records if r["media_type"] == "TV"]),
+                "fixture_filename": "catalogue_snapshot_v1.jsonl",
+                "record_count": len(records),
+                "movie_count": len([r for r in records if r["media_type"] == "MOVIE"]),
+                "tv_count": len([r for r in records if r["media_type"] == "TV"]),
                 "probe_count": len([r for r in records if r["is_probe"]]),
+                "sha256": digest,
+                "source_identity": "CineSphere PostgreSQL (catalogue tables)",
+                "selection_algorithm_version": "1.0.0-deterministic",
+                "serialization_version": "1.0.0-bracketed-tokens",
+                "generated_at": datetime.now(UTC).isoformat(),
                 "probes_by_stratum": {
                     stratum: len([r for r in records if r.get("stratum") == stratum])
                     for stratum in sorted(ALLOWED_STRATA)
@@ -857,22 +1029,26 @@ def prepare_catalogue_snapshot(
                         "tmdbId ASC",
                     ],
                     "final_sort_order": ["media_type ASC", "tmdb_id ASC"],
+                    "synthetic_movie_exclusion_applied": True,
+                    "synthetic_tv_exclusion_applied": True,
                 },
-                "created_at": datetime.now(UTC).isoformat(),
-                "generated_by": "ml/benchmark/scripts/prepare_catalogue_fixture.py",
             }
 
             with open(tmp_manifest, "w", encoding="utf-8", newline="\n") as f:
                 json.dump(manifest, f, indent=2, ensure_ascii=False)
 
-            # Atomic replace
-            tmp_jsonl.replace(jsonl_path)
-            tmp_sha256.replace(sha256_path)
-            tmp_manifest.replace(manifest_path)
+            # Staged publication with backup and rollback
+            publish_artifacts(
+                [
+                    (tmp_jsonl, jsonl_path),
+                    (tmp_sha256, sha256_path),
+                    (tmp_manifest, manifest_path),
+                ]
+            )
 
-            print(f"[OK] Atomically published {jsonl_path}")
-            print(f"[OK] Atomically published {sha256_path}")
-            print(f"[OK] Atomically published {manifest_path}")
+            print(f"[OK] Published {jsonl_path}")
+            print(f"[OK] Published {sha256_path}")
+            print(f"[OK] Published {manifest_path}")
 
             print("\n" + "=" * 80)
             print("STAGE 5.0 BENCHMARK DATASET PREPARATION COMPLETED SUCCESSFULLY")

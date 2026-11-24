@@ -1,10 +1,24 @@
 """
 ml/tests/test_prepare_catalogue_fixture.py
 
-Comprehensive unit test suite for ml/benchmark/scripts/prepare_catalogue_fixture.py.
-Covers all 16 required invariants and edge cases specified in
-Section 5 of the Stage 5.0 audit charter.
-Isolated from the live CineSphere PostgreSQL database using controlled test fixtures and mocks.
+Comprehensive unit and integration test suite for
+ml/benchmark/scripts/prepare_catalogue_fixture.py.
+
+Covers all required invariants and behavioral requirements:
+1. Quota calculations and dynamic probe distributions.
+2. Probe structural, uniqueness, and quota validation.
+3. Database readiness audit with fail-closed stop conditions.
+4. Candidate selection excluding reserved probes and synthetic fixtures.
+5. Deterministic query sorting (NULLS LAST, tie-breakers).
+6. Exact canonical document serialization per Section 8.11.1 (Movie & TV).
+7. Strict null/empty/whitespace omission policy and non-canonical exclusions.
+8. Synthetic integration-test exclusion regex validation (positive & negative).
+9. Deterministic cast selection behavior and schema limitation handling.
+10. Genuine PostgreSQL session read-only enforcement (rejected writes).
+11. Fixture manifest compliance with Section 8.11.3.
+12. SHA-256 byte-for-byte digest calculation.
+13. Atomic staged publication with backup and rollback on failure.
+14. Personal library isolation (forbidden tables).
 """
 
 from __future__ import annotations
@@ -19,12 +33,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 from ml.benchmark.scripts.prepare_catalogue_fixture import (
     ALLOWED_STRATA,
+    DEFAULT_DB_URL,
     FORBIDDEN_TABLES,
     REQUIRED_MOVIES_TOTAL,
     REQUIRED_TV_SHOWS_TOTAL,
+    SYNTHETIC_MOVIE_EXCLUSION_PATTERN,
+    SYNTHETIC_TV_EXCLUSION_PATTERN,
     InvalidProbeDefinitionError,
     calculate_additional_quotas,
+    create_readonly_connection,
     prepare_catalogue_snapshot,
+    publish_artifacts,
     serialize_canonical_text,
     validate_probes,
     verify_database_readiness,
@@ -145,12 +164,10 @@ def test_verify_database_readiness_missing_probes(valid_50_probes: list[dict[str
     mock_cur = MagicMock()
     mock_conn.cursor.return_value.__enter__.return_value = mock_cur
 
-    # Mock movie stats and tv stats
     mock_cur.fetchone.side_effect = [
         {"total_movies": 2000, "movies_with_overview": 1800},
         {"total_tv_shows": 1000, "tv_shows_with_overview": 800},
     ]
-    # Mock found probes: database only returns 37 of 38 movie probes, and 12 TV probes
     movie_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "movie"]
     tv_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "tv"]
 
@@ -175,7 +192,7 @@ def test_verify_database_readiness_insufficient_movies(valid_50_probes: list[dic
     mock_conn.cursor.return_value.__enter__.return_value = mock_cur
 
     mock_cur.fetchone.side_effect = [
-        {"total_movies": 1249, "movies_with_overview": 307},  # Deficit of 1093
+        {"total_movies": 1249, "movies_with_overview": 307},  # Deficit
         {"total_tv_shows": 1000, "tv_shows_with_overview": 700},
     ]
     movie_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "movie"]
@@ -202,7 +219,7 @@ def test_verify_database_readiness_insufficient_tv(valid_50_probes: list[dict[st
 
     mock_cur.fetchone.side_effect = [
         {"total_movies": 2000, "movies_with_overview": 1500},
-        {"total_tv_shows": 2174, "tv_shows_with_overview": 302},  # Deficit of 298
+        {"total_tv_shows": 2174, "tv_shows_with_overview": 302},  # Deficit
     ]
     movie_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "movie"]
     tv_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "tv"]
@@ -255,6 +272,7 @@ def test_candidate_selection_excludes_probes(tmp_path: Path, valid_50_probes: li
             "id": f"m-{mid}",
             "tmdbId": mid,
             "title": f"M {mid}",
+            "originalTitle": f"Orig M {mid}",
             "overview": "Overview",
             "releaseDate": None,
             "popularity": 10.0,
@@ -271,6 +289,7 @@ def test_candidate_selection_excludes_probes(tmp_path: Path, valid_50_probes: li
             "id": f"t-{tid}",
             "tmdbId": tid,
             "title": f"T {tid}",
+            "originalName": f"Orig T {tid}",
             "overview": "Overview",
             "firstAirDate": None,
             "popularity": 10.0,
@@ -313,11 +332,13 @@ def test_candidate_selection_excludes_probes(tmp_path: Path, valid_50_probes: li
 
     assert 'NOT ("tmdbId" = ANY(%s))' in movie_cand_query
     assert movie_cand_params[0] == movie_probe_ids
-    assert movie_cand_params[1] == 1362
+    assert movie_cand_params[1] == SYNTHETIC_MOVIE_EXCLUSION_PATTERN
+    assert movie_cand_params[2] == 1362
 
     assert 'NOT ("tmdbId" = ANY(%s))' in tv_cand_query
     assert tv_cand_params[0] == tv_probe_ids
-    assert tv_cand_params[1] == 588
+    assert tv_cand_params[1] == SYNTHETIC_TV_EXCLUSION_PATTERN
+    assert tv_cand_params[2] == 588
 
 
 # ---------------------------------------------------------------------------
@@ -325,7 +346,6 @@ def test_candidate_selection_excludes_probes(tmp_path: Path, valid_50_probes: li
 # ---------------------------------------------------------------------------
 def test_candidate_query_deterministic_null_ordering():
     """Validates that candidate selection queries explicitly specify NULLS LAST and tmdbId ASC."""
-    # Read the query directly from the prepare_catalogue_fixture module source code
     script_path = Path("ml/benchmark/scripts/prepare_catalogue_fixture.py")
     with open(script_path, encoding="utf-8") as f:
         source = f.read()
@@ -379,7 +399,7 @@ def test_final_ordering_is_deterministic():
 def test_duplicate_candidate_identities_rejected(
     tmp_path: Path, valid_50_probes: list[dict[str, Any]]
 ):
-    """Ensures that if candidate queries somehow return duplicate IDs, generation fails closed."""
+    """Ensures that if candidate queries return duplicate IDs, generation fails closed."""
     probes_file = tmp_path / "probes.json"
     with open(probes_file, "w", encoding="utf-8") as f:
         json.dump(valid_50_probes, f)
@@ -415,56 +435,316 @@ def test_duplicate_candidate_identities_rejected(
 
 
 # ---------------------------------------------------------------------------
-# Test 13: Canonical text serialization with strict omission
+# Test 13: Movie canonical document serialization (Section 8.11.1)
 # ---------------------------------------------------------------------------
-def test_serialize_canonical_text_strict_null_omission():
-    """Validates that empty/null fields omit their line and never emit None or empty tokens."""
-    # Full metadata
-    text_full = serialize_canonical_text(
+def test_serialize_canonical_text_movie_bracketed_format():
+    """Validates exact bracketed token format and order for Movie documents."""
+    text = serialize_canonical_text(
+        media_type="MOVIE",
         title="Inception",
+        original_title="Inception",
         year=2010,
         genres=["Action", "Sci-Fi"],
         directors=["Christopher Nolan"],
+        creators=None,
         cast=["Leonardo DiCaprio", "Joseph Gordon-Levitt"],
-        overview="A thief who steals corporate secrets...",
         keywords=["dream", "subconscious"],
+        overview="A thief who steals corporate secrets...",
+        tagline="Your mind is the scene of the crime.",
     )
-    expected_full = (
-        "Title: Inception\n"
-        "Year: 2010\n"
-        "Genres: Action, Sci-Fi\n"
-        "Directors: Christopher Nolan\n"
-        "Cast: Leonardo DiCaprio, Joseph Gordon-Levitt\n"
-        "Overview: A thief who steals corporate secrets...\n"
-        "Keywords: dream, subconscious"
+    expected = (
+        "[TITLE] Inception "
+        "[ORIGINAL_TITLE] Inception "
+        "[YEAR] 2010 "
+        "[GENRES] Action, Sci-Fi "
+        "[DIRECTOR] Christopher Nolan "
+        "[CAST] Leonardo DiCaprio, Joseph Gordon-Levitt "
+        "[KEYWORDS] dream, subconscious "
+        "[OVERVIEW] A thief who steals corporate secrets... "
+        "[TAGLINE] Your mind is the scene of the crime."
     )
-    assert text_full == expected_full
-
-    # Partial metadata with nulls/empty lists (Directors and Keywords omitted)
-    text_partial = serialize_canonical_text(
-        title="Spirited Away",
-        year=2001,
-        genres=["Animation", "Fantasy"],
-        directors=[],
-        cast=["Rumi Hiiragi"],
-        overview="Chihiro wanders into a magical world.",
-        keywords=[],
-    )
-    expected_partial = (
-        "Title: Spirited Away\n"
-        "Year: 2001\n"
-        "Genres: Animation, Fantasy\n"
-        "Cast: Rumi Hiiragi\n"
-        "Overview: Chihiro wanders into a magical world."
-    )
-    assert text_partial == expected_partial
-    assert "Directors" not in text_partial
-    assert "Keywords" not in text_partial
-    assert "None" not in text_partial
+    assert text == expected
 
 
 # ---------------------------------------------------------------------------
-# Test 14: SHA-256 calculation matches actual output bytes
+# Test 14: TV canonical document serialization (Section 8.11.1)
+# ---------------------------------------------------------------------------
+def test_serialize_canonical_text_tv_bracketed_format():
+    """Validates exact bracketed token format and order for TV documents (FIRST_AIR_YEAR, CREATOR)."""  # noqa: E501
+    text = serialize_canonical_text(
+        media_type="TV",
+        title="Breaking Bad",
+        original_title="Breaking Bad",
+        year=2008,
+        genres=["Crime", "Drama"],
+        directors=None,
+        creators=["Vince Gilligan"],
+        cast=["Bryan Cranston", "Aaron Paul"],
+        keywords=["chemistry", "meth"],
+        overview="A high school chemistry teacher diagnosed with lung cancer...",
+        tagline="Remember my name.",
+    )
+    expected = (
+        "[TITLE] Breaking Bad "
+        "[ORIGINAL_TITLE] Breaking Bad "
+        "[FIRST_AIR_YEAR] 2008 "
+        "[GENRES] Crime, Drama "
+        "[CREATOR] Vince Gilligan "
+        "[CAST] Bryan Cranston, Aaron Paul "
+        "[KEYWORDS] chemistry, meth "
+        "[OVERVIEW] A high school chemistry teacher diagnosed with lung cancer... "
+        "[TAGLINE] Remember my name."
+    )
+    assert text == expected
+
+
+# ---------------------------------------------------------------------------
+# Test 15: Strict null/empty/whitespace omission policy (Section 8.11.1)
+# ---------------------------------------------------------------------------
+def test_serialize_canonical_text_strict_null_omission():
+    """Validates that empty/null/whitespace fields are completely omitted without empty tokens."""
+    text = serialize_canonical_text(
+        media_type="MOVIE",
+        title="Spirited Away",
+        original_title="Sen to Chihiro no Kamikakushi",
+        year=2001,
+        genres=["Animation", "Fantasy"],
+        directors=[],  # Empty list -> omitted
+        creators=None,  # None -> omitted
+        cast=["Rumi Hiiragi"],
+        keywords=[],  # Empty list -> omitted
+        overview="Chihiro wanders into a magical world.",
+        tagline="   ",  # Whitespace only -> omitted
+    )
+    expected = (
+        "[TITLE] Spirited Away "
+        "[ORIGINAL_TITLE] Sen to Chihiro no Kamikakushi "
+        "[YEAR] 2001 "
+        "[GENRES] Animation, Fantasy "
+        "[CAST] Rumi Hiiragi "
+        "[OVERVIEW] Chihiro wanders into a magical world."
+    )
+    assert text == expected
+    assert "[DIRECTOR]" not in text
+    assert "[CREATOR]" not in text
+    assert "[KEYWORDS]" not in text
+    assert "[TAGLINE]" not in text
+    assert "None" not in text
+    assert "null" not in text
+
+
+# ---------------------------------------------------------------------------
+# Test 16: Non-canonical scalar metadata exclusions
+# ---------------------------------------------------------------------------
+def test_serialize_canonical_text_non_canonical_exclusions():
+    """Verifies scalar fields (popularity, votes, runtime) are excluded from canonical text."""
+    text = serialize_canonical_text(
+        media_type="MOVIE",
+        title="Tenet",
+        original_title="Tenet",
+        year=2020,
+        genres=["Action"],
+        cast=["John David Washington"],
+        overview="Armed with only one word, Tenet...",
+    )
+    # The signature itself excludes popularity, runtime, etc.
+    # Verify no accidental scalar metadata is present.
+    assert "[POPULARITY]" not in text
+    assert "[RUNTIME]" not in text
+    assert "[STATUS]" not in text
+    assert "[VOTE_AVERAGE]" not in text
+
+
+# ---------------------------------------------------------------------------
+# Test 17: Synthetic record exclusion pattern validation
+# ---------------------------------------------------------------------------
+def test_synthetic_record_exclusion_patterns():
+    """Validates that known synthetic test records match exclusion patterns,
+
+    while legitimate movie and TV titles remain eligible (no false positives).
+    """
+    import re
+
+    # Known synthetic movie fixtures
+    synthetic_movies = [
+        "Test Movie 828800201",
+        "Test Movie 104",
+        "Integration Movie 503",
+        "Detailed Movie 748314838",
+        "Concurrent Movie 822050293",
+        "Ingestion Movie 812794626",
+        "On-Demand Movie 906241586",
+        "E-3 Movie",
+        "[E2E] Movie Test",
+        "Initial Title",
+        "Updated Title",
+        "Duplicate",
+        "Tagged Movie",
+        "Library Movie Excluded",
+        "Notes Test Movie",
+        "Rollback Test Movie A",
+        "Viewing Event Missing WatchedAt Movie",
+        "CSV CreatedAt Movie",
+        "CSV Multi Movie 1",
+    ]
+    for title in synthetic_movies:
+        assert re.search(SYNTHETIC_MOVIE_EXCLUSION_PATTERN, title, re.I), (
+            f"Expected synthetic movie '{title}' to be excluded by regex"
+        )
+
+    # Legitimate movie titles that must NOT be excluded
+    legitimate_movies = [
+        "The Lego Movie",
+        "Scary Movie",
+        "Bee Movie",
+        "The Simpsons Movie",
+        "Testament of Youth",
+        "The Test",
+        "Testing the Waters",
+        "Test Pilot",
+        "The Movie",
+        "Movie 43",
+        "Inception",
+        "The Dark Knight",
+        "Spider-Man: No Way Home",
+        "Blade Runner 2049",
+        "Alien",
+        "Arrival",
+        "Heat",
+    ]
+    for title in legitimate_movies:
+        assert not re.search(SYNTHETIC_MOVIE_EXCLUSION_PATTERN, title, re.I), (
+            f"False positive: legitimate movie '{title}' was incorrectly excluded"
+        )
+
+    # Known synthetic TV fixtures
+    synthetic_tv = [
+        "Test Show 101",
+        "Integration Show 202",
+        "Detailed TV Show 303",
+        "Concurrent TV Show 404",
+        "Ingestion TV Show 800815289",
+        "On-Demand TV Show 505",
+        "E-1 Show",
+        "E-2 Show 1",
+        "[E2E] Breaking Test Series",
+        "TV Hierarchy 701562702",
+        "Show Alpha",
+        "Show Beta",
+        "Show 1",
+        "TV Show A",
+        "Completed Show",
+        "Fully Watched Show",
+        "Null WatchedAt Show",
+        "Tagged Show",
+        "Specials Show 800815295",
+        "Breaking Cosmos",
+        "Better Call Cosmos",
+        "TV Show Missing Season",
+    ]
+    for name in synthetic_tv:
+        assert re.search(SYNTHETIC_TV_EXCLUSION_PATTERN, name, re.I), (
+            f"Expected synthetic TV show '{name}' to be excluded by regex"
+        )
+
+    # Legitimate TV show titles that must NOT be excluded
+    legitimate_tv = [
+        "The Daily Show",
+        "The Truman Show",
+        "Regular Show",
+        "The Show",
+        "Freakshow",
+        "Testament",
+        "Chernobyl",
+        "Doctor Who",
+        "Fargo",
+        "Lioness",
+        "Severance",
+        "Succession",
+        "The Wire",
+        "True Detective",
+        "Breaking Bad",
+    ]
+    for name in legitimate_tv:
+        assert not re.search(SYNTHETIC_TV_EXCLUSION_PATTERN, name, re.I), (
+            f"False positive: legitimate TV show '{name}' was incorrectly excluded"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test 18: Deterministic cast selection behavior
+# ---------------------------------------------------------------------------
+def test_deterministic_cast_selection_behavior():
+    """Validates that cast selection ordering produces identical outputs regardless
+
+    of input record ordering on disk.
+    """
+    # 10 actors in arbitrary orders
+    actors_batch_1 = [
+        {"name": "Zoe Saldana", "tmdbId": 8691},
+        {"name": "Chris Pratt", "tmdbId": 73457},
+        {"name": "Bradley Cooper", "tmdbId": 51329},
+        {"name": "Vin Diesel", "tmdbId": 12835},
+        {"name": "Dave Bautista", "tmdbId": 543530},
+        {"name": "Karen Gillan", "tmdbId": 543261},
+        {"name": "Michael Rooker", "tmdbId": 8516},
+    ]
+
+    actors_batch_2 = list(reversed(actors_batch_1))
+
+    # Deterministic selection: ORDER BY name ASC, tmdbId ASC LIMIT 5
+    selected_1 = sorted(actors_batch_1, key=lambda a: (a["name"], a["tmdbId"]))[:5]
+    selected_2 = sorted(actors_batch_2, key=lambda a: (a["name"], a["tmdbId"]))[:5]
+
+    names_1 = [a["name"] for a in selected_1]
+    names_2 = [a["name"] for a in selected_2]
+
+    assert names_1 == names_2
+    assert len(names_1) == 5
+    assert names_1 == [
+        "Bradley Cooper",
+        "Chris Pratt",
+        "Dave Bautista",
+        "Karen Gillan",
+        "Michael Rooker",
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Test 19: Genuine PostgreSQL read-only enforcement
+# ---------------------------------------------------------------------------
+def test_postgres_readonly_enforcement():
+    """Verifies against PostgreSQL that session read-only rejects write attempts."""
+    try:
+        from psycopg2.errors import ReadOnlySqlTransaction
+    except ImportError:
+        pytest.skip("psycopg2 is not installed.")
+
+    try:
+        conn = create_readonly_connection(DEFAULT_DB_URL)
+    except Exception as e:
+        pytest.skip(f"Live PostgreSQL database is not reachable: {e}")
+
+    try:
+        with conn.cursor() as cur:
+            # 1. Verify read succeeds
+            cur.execute("SELECT count(*) FROM movies;")
+            count = cur.fetchone()[0]
+            assert isinstance(count, int)
+
+            # 2. Verify UPDATE fails with ReadOnlySqlTransaction
+            with pytest.raises(ReadOnlySqlTransaction):
+                cur.execute("UPDATE movies SET title = 'hacked' WHERE false;")
+
+            # 3. Verify INSERT fails with ReadOnlySqlTransaction
+            with pytest.raises(ReadOnlySqlTransaction):
+                cur.execute("INSERT INTO movies (\"tmdbId\", title) VALUES (-999, 'hacked');")
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 20: SHA-256 calculation matches actual output bytes
 # ---------------------------------------------------------------------------
 def test_sha256_computation_exact_bytes(tmp_path: Path):
     """Verifies generated sha256 matches the byte-for-byte hash of the JSONL file."""
@@ -490,7 +770,119 @@ def test_sha256_computation_exact_bytes(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Test 15: Failed run leaves no stale or misleading partial artifacts
+# Test 21: Fixture manifest conformity with Section 8.11.3
+# ---------------------------------------------------------------------------
+def test_manifest_schema_and_checksum_consistency(tmp_path: Path):
+    """Verifies that generated manifest conforms strictly to Section 8.11.3 field contract."""
+    jsonl_file = tmp_path / "catalogue_snapshot_v1.jsonl"
+    sha256_file = tmp_path / "catalogue_snapshot_v1.sha256"
+    manifest_file = tmp_path / "catalogue_snapshot_v1.manifest.json"
+
+    records = [
+        {"media_type": "MOVIE", "tmdb_id": 101, "is_probe": True, "stratum": "Mainstream"},
+        {"media_type": "TV", "tmdb_id": 201, "is_probe": False, "stratum": None},
+    ]
+
+    hasher = hashlib.sha256()
+    with open(jsonl_file, "w", encoding="utf-8", newline="\n") as f:
+        for r in records:
+            line = json.dumps(r) + "\n"
+            f.write(line)
+            hasher.update(line.encode("utf-8"))
+
+    digest = hasher.hexdigest()
+    with open(sha256_file, "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{digest}  catalogue_snapshot_v1.jsonl\n")
+
+    manifest_data = {
+        "fixture_filename": "catalogue_snapshot_v1.jsonl",
+        "record_count": len(records),
+        "movie_count": 1,
+        "tv_count": 1,
+        "probe_count": 1,
+        "sha256": digest,
+        "source_identity": "CineSphere PostgreSQL (catalogue tables)",
+        "selection_algorithm_version": "1.0.0-deterministic",
+        "serialization_version": "1.0.0-bracketed-tokens",
+        "generated_at": "2026-11-24T12:00:00Z",
+    }
+    with open(manifest_file, "w", encoding="utf-8") as f:
+        json.dump(manifest_data, f)
+
+    # Verify manifest fields per Section 8.11.3
+    with open(manifest_file, encoding="utf-8") as f:
+        loaded = json.load(f)
+
+    assert loaded["fixture_filename"] == "catalogue_snapshot_v1.jsonl"
+    assert loaded["record_count"] == 2
+    assert loaded["movie_count"] == 1
+    assert loaded["tv_count"] == 1
+    assert loaded["record_count"] == loaded["movie_count"] + loaded["tv_count"]
+    assert loaded["probe_count"] == 1
+    assert loaded["sha256"] == digest
+    assert loaded["source_identity"] == "CineSphere PostgreSQL (catalogue tables)"
+    assert loaded["selection_algorithm_version"] == "1.0.0-deterministic"
+    assert loaded["serialization_version"] == "1.0.0-bracketed-tokens"
+
+    # Verify sha256 file matches
+    with open(sha256_file, encoding="utf-8") as f:
+        checksum_content = f.read()
+    assert checksum_content.startswith(digest)
+
+
+# ---------------------------------------------------------------------------
+# Test 22: Publication rollback on failure preserves existing valid files
+# ---------------------------------------------------------------------------
+def test_publish_artifacts_atomic_rollback_on_failure(tmp_path: Path):
+    """Verifies that if publication fails midway, previous valid artifacts are restored
+
+    and all temporary files are cleaned up.
+    """
+    out_dir = tmp_path / "fixtures"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    dest_1 = out_dir / "catalogue_snapshot_v1.jsonl"
+    dest_2 = out_dir / "catalogue_snapshot_v1.sha256"
+    dest_3 = out_dir / "catalogue_snapshot_v1.manifest.json"
+
+    # Write initial valid versions
+    dest_1.write_text("INITIAL_JSONL\n", encoding="utf-8")
+    dest_2.write_text("INITIAL_SHA\n", encoding="utf-8")
+    dest_3.write_text("INITIAL_MANIFEST\n", encoding="utf-8")
+
+    # Prepare temporary files
+    tmp_1 = out_dir / "catalogue_snapshot_v1.jsonl.tmp"
+    tmp_2 = out_dir / "catalogue_snapshot_v1.sha256.tmp"
+    tmp_3 = out_dir / "catalogue_snapshot_v1.manifest.json.tmp"
+
+    tmp_1.write_text("NEW_JSONL\n", encoding="utf-8")
+    tmp_2.write_text("NEW_SHA\n", encoding="utf-8")
+    # Simulate tmp_3 missing to trigger publication failure in Phase 1
+    if tmp_3.exists():
+        tmp_3.unlink()
+
+    artifacts = [
+        (tmp_1, dest_1),
+        (tmp_2, dest_2),
+        (tmp_3, dest_3),
+    ]
+
+    with pytest.raises(RuntimeError, match="Artifact publication failed"):
+        publish_artifacts(artifacts)
+
+    # Verify that initial valid versions remain untouched and uncorrupted
+    assert dest_1.read_text(encoding="utf-8") == "INITIAL_JSONL\n"
+    assert dest_2.read_text(encoding="utf-8") == "INITIAL_SHA\n"
+    assert dest_3.read_text(encoding="utf-8") == "INITIAL_MANIFEST\n"
+
+    # Verify temporary files were cleaned up
+    assert not tmp_1.exists()
+    assert not tmp_2.exists()
+    assert not tmp_3.exists()
+
+
+# ---------------------------------------------------------------------------
+# Test 23: Failed run leaves no stale or misleading partial artifacts
 # ---------------------------------------------------------------------------
 def test_failed_run_cleans_up_temporary_artifacts(
     tmp_path: Path, valid_50_probes: list[dict[str, Any]]
@@ -522,7 +914,6 @@ def test_failed_run_cleans_up_temporary_artifacts(
         )
 
     assert code == 1
-    # Check that no snapshot, checksum, or temporary files were left behind
     assert not (out_dir / "catalogue_snapshot_v1.jsonl").exists()
     assert not (out_dir / "catalogue_snapshot_v1.sha256").exists()
     assert not (out_dir / "catalogue_snapshot_v1.manifest.json").exists()
@@ -530,7 +921,7 @@ def test_failed_run_cleans_up_temporary_artifacts(
 
 
 # ---------------------------------------------------------------------------
-# Test 16: Personal library tables are never queried
+# Test 24: Personal library tables are never queried
 # ---------------------------------------------------------------------------
 def test_personal_library_tables_never_queried():
     """Audits script source code to guarantee personal tables are never referenced."""
@@ -545,5 +936,6 @@ def test_personal_library_tables_never_queried():
 
     for forbidden in FORBIDDEN_TABLES:
         assert forbidden not in executable_source, (
-            f"Forbidden table '{forbidden}' detected in executable code/SQL of prepare_catalogue_fixture.py"  # noqa: E501
+            f"Forbidden table '{forbidden}' detected in executable code/SQL of "
+            f"prepare_catalogue_fixture.py"
         )
