@@ -1,8 +1,8 @@
 # CineSphere — Project Plan
 
-**Status:** Phase 4 Complete (100% Finished) — Next: Phase 5 (Recommendation Engine Foundation)  
-**Last Updated:** 2026-11-18  
-**Version:** 1.4
+**Status:** Phase 4 Complete; Phase 5 Stage 5.0 Benchmark Preparation Tooling Complete & Verified (Catalogue Seeding Pending Authorization)<br>
+**Last Updated:** 2026-11-24<br>
+**Version:** 1.5
 
 ---
 
@@ -275,7 +275,7 @@ The following are explicitly outside the scope of this project and should not be
 | 2     | Catalogue and TMDB Integration   | TMDB client, catalogue schema, search and discover API and UI                                            | **Complete** |
 | 3     | Personal Library and Tracking    | Library schema, CRUD API, frontend My Library & detail modal, Dashboard (/ route), Statistics Foundation | **Complete** |
 | 4     | Statistics and Import/Export     | Statistics API and live UI (4.1–4.3 ✓), JSON/CSV data import (4.4 ✓), JSON/CSV data export (4.5 ✓)       | **Complete** |
-| 5     | Recommendation Engine Foundation | Embeddings, similarity, preference signals, baseline scoring, recommendation storage                     | Planned      |
+| 5     | Recommendation Engine Foundation | Benchmark evaluation (5.0 tooling complete; seeding pending); baseline scoring, recommendation storage   | Planned      |
 | 6     | Recommendation Intelligence      | Diversity modes, feedback, evaluation, Taste Profile, Taste Evolution                                    | Planned      |
 | 7     | Local LLM Integration            | Ollama client, conversational discovery, LLM-enhanced taste profile                                      | Planned      |
 | 8     | Movie Universe                   | HDBSCAN clustering, UMAP coordinates, PixiJS visualization                                               | Planned      |
@@ -312,7 +312,8 @@ Phase 10 (Deployment) ← depends on Phase 9
 | M3        | TMDB search and catalogue browsing working              | 2     | **Complete** |
 | M4        | Library tracking working for movies and TV              | 3     | **Complete** |
 | M4.5      | Personal viewing statistics and data import/export live | 4     | **Complete** |
-| M5        | First recommendation results generated                  | 5     | Planned      |
+| M5.0      | Candidate embedding model benchmark pipeline & tooling  | 5     | **Complete** |
+| M5.1      | First recommendation results generated                  | 5     | Planned      |
 | M6        | Movie Universe renders with real embedding data         | 8     | Planned      |
 | M7        | Full test suite passing                                 | 9     | In Progress  |
 | M8        | Hosted portfolio deployment live                        | 10    | Planned      |

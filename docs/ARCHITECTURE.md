@@ -1,10 +1,10 @@
 # CineSphere — System Architecture
 
-**Status:** Active / Implemented Baseline (Phases 1, 2, 3, and 4.1–4.4 Verified)  
-**Last Updated:** 2026-11-18  
-**Version:** 1.3
+**Status:** Active / Implemented Baseline (Phases 1–4 Complete; Phase 5 Stage 5.0 Benchmark Preparation Tooling Verified)<br>
+**Last Updated:** 2026-11-24<br>
+**Version:** 1.5
 
-> This document describes the CineSphere system architecture. The foundation (Phase 1), catalogue and TMDB integration (Phase 2), personal library & tracking system (Phase 3 Stages 3.0–3.8), and personal statistics & data import (Phase 4 Stages 4.1–4.4) are fully implemented and verified with automated test suites. Personal data export (Stage 4.5), recommendation intelligence, ML pipelines, and the Movie Universe visualization remain design specifications.
+> This document describes the CineSphere system architecture. The foundation (Phase 1), catalogue and TMDB integration (Phase 2), personal library & tracking system (Phase 3 Stages 3.0–3.8), personal statistics & data import/export (Phase 4 Stages 4.1–4.5), and candidate embedding benchmark preparation tooling (Phase 5 Stage 5.0) are fully implemented and verified with automated test suites. Production recommendation engine implementation (Stage 5.1), recommendation intelligence, and the Movie Universe visualization remain design specifications.
 
 ---
 
@@ -147,24 +147,26 @@ flowchart TD
 - Media types: `MovieDetails`, `TvShowDetails`, `SeasonDetails`, `EpisodeDetails`, `Genre`, `PersonCredit`.
 - TMDB types: search results, trending/popular responses, pagination contracts.
 - Health and vector diagnostic types.
-- Health and vector diagnostic types.
 
 **`packages/config/`:** Shared ESLint, Prettier, and TypeScript configurations ensuring strict type checking and consistent formatting across the monorepo.
 
 ---
 
-### 2.4 Python ML Package — `ml/` [Scaffolding Implemented, Algorithms Planned for Phase 5+]
+### 2.4 Python ML Package — `ml/` [Tooling Implemented, Algorithms Planned for Phase 5+]
 
 **Technology:** Python 3.12, Pytest, Ruff (active); Sentence Transformers, scikit-learn, HDBSCAN, UMAP-learn (planned)
 
-**Active Baseline:**
+**Active Baseline & Implemented Tooling:**
 
-- Python virtual environment with `pyproject.toml` packaging.
-- Ruff linting and formatting configured and clean.
-- Pytest suite configured with baseline test suite (4/4 passing).
+- Python virtual environment with `pyproject.toml` packaging and dependency groups (`ci`, `dev`, `ml`).
+- Ruff linting and formatting configured and clean across `ml/`.
+- Predefined Evaluation Probes (`ml/benchmark/fixtures/probes_v1.json`): 50 probes across 5 strata (38 movies, 12 TV shows) with verified canonical TMDB IDs and PB-45 approved alias handling.
+- Catalogue Fixture Extraction Pipeline (`ml/benchmark/scripts/prepare_catalogue_fixture.py`): bracketed canonical text serialization, deterministic cast ordering, synthetic-title regex filtering, read-only session enforcement, staged artifact publication with atomic rollback, and probe identity validation (`matches_probe_identity()`, `APPROVED_PROBE_ALIASES`, `ProbeIdentityMismatchError`).
+- Pytest suite configured with 48 automated unit and integration tests passing in `ml/tests/` (including disposable PostgreSQL integration tests for metadata queries, POSIX regex execution, and probe identity validation).
 
 **Planned ML Responsibilities (Phase 5+):**
 
+- Candidate Embedding Model Benchmark Execution (Stage 5.0): evaluate MiniLM, MPNet, and Nemotron across the 50 probes to select the model and resolve TD-08.
 - Generate semantic embeddings for catalogue items using Sentence Transformers.
 - Compute cosine similarity and precompute nearest-neighbour relationships.
 - Run HDBSCAN clustering on high-dimensional embedding space.
@@ -185,9 +187,11 @@ flowchart TD
 
 **Continuous Integration (`.github/workflows/ci.yml`):**
 
-- Two parallel jobs: `typescript` and `python`.
-- `typescript` job utilizes a containerized PostgreSQL 16 + pgvector service, executes `prisma generate`, `typecheck`, `lint`, `format:check`, `pnpm test` (unit tests), applies migrations via `prisma migrate deploy`, runs 137 backend integration tests (`test:integration`), and performs production builds (`pnpm build`).
-- `python` job runs Ruff lint, Ruff format check, and Pytest on Python 3.12.
+The repository enforces automated CI across three discrete, reliable jobs:
+
+1. **`typescript` (TypeScript Monorepo):** Runs against a containerized `pgvector/pgvector:pg16` service; executes `pnpm install --frozen-lockfile`, `prisma generate`, `typecheck`, `lint`, `format:check` (Prettier), `pnpm test` (unit tests across monorepo), `prisma migrate deploy`, `pnpm test:integration` (backend PostgreSQL integration tests), and `pnpm build`.
+2. **`python` (Python ML Package):** Runs on Python 3.12; installs the dedicated, lightweight `ci` dependency group (`pip install "./ml[ci]"`, containing `pytest`, `ruff`, and `psycopg2-binary` without unnecessary heavy ML packages); executes `python -m ruff check ml/`, `python -m ruff format --check ml/`, and `python -m pytest ml/tests -v` (48 tests).
+3. **`e2e` (E2E Tests via Playwright):** Runs upon successful completion of the `typescript` job (`needs: typescript`); spins up the PostgreSQL service container; deploys migrations; builds the API; starts the NestJS API and Next.js web server in the background with fail-closed polling loops; warms up application routes; executes the 39 Playwright workflow tests against the dedicated test database (`CINESPHERE_E2E_DATABASE_URL`); and uploads Playwright report artifacts upon failure.
 
 ---
 

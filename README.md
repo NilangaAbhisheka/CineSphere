@@ -345,73 +345,69 @@ CineSphere can be deployed publicly to demonstrate the project. In this mode:
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
 
-Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.themoviedb.org/). A TMDB API key is required for local development. TMDB attribution must be displayed wherever TMDB data is shown, per their [API terms of use](https://www.themoviedb.org/documentation/api/terms-of-use).
+Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.themoviedb.org/). A TMDB v4 Read Access Token (`TMDB_READ_ACCESS_TOKEN`) with Bearer authentication is required for local development and catalogue ingestion. TMDB attribution must be displayed wherever TMDB data is shown, per their [API terms of use](https://www.themoviedb.org/documentation/api/terms-of-use).
 
 ---
 
 ## Project Status
 
-**Current phase:** Phase 4 — Statistics and Data Import/Export (Stages 4.1–4.5 Complete — 100% Finished)
+**Current phase:** Phase 5 — Recommendation Engine Foundation (Stage 5.0 Benchmark Preparation)
 
 **What exists & is verified:**
 
-- TypeScript monorepo with Turborepo 2.x and pnpm 10 workspaces
-- Next.js 14+ App Router frontend ([`apps/web`](apps/web)):
-  - Personal Dashboard (`/`) with 5 aggregated sections: Viewing Summary stat cards, Continue Watching cards with next-episode calculations and progress bars, Recent Activity timeline, and Quick Picks catalogue recommendations
-  - Discover experience with TMDB search, curated popular/trending sections, debounce, pagination, and `MediaCard` components
-  - My Library experience (`/library`) with 5 status tabs, media type toggle, sorting, pagination, and `LibraryCard` components
-  - Statistics Experience (`/statistics`) with live API integration (`ApiClient`), 4 primary summary cards (Movies Completed, Episodes Watched, Shows Completed, Average Personal Rating), secondary metrics bar (Watch Time, Unique Rewatched, Top Genre, Highest Rated Year), top 8 genres breakdown with "View all" toggle, monthly stacked viewing activity timeline, 19-bucket personal rating histogram, accessible data tables, loading skeletons, and retry error handling
-  - Data Import experience (`/import`) supporting JSON and CSV formats with file dropzone, format auto-detection, progress spinner, summary cards, and item-level error diagnostics
-  - Data Export experience (`/export`) supporting full-fidelity JSON backups and flat RFC 4180 CSV exports with dedicated format cards, explicit limitation notices, immediate downloads, error banners, and cross-navigation
-  - `AddLibraryModal` with status selection, 1.0–10.0 half-step ratings, notes, and duplicate prevention
-  - `LibraryDetailModal` with movie viewing event logging, viewing history, TV episode toggle progress, batch "Mark All Watched" (with specials inclusion toggle), per-season ratings, notes editor, and deletion with confirmation
-  - 242 frontend component unit tests passing across 18 suites
-- NestJS REST API backend ([`apps/api`](apps/api)):
-  - Consolidated Dashboard API (`DashboardModule` with `GET /api/dashboard/overview`, `/stats`, `/continue-watching`, `/recent-activity`, `/quick-picks`)
-  - Statistics API (`StatsModule` with `GET /api/stats/overview`, `/genres`, `/activity`, `/ratings`)
-  - Import API (`ImportModule` with `POST /api/import/json` and `POST /api/import/csv` featuring RFC 4180 parsing, strict ISO 8601 datetimes, duplicate detection, catalogue resolution, and atomic `READ COMMITTED` transactions)
-  - Export API (`ExportModule` with `GET /api/export/json` and `GET /api/export/csv` featuring `REPEATABLE READ` snapshot isolation, zero silent data loss enforcement, RFC 4180 CSV formatting, and `no-store` cache headers)
-  - TMDB proxy, client retry logic with exponential backoff, Bearer authentication, and catalogue ingestion layer (`TmdbModule`)
-  - Local catalogue browsing, search, and details endpoints (`CatalogueModule`)
-  - Personal library REST API (`POST/GET/PATCH/DELETE /api/library`, `/viewing-events`, `/episode-progress`, `/mark-all-watched`, `/season-ratings`) (`LibraryModule`)
-  - Deterministic single-user bootstrapping (`SingleUserBootstrap`)
-  - Centralized database error mapping (`DatabaseErrorMapper`)
-  - 271 backend unit tests passing across 21 suites
-  - 199 PostgreSQL integration tests passing across 11 suites with real transactions and triggers
-  - Total monorepo unit tests: 513 passing unit tests (271 backend + 242 frontend)
-- End-to-End Testing & Hardening ([`apps/web/e2e`](apps/web/e2e)):
-  - Playwright E2E infrastructure with dedicated test database isolation (`CINESPHERE_E2E_DATABASE_URL`), fail-closed validation, and server isolation
-  - 39 comprehensive workflow tests passing across 8 suites:
-    - Workflow A: Movie lifecycle (discovery $\to$ library $\to$ detail modal rating & notes $\to$ reload persistence $\to$ removal)
-    - Workflow B: Viewing history logging (append-only events, independent ratings, reload persistence, library entry decoupling)
-    - Workflow C: TV episode progress tracking (season/episode listing, individual toggle, multi-episode state, reload persistence, unmark)
-    - Workflow D: Library detail modal integration (movie & TV coexistence, state freshness across reopen, per-season ratings, notes editor)
-    - Workflow E: Dashboard consistency (renders without error, stat cards with accurate metrics, continue watching progression)
-    - Workflow F: Navigation & page integration (navbar links, direct routing, statistics foundation indicators, console error hygiene)
-    - Workflow G: Data import workflows (page accessibility, client-side/server-side validation errors, successful CSV import to library)
-    - Workflow H: Data export workflows (navigation & format cards, JSON full backup download stream verification, CSV flat download stream verification, direct routing, error banner & dismissal)
-- Shared TypeScript contracts and DTOs ([`packages/shared`](packages/shared)) including statistics models, import contracts, and export document models (`ExportDocument`)
-- Shared linting, Prettier, and TypeScript configs ([`packages/config`](packages/config))
-- Dockerized PostgreSQL 16 database with `pgvector` extension enabled (`0.8.7`)
-- Prisma 6 ORM integration with dedicated SQL migrations:
-  - Phase 1: pgvector extension & initial vector repository foundation
-  - Phase 2: Catalogue tables (`Movie`, `TvShow`, `Season`, `Episode`, `Genre`, `Keyword`, `Person`, `PersonCredit`)
-  - Phase 3: Personal library foundation (`UserLibraryEntry`, `ViewingEvent`, `EpisodeProgress`, `SeasonRating`), XOR media check constraint, rating check constraints, partial unique indexes, locking helper functions, and `VOLATILE` triggers
-  - Phase 4: Nullable `EpisodeProgress.watched_at` migration (`20261117223000_episode_progress_watched_at_nullable`)
-- Python ML package structure with Ruff linter and Pytest test suite ([`ml/`](ml))
-- Continuous Integration (`.github/workflows/ci.yml`):
-  - GitHub Actions runs `pgvector/pgvector:pg16` service container
-  - Enforces `prisma generate`, `typecheck`, `lint`, `format:check`, unit tests (`pnpm test`), migration deployment (`prisma migrate deploy`), backend integration tests (`test:integration`), production builds (`pnpm build`), and Playwright E2E tests (`pnpm test:e2e`)
-  - Python ML checks (Ruff lint/format & Pytest)
+- **Phases 1–4 Complete Application Baseline:**
+  - **TypeScript monorepo** with Turborepo 2.x and pnpm 10 workspaces
+  - **Next.js 14+ App Router frontend** ([`apps/web`](apps/web)):
+    - Personal Dashboard (`/`) with Viewing Summary stat cards, Continue Watching cards with next-episode calculations and progress bars, Recent Activity timeline, and Quick Picks catalogue recommendations
+    - Discover experience with TMDB search, curated popular/trending sections, debounce, pagination, and `MediaCard` components
+    - My Library experience (`/library`) with 5 status tabs, media type toggle, sorting, pagination, and `LibraryCard` components
+    - Statistics Experience (`/statistics`) with live API integration (`ApiClient`), 4 primary summary cards, secondary metrics bar, top 8 genres breakdown, monthly stacked viewing activity timeline, 19-bucket personal rating histogram, accessible data tables, loading skeletons, and retry error handling
+    - Data Import experience (`/import`) supporting JSON and CSV formats with file dropzone, format auto-detection, progress spinner, summary cards, and item-level error diagnostics
+    - Data Export experience (`/export`) supporting full-fidelity JSON backups and flat RFC 4180 CSV exports with dedicated format cards, explicit limitation notices, immediate downloads, error banners, and cross-navigation
+    - Tracking modals (`AddLibraryModal`, `LibraryDetailModal`) with movie viewing history, TV episode toggle progress, batch "Mark All Watched", per-season ratings, and notes editor
+    - 242 frontend component unit tests passing across 18 suites
+  - **NestJS REST API backend** ([`apps/api`](apps/api)):
+    - Consolidated Dashboard API (`DashboardModule` with `/api/dashboard/overview`, `/stats`, `/continue-watching`, `/recent-activity`, `/quick-picks`)
+    - Statistics API (`StatsModule` with `/api/stats/overview`, `/genres`, `/activity`, `/ratings`)
+    - Import API (`ImportModule` with `/api/import/json` and `/api/import/csv` featuring RFC 4180 parsing, strict ISO 8601 datetimes, duplicate detection, catalogue resolution, and atomic `READ COMMITTED` transactions)
+    - Export API (`ExportModule` with `/api/export/json` and `/api/export/csv` featuring `REPEATABLE READ` snapshot isolation, zero silent data loss enforcement, RFC 4180 CSV formatting, and `no-store` cache headers)
+    - TMDB client with exponential backoff retry, Bearer token authentication, and catalogue ingestion layer (`TmdbModule`)
+    - Local catalogue browsing, search, and details endpoints (`CatalogueModule`)
+    - Personal library REST API (`LibraryModule`)
+    - Deterministic single-user bootstrapping (`SingleUserBootstrap`)
+    - Centralized database error mapping (`DatabaseErrorMapper`)
+    - 271 backend unit tests passing across 21 suites
+    - 199 PostgreSQL integration tests passing across 11 suites with real transactions and triggers
+    - Total monorepo unit tests: 513 passing unit tests (271 backend + 242 frontend)
+  - **End-to-End Testing & Hardening** ([`apps/web/e2e`](apps/web/e2e)):
+    - Playwright E2E infrastructure with dedicated test database isolation (`CINESPHERE_E2E_DATABASE_URL`), fail-closed validation, and server isolation
+    - 39 comprehensive workflow tests passing across 8 suites (Workflows A through H)
+  - **Shared Packages & Infrastructure:**
+    - Shared TypeScript contracts and DTOs ([`packages/shared`](packages/shared))
+    - Shared linting, Prettier, and TypeScript configs ([`packages/config`](packages/config))
+    - Dockerized PostgreSQL 16 database with `pgvector` extension enabled (`0.8.7`)
+    - Prisma 6 ORM integration with tracked SQL migrations for catalogue tables, library tables, and integrity triggers
+- **Phase 5 Stage 5.0 Benchmark Preparation Tooling:**
+  - Authoritative candidate embedding model evaluation specification (`PHASE_5_TECHNICAL_DESIGN_PROPOSAL_V0.7.4_CORRECTION_ADDENDUM.md`, V0.7.8)
+  - Predefined benchmark evaluation probes (`ml/benchmark/fixtures/probes_v1.json`): 50 probes across 5 strata (38 movies, 12 TV shows), with verified canonical TMDB IDs and PB-45 approved alias handling
+  - Hardened catalogue fixture extraction pipeline (`ml/benchmark/scripts/prepare_catalogue_fixture.py`): bracketed canonical serialization, deterministic cast selection, cross-engine synthetic regex exclusions, read-only session enforcement, staged artifact publication with atomic rollback, and probe identity validation (`matches_probe_identity()`, `APPROVED_PROBE_ALIASES`, `ProbeIdentityMismatchError`)
+  - Python ML test suite: 48 automated tests passing in `ml/tests/` (including disposable PostgreSQL integration tests for metadata extraction, POSIX regex execution, and probe identity matching)
+- **Continuous Integration (`.github/workflows/ci.yml`):**
+  - Three distinct, reliable jobs: TypeScript Monorepo, Python ML Package (with minimal `ci` dependency group), and Playwright E2E (with fail-closed service readiness loops)
 
-**What does not exist yet (Upcoming Phases):**
+**What is pending (Prerequisites for Benchmark Execution):**
 
-- Sentence Transformers embedding generation and candidate scoring (Phase 5)
-- Recommendation intelligence, diversity modes, and Taste Profile (Phase 6)
-- Optional local LLM integration via Ollama (Phase 7)
-- Movie Universe PixiJS canvas visualization (Phase 8)
-- Comprehensive security audit, fuzzing, and QA hardening (Phase 9)
-- Hosted deployment and portfolio preparation (Phase 10)
+- **Catalogue Data Seeding (Stage 5.0.3-B):** Ingesting genuine TMDB catalogue records to satisfy the 1,400 movie quota, 600 TV show quota, and 50 mandatory probe identities (currently blocked; seeding is planned but not yet authorized)
+- **Candidate Embedding Model Benchmark Execution:** Evaluating candidate models (MiniLM, MPNet, Nemotron) across the 50 probes to select the production embedding model and resolve TD-08
+
+**What does not exist yet (Upcoming Stages / Phases):**
+
+- Stage 5.1 production recommendation engine implementation (scoring model, preference vectors, candidate generation)
+- Phase 6 recommendation intelligence, diversity modes, feedback collection, and Taste Profile
+- Phase 7 optional local LLM integration via Ollama
+- Phase 8 Movie Universe PixiJS canvas visualization
+- Phase 9 comprehensive security audit, fuzzing, and QA hardening
+- Phase 10 hosted deployment and portfolio preparation
 
 > See [`tasks.md`](tasks.md) for the full project roadmap and current task status.
 

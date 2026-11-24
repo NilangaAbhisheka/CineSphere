@@ -1,12 +1,12 @@
 # CineSphere — Database Design
 
-**Status:** Phase 1, Phase 2, and Phase 3 (Stages 3.0–3.5) Implemented & Verified
+**Status:** Phase 1, Phase 2, Phase 3 (Stages 3.0–3.8), and Phase 4 Implemented & Verified
 
-**Last Updated:** 2026-11-08
+**Last Updated:** 2026-11-24
 
-**Version:** 1.3
+**Version:** 1.4
 
-> This document defines the CineSphere database architecture. Phase 1 foundation tables, Phase 2 catalogue tables, and Phase 3 personal library tables and integrity triggers are fully implemented and verified with PostgreSQL/Prisma migrations. Higher-phase tables remain design specifications.
+> This document defines the CineSphere database architecture. Phase 1 foundation tables, Phase 2 catalogue tables, Phase 3 personal library tables and integrity triggers, and Phase 4 nullable episode progress watched_at migration are fully implemented and verified with PostgreSQL/Prisma migrations. Higher-phase tables remain design specifications.
 
 ---
 
@@ -28,31 +28,31 @@
 
 ## 2. Entity Overview
 
-| Entity                     | Purpose                                                                                 | Status                  |
-| -------------------------- | --------------------------------------------------------------------------------------- | ----------------------- |
-| `User`                     | Single application user. Anchored by deterministic UUID (`CINESPHERE_SINGLE_USER_ID`).  | Implemented (Phase 1/3) |
-| `Movie`                    | Movie-specific catalogue metadata (runtime, release date, TMDB ID, budget, etc.).       | Implemented (Phase 2)   |
-| `TvShow`                   | TV-show-specific catalogue metadata (first/last air date, status, seasons count, etc.). | Implemented (Phase 2)   |
-| `Season`                   | A season within a TV show (supporting season 0 specials).                               | Implemented (Phase 2)   |
-| `Episode`                  | A single episode within a season.                                                       | Implemented (Phase 2)   |
-| `Genre`                    | Reference table for TMDB genres. Implicit M2M with Movie and TvShow.                    | Implemented (Phase 2)   |
-| `Keyword`                  | Reference table for TMDB keywords. Implicit M2M with Movie and TvShow.                  | Implemented (Phase 2)   |
-| `Person`                   | Cast and crew members from TMDB.                                                        | Implemented (Phase 2)   |
-| `PersonCredit`             | Combined junction: person ↔ movie / TV show with role, character, and XOR check.        | Implemented (Phase 2)   |
-| `UserLibraryEntry`         | Core tracking record: status, personal rating (1.0–10.0 half-step), notes, XOR check.   | Implemented (Phase 3)   |
-| `ViewingEvent`             | Append-only watch history: watchedAt timestamp, rating, notes.                          | Implemented (Phase 3)   |
-| `EpisodeProgress`          | Composite PK (libraryEntryId, episodeId): existence denotes watched status.             | Implemented (Phase 3)   |
-| `SeasonRating`             | Per-season rating: unique (libraryEntryId, seasonId), rating (1.0–10.0 half-step).      | Implemented (Phase 3)   |
-| `MediaEmbedding`           | Semantic embedding vector for a media item (pgvector).                                  | Planned (Phase 5)       |
-| `MediaSimilarity`          | Precomputed cosine similarity neighbours.                                               | Planned (Phase 5)       |
-| `ClusterAssignment`        | HDBSCAN cluster assignment and UMAP 2D coordinates.                                     | Planned (Phase 8)       |
-| `Cluster`                  | Cluster metadata (label, description, colour).                                          | Planned (Phase 8)       |
-| `RecommendationRecord`     | A single recommendation shown to the user.                                              | Planned (Phase 5)       |
-| `RecommendationImpression` | Record that a recommendation was displayed.                                             | Planned (Phase 6)       |
-| `RecommendationFeedback`   | User feedback on a recommendation.                                                      | Planned (Phase 6)       |
-| `TasteProfile`             | Current structured taste profile.                                                       | Planned (Phase 6)       |
-| `TasteProfileSnapshot`     | Historical snapshots of the taste profile.                                              | Planned (Phase 6)       |
-| `UserPreference`           | Application and recommendation settings.                                                | Planned (Phase 6)       |
+| Entity                     | Purpose                                                                                         | Status                  |
+| -------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------- |
+| `User`                     | Single application user. Anchored by deterministic UUID (`CINESPHERE_SINGLE_USER_ID`).          | Implemented (Phase 1/3) |
+| `Movie`                    | Movie-specific catalogue metadata (runtime, release date, TMDB ID, budget, etc.).               | Implemented (Phase 2)   |
+| `TvShow`                   | TV-show-specific catalogue metadata (first/last air date, status, seasons count, etc.).         | Implemented (Phase 2)   |
+| `Season`                   | A season within a TV show (supporting season 0 specials).                                       | Implemented (Phase 2)   |
+| `Episode`                  | A single episode within a season.                                                               | Implemented (Phase 2)   |
+| `Genre`                    | Reference table for TMDB genres. Implicit M2M with Movie and TvShow.                            | Implemented (Phase 2)   |
+| `Keyword`                  | Reference table for TMDB keywords. Implicit M2M with Movie and TvShow.                          | Implemented (Phase 2)   |
+| `Person`                   | Cast and crew members from TMDB.                                                                | Implemented (Phase 2)   |
+| `PersonCredit`             | Combined junction: person ↔ movie / TV show with role, character, and XOR check.                | Implemented (Phase 2)   |
+| `UserLibraryEntry`         | Core tracking record: status, personal rating (1.0–10.0 half-step), notes, XOR check.           | Implemented (Phase 3)   |
+| `ViewingEvent`             | Append-only watch history: watchedAt timestamp, rating, notes.                                  | Implemented (Phase 3)   |
+| `EpisodeProgress`          | Composite PK (libraryEntryId, episodeId): existence denotes watched status; nullable watchedAt. | Implemented (Phase 3/4) |
+| `SeasonRating`             | Per-season rating: unique (libraryEntryId, seasonId), rating (1.0–10.0 half-step).              | Implemented (Phase 3)   |
+| `MediaEmbedding`           | Semantic embedding vector for a media item (pgvector).                                          | Planned (Phase 5)       |
+| `MediaSimilarity`          | Precomputed cosine similarity neighbours.                                                       | Planned (Phase 5)       |
+| `ClusterAssignment`        | HDBSCAN cluster assignment and UMAP 2D coordinates.                                             | Planned (Phase 8)       |
+| `Cluster`                  | Cluster metadata (label, description, colour).                                                  | Planned (Phase 8)       |
+| `RecommendationRecord`     | A single recommendation shown to the user.                                                      | Planned (Phase 5)       |
+| `RecommendationImpression` | Record that a recommendation was displayed.                                                     | Planned (Phase 6)       |
+| `RecommendationFeedback`   | User feedback on a recommendation.                                                              | Planned (Phase 6)       |
+| `TasteProfile`             | Current structured taste profile.                                                               | Planned (Phase 6)       |
+| `TasteProfileSnapshot`     | Historical snapshots of the taste profile.                                                      | Planned (Phase 6)       |
+| `UserPreference`           | Application and recommendation settings.                                                        | Planned (Phase 6)       |
 
 ---
 

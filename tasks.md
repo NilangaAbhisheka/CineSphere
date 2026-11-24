@@ -6,14 +6,14 @@
 
 ## Project Overview
 
-| Field             | Value                                                                                                                                                                                                                                                                                                                       |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project           | CineSphere                                                                                                                                                                                                                                                                                                                  |
-| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                                                                           |
-| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                                                                      |
-| Phase             | **Phase 5 — Recommendation Engine Foundation (Stage 5.0 Benchmark Preparation)**                                                                                                                                                                                                                                            |
-| Current Milestone | Stage 5.0.2 Complete ✅ (Production Extraction Path Verification & Final Fixture Readiness Audit) — Pipeline verified; DB catalogue seeding required before benchmark fixture can be generated                                                                                                                               |
-| Last Updated      | 2026-11-24                                                                                                                                                                                                                                                                                                                  |
+| Field             | Value                                                                                                                                                                                                                                                                                                 |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project           | CineSphere                                                                                                                                                                                                                                                                                            |
+| Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                                                     |
+| Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                                                |
+| Phase             | **Phase 5 — Recommendation Engine Foundation (Stage 5.0 Benchmark Preparation)**                                                                                                                                                                                                                      |
+| Current Milestone | Stage 5.0.3-A.3 Complete ✅ (Repository Reliability Recovery & Documentation Reconciliation) — GitHub Actions CI restored to green; Python CI dependency group added; documentation reconciled with Stage 5.0.3-A.2 baseline; DB catalogue seeding required before benchmark fixture can be generated |
+| Last Updated      | 2026-11-24                                                                                                                                                                                                                                                                                            |
 
 ---
 
@@ -24,7 +24,7 @@ Phase 1  — Project Foundation                  ██████████�
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
 Phase 3  — Personal Library and Tracking       ████████████████  100% (Stages 3.0–3.8: DB foundation, integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening — COMPLETE)
 Phase 4  — Statistics and Data Import/Export   ████████████████  100% (Stages 4.1, 4.2, 4.3, 4.4, 4.5 complete — Phase 4 COMPLETE)
-Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  Stage 5.0 Benchmark Design & Pipeline Verified (Production Implementation 0%, TD-08 Open)
+Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  Stage 5.0 Benchmark Design & Tooling Verified (Stages 5.0.1–5.0.3-A.3 complete; Seeding & Prod 0%, TD-08 Open)
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
 Phase 7  — Local LLM Integration               ░░░░░░░░░░░░░░░░  0%
 Phase 8  — Movie Universe                      ░░░░░░░░░░░░░░░░  0%
@@ -36,7 +36,12 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ## Blocked Tasks
 
-> _None currently blocked._
+1. **Benchmark Fixture Generation (`catalogue_snapshot_v1.jsonl`):**
+   - **Status:** **BLOCKED** by catalogue data deficit in the local PostgreSQL database.
+   - **Prerequisites Needed:** 1,400 movies with non-empty overview (deficit: 1,262), 600 TV shows with non-empty overview (deficit: 494), and all 50 mandatory benchmark probes present with verified identity.
+   - **Resolution Path:** Stage 5.0.3-B catalogue seeding execution (pending separate explicit authorization).
+2. **Production Recommendation Engine (Stage 5.1):**
+   - **Status:** **BLOCKED** pending completion of Stage 5.0 scientific benchmark evaluation and formal selection of embedding model (TD-08).
 
 ---
 
@@ -633,15 +638,36 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Modular artifact staging (`write_jsonl_snapshot`, `stage_fixture_artifacts`)
   - [x] Publication rollback & cleanup hardening (`publish_artifacts`): staged replacement, backup of existing files (`.old`), rollback restoring backups and unlinking newly created destinations, `PublicationRollbackError` for dual failures, `PublicationCleanupError` for post-publication backup cleanup errors
 - [x] Pipeline Test Suite & Verification (`ml/tests/test_prepare_catalogue_fixture.py`)
-  - [x] 35 unit and integration tests passing in `test_prepare_catalogue_fixture.py` (39 total in `ml/tests/`)
+  - [x] 44 unit and integration tests passing in `test_prepare_catalogue_fixture.py` (48 total in `ml/tests/`)
   - [x] Real PostgreSQL integration tests for `fetch_full_metadata()` (Movie & TV queries against temporary tables)
   - [x] Real PostgreSQL POSIX regex integration test (`~*`) confirming portable syntax
   - [x] Real PostgreSQL session read-only enforcement test on disposable test DB
   - [x] Publication rollback & cleanup failure scenario tests (Scenarios A, B, C, D, E, F)
-- [ ] Catalogue Data Seeding (PREREQUISITE for Benchmark Fixture Generation)
+  - [x] Real PostgreSQL probe identity validation integration test
+- [x] Stage 5.0.3-A — TMDB Catalogue Seeding Plan & Safety Audit (Completed ✅)
+  - [x] Read-only database sufficiency audit: 138 eligible movies, 106 eligible TV shows, 0 probes
+  - [x] Ingestion safety boundaries established (personal tables strictly forbidden)
+  - [x] Two-stage ingestion architecture designed: offline candidate manifest generation + NestJS REST ingestion
+- [x] Stage 5.0.3-A.1 — Probe Integrity Audit & Plan Correction (Completed ✅)
+  - [x] Master probe inventory reconstructed 100% from authoritative `probes_v1.json` fixture
+  - [x] Live TMDB audit executed: 46 exact matches, 1 valid alias (`PB-45`), 3 ID mismatches detected
+- [x] Stage 5.0.3-A.2 — Mandatory Probe Identity Correction & Validation Hardening (Completed ✅)
+  - [x] Corrected 3 TMDB IDs in `probes_v1.json`: PB-27 (334541), PB-40 (1438), PB-46 (89708)
+  - [x] Preserved PB-45 (`tmdb_id: 1920`, _Twin Peaks: The Return_) with approved alias handling
+  - [x] Added `ProbeIdentityMismatchError` and conservative identity matcher `matches_probe_identity()`
+  - [x] Added auditable alias registry `APPROVED_PROBE_ALIASES`
+  - [x] Hardened `verify_database_readiness()` to validate stored titles against probe identity
+  - [x] Hardened `prepare_catalogue_snapshot()` to fail closed on identity mismatch
+  - [x] 9 new automated unit and integration tests (Tests 25–33), bringing `ml/tests` to 48/48 passing
+- [x] Stage 5.0.3-A.3 — Repository Reliability Recovery & Documentation Reconciliation (Completed ✅)
+  - [x] Introduced `ci` optional dependency group in `ml/pyproject.toml` including `psycopg2-binary`
+  - [x] Updated GitHub Actions workflow `.github/workflows/ci.yml` with fail-closed service readiness loops
+  - [x] Resolved Prettier formatting issues across tracked Markdown, JSON, and workflow files
+  - [x] Reconciled `tasks.md`, `STAGE_5.0.3_TMDB_CATALOGUE_SEEDING_PLAN.md`, `README.md`, `ARCHITECTURE.md`, `DATABASE_DESIGN.md`, `PROJECT_PLAN.md`, and `AI_DEVELOPMENT_GUIDE.md`
+- [ ] Stage 5.0.3-B — Catalogue Data Seeding (PREREQUISITE for Benchmark Fixture Generation — NOT YET AUTHORIZED)
   - [ ] Ingest real TMDB catalogue records to satisfy 1,400 movie quota and 600 TV show quota
-  - [ ] Ensure all 50 mandatory benchmark probes are present in database
-  - [ ] Current database status: 138 movies with overview (deficit: 1,262), 106 TV shows with overview (deficit: 494), 0/50 probes present
+  - [ ] Ensure all 50 mandatory benchmark probes are present with matching identity in database
+  - [ ] Current database status (2026-11-24 audit): 138 movies with overview (deficit: 1,262), 106 TV shows with overview (deficit: 494), 0/50 probes present
   - [ ] Fail-closed status: Extraction pipeline correctly halts under Section 7 Stop Conditions
 - [ ] Candidate Embedding Model Benchmark Execution (Stage 5.0 Scientific Benchmark)
   - [ ] Generate 2,000-item fixture (`catalogue_snapshot_v1.jsonl`, `.sha256`, `.manifest.json`)
@@ -1013,6 +1039,14 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 | Phase 3 Stages 3.4–3.8 complete (Library, UI, Hardening)          | 2026-11-09 | Full library tracking (movies/TV), Dashboard with continuation/history, Statistics foundation, Playwright E2E suite (31 tests), CI green.                                   |
 | Phase 4 Stages 4.1–4.3 complete (Statistics Backend & Live UI)    | 2026-11-17 | Dedicated StatsModule with 4 endpoints, UTC monthly aggregation, live frontend integration with skeleton/error retry, CI run 44100431302 green (383 unit, 164 int, 31 E2E). |
 | Phase 4 Stage 4.4 complete (Data Import)                          | 2026-11-17 | JSON + CSV import endpoints, atomic transactions, full validation, duplicate skipping, frontend /import page, Workflow G E2E (3/3), 231 unit + 184 int + 34 E2E passing.    |
+| Phase 4 Stage 4.5 complete (Data Export)                          | 2026-11-18 | JSON full-fidelity backup + RFC 4180 CSV export endpoints, REPEATABLE READ snapshot isolation, zero silent data loss, dedicated /export page, Workflow H E2E (5/5).         |
+| Phase 5 Stage 5.0 complete (Candidate Model Evaluation Design)    | 2026-11-23 | Authoritative specification V0.7.8, candidate evaluation protocol, 50-probe fixture foundation, 2,000-record fixture preparation script.                                    |
+| Phase 5 Stage 5.0.1 complete (Fixture Hardening & Rollback)       | 2026-11-24 | Canonical serialization, synthetic-record exclusions, deterministic cast selection, read-only session enforcement, staged artifact publication with atomic rollback.        |
+| Phase 5 Stage 5.0.2 complete (Production Extraction Verification) | 2026-11-24 | Fixed SQL interpolation in `fetch_full_metadata()`, verified against disposable PostgreSQL tables, regex engine verification, fresh read-only catalogue audit.              |
+| Phase 5 Stage 5.0.3-A complete (Catalogue Seeding Plan)           | 2026-11-24 | Detailed seeding plan, transport-level pacing design, two-stage sourcing architecture, personal library isolation boundaries.                                               |
+| Phase 5 Stage 5.0.3-A.1 complete (Probe Integrity Audit)          | 2026-11-24 | Reconciled master probe inventory from `probes_v1.json`, executed live TMDB audit (46 exact, 1 alias, 3 ID mismatches identified).                                          |
+| Phase 5 Stage 5.0.3-A.2 complete (Probe Identity Hardening)       | 2026-11-24 | Corrected PB-27/PB-40/PB-46 in `probes_v1.json`, added `matches_probe_identity()`, `APPROVED_PROBE_ALIASES`, `ProbeIdentityMismatchError`, 48 tests in `ml/tests/` passing. |
+| Phase 5 Stage 5.0.3-A.3 complete (CI & Documentation Recovery)    | 2026-11-24 | Minimal CI optional dependency group in `pyproject.toml`, fail-closed service loops in `ci.yml`, Prettier format reconciliation, synchronized core documentation.           |
 
 ---
 
