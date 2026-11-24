@@ -37,7 +37,7 @@ The following eight technical corrections and specifications were integrated int
 ### 2. Section 8.7.1: Device-Specific Performance Reporting Boundaries
 - Added Section 8.7.1 establishing strict boundaries for hardware performance reporting.
 - Explicitly documented that CPU and GPU latency/throughput figures must be reported separately and cannot be compared apples-to-apples.
-- Noted that while Model C (`Nemotron-3.5-Embed-1B`) requires GPU execution to achieve acceptable latency, Models A (`all-MiniLM-L6-v2`) and B (`bge-base-en-v1.5`) can be evaluated on both CPU and GPU, requiring per-device latency and throughput tables.
+- Noted that while Model C (`Nemotron-3.5-Embed-1B`) requires GPU execution to achieve acceptable latency, Models A (`all-MiniLM-L6-v2`) and B (`all-mpnet-base-v2`) can be evaluated on both CPU and GPU, requiring per-device latency and throughput tables.
 
 ### 3. Section 8.10: Re-Classification of Nemotron Feasibility
 - Re-classified the feasibility assessment of `Nemotron-3.5-Embed-1B` into three distinct epistemic categories:
@@ -55,7 +55,7 @@ The following eight technical corrections and specifications were integrated int
 ### 5. Section 8.11: Deterministic Selection Algorithm
 - Defined the exact algorithm for generating the 2,000-record benchmark snapshot:
   - Step 1: Reserve all 50 predefined benchmark probes first by `(media_type, tmdb_id)`.
-  - Step 2: Select 1,360 additional movies and 590 additional TV shows having non-null and non-empty overviews, excluding the probe media.
+  - Step 2: Select 1,362 additional movies and 588 additional TV shows having non-null and non-empty overviews, excluding the probe media.
   - Step 3: Sort candidates by `ORDER BY popularity DESC, voteCount DESC, releaseDate/firstAirDate DESC, tmdbId ASC`.
   - Step 4: Deduplicate on composite key `(media_type, tmdb_id)`.
   - Step 5: Final output ordering strictly by `ORDER BY media_type ASC, tmdb_id ASC`.
@@ -77,6 +77,16 @@ The following eight technical corrections and specifications were integrated int
 
 ### Structural Integrity Verification
 - Verified markdown code fences across the document: exactly 34 true markdown code fences (` ``` `), perfectly balanced and matched.
+
+### C. Model B Identity Verification
+
+The authoritative Model B identifier is confirmed as `sentence-transformers/all-mpnet-base-v2`.
+
+**Evidence:**
+- 4 occurrences in `docs/PHASE_5_TECHNICAL_DESIGN_PROPOSAL_V0.7.4_CORRECTION_ADDENDUM.md` (Sections 8.1, 8.7, 8.7.1, 8.10).
+- Consistent with `docs/DATABASE_DESIGN.md` and all prior proposal versions (V0.7.4, V0.7.6, V0.7.7).
+
+**Correction Applied:** A prior draft of this audit report (Section B, item 2) incorrectly referenced Model B as `` `bge-base-en-v1.5` ``. This was an auditor transcription error. The proposal has never contained that identifier. The reference in this report has been corrected to `` `all-mpnet-base-v2` ``. No change to the Phase 5 proposal itself was required.
 
 ---
 
@@ -134,7 +144,7 @@ Under Section 7 of the audit instructions:
   - Column quoting to handle PostgreSQL case-folding on camelCase columns (`"tmdbId"`, `"releaseDate"`, etc.).
   - Automated readiness audit comparing database counts against quotas.
   - Fail-closed stop condition enforcement (`MissingMandatoryProbesError`, `InsufficientCatalogueError`).
-  - Deterministic candidate selection (50 probes reserved first, 1,360 movies and 590 TV shows selected by popularity, vote count, date, and tmdbId).
+  - Deterministic candidate selection (50 probes reserved first, 1,362 movies and 588 TV shows selected by popularity, vote count, date, and tmdbId).
   - Canonical text serialization implementing the strict null/empty line omission policy.
   - Deterministic sorting by `media_type ASC, tmdb_id ASC`.
   - SHA-256 digest computation and manifest generation.
