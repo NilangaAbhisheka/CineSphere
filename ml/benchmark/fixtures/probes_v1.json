@@ -236,7 +236,7 @@
   {
     "probe_id": "PB-27",
     "media_type": "movie",
-    "tmdb_id": 334543,
+    "tmdb_id": 334541,
     "title": "Manchester by the Sea",
     "stratum": "Indie",
     "selection_rationale": "Unresolved tragic grief, Massachusetts coastal realism, guilt-ridden parenting trauma.",
@@ -353,7 +353,7 @@
   {
     "probe_id": "PB-40",
     "media_type": "tv",
-    "tmdb_id": 3297,
+    "tmdb_id": 1438,
     "title": "The Wire",
     "stratum": "Serialized TV",
     "selection_rationale": "Baltimore institutional sociology, police wiretaps, school system decay, drug trade web.",
@@ -407,7 +407,7 @@
   {
     "probe_id": "PB-46",
     "media_type": "movie",
-    "tmdb_id": 85350,
+    "tmdb_id": 89708,
     "title": "Samsara",
     "stratum": "Stress Cases",
     "selection_rationale": "Non-verbal visual essay, global humanity and industrial montage, zero dialogue.",

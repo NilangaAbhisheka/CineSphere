@@ -33,6 +33,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -88,6 +89,29 @@ class InvalidProbeDefinitionError(Exception):
     """Raised when probe definitions violate structural, uniqueness, or quota invariants."""
 
     pass
+
+
+class ProbeIdentityMismatchError(Exception):
+    """Raised when a mandatory probe's stored title does not match its expected identity."""
+
+    def __init__(
+        self,
+        probe_id: str,
+        expected_title: str,
+        actual_title: str | None,
+        media_type: str,
+        tmdb_id: int,
+    ) -> None:
+        self.probe_id = probe_id
+        self.expected_title = expected_title
+        self.actual_title = actual_title
+        self.media_type = media_type
+        self.tmdb_id = tmdb_id
+        super().__init__(
+            f"Probe identity mismatch for [{probe_id}] ({media_type} tmdbId={tmdb_id}): "
+            f"expected '{expected_title}', but database contains '{actual_title or '<empty>'}'. "
+            f"Matching TMDB ID alone is not sufficient to satisfy mandatory benchmark probes."
+        )
 
 
 DEFAULT_DB_URL = os.environ.get(
@@ -378,6 +402,75 @@ def load_probes(probes_path: Path) -> list[dict[str, Any]]:
     return validated_probes
 
 
+def normalize_probe_title(title: str | None) -> str:
+    """Normalizes titles for deterministic identity comparison.
+
+    - Strips leading and trailing whitespace
+    - Lowercases
+    - Removes apostrophes and single quotes
+    - Replaces common punctuation (: , . - – — ? ! /) with single space
+    - Collapses internal whitespace sequences to a single space
+    """
+    if not title:
+        return ""
+    text = title.strip().lower()
+    text = re.sub(r"['’`]", "", text)
+    text = re.sub(r"[:,\.\-\–\—\?!/]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+# Explicit allowlist of approved probe title aliases.
+# Key: (media_type_upper, tmdb_id) -> set of normalized approved alias strings.
+# PB-45: Twin Peaks (1920) Season 3 on TMDB represents 'Twin Peaks: The Return'
+APPROVED_PROBE_ALIASES: dict[tuple[str, int], set[str]] = {
+    ("TV", 1920): {
+        "twin peaks",
+        "twin peaks the return",
+        "twin peaks a limited event series",
+    },
+}
+
+
+def matches_probe_identity(
+    expected_title: str,
+    stored_title: str | None,
+    stored_original_title: str | None,
+    media_type: str,
+    tmdb_id: int,
+) -> bool:
+    """Conservatively validates whether stored catalogue titles match expected probe identity.
+
+    Rules:
+    1. Exact or normalized match against stored title / name.
+    2. Normalized match against stored originalTitle / originalName.
+    3. Explicit approved alias match for specific (media_type, tmdb_id) keys.
+    Does NOT use unrestricted fuzzy matching or partial substring overlap.
+    """
+    norm_expected = normalize_probe_title(expected_title)
+    if not norm_expected:
+        return False
+
+    norm_stored = normalize_probe_title(stored_title)
+    if norm_stored and norm_expected == norm_stored:
+        return True
+
+    norm_orig = normalize_probe_title(stored_original_title)
+    if norm_orig and norm_expected == norm_orig:
+        return True
+
+    # Check explicit approved aliases
+    alias_key = (media_type.upper(), tmdb_id)
+    approved_aliases = APPROVED_PROBE_ALIASES.get(alias_key)
+    if approved_aliases:
+        if norm_stored and norm_stored in approved_aliases:
+            return True
+        if norm_orig and norm_orig in approved_aliases:
+            return True
+
+    return False
+
+
 def verify_database_readiness(
     conn: Any,
     probes: list[dict[str, Any]],
@@ -385,6 +478,8 @@ def verify_database_readiness(
     """Performs data sufficiency and probe presence verification against PostgreSQL.
 
     Excludes synthetic integration-test fixtures from counts.
+    Validates both presence and semantic identity for all mandatory probes.
+    Raises ProbeIdentityMismatchError if a stored probe title does not match.
     Returns audit statistics dictionary or raises fail-closed exceptions.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -422,30 +517,76 @@ def verify_database_readiness(
         total_tv_shows = tv_stats["total_tv_shows"]
         tv_shows_with_overview = tv_stats["tv_shows_with_overview"]
 
-        # 3. Check presence of each probe
+        # 3. Check presence and semantic identity of each probe
         probe_movie_ids = [p["tmdb_id"] for p in probes if p["media_type"].upper() == "MOVIE"]
         probe_tv_ids = [p["tmdb_id"] for p in probes if p["media_type"].upper() == "TV"]
 
         cur.execute(
-            'SELECT "tmdbId" FROM movies WHERE "tmdbId" = ANY(%s);',
+            'SELECT "tmdbId", title, "originalTitle" FROM movies WHERE "tmdbId" = ANY(%s);',
             (probe_movie_ids,),
         )
-        found_movie_tmdb_ids = {row["tmdbId"] for row in cur.fetchall()}
+        movie_rows = {row["tmdbId"]: row for row in cur.fetchall()}
 
         cur.execute(
-            'SELECT "tmdbId" FROM tv_shows WHERE "tmdbId" = ANY(%s);',
+            'SELECT "tmdbId", name, "originalName" FROM tv_shows WHERE "tmdbId" = ANY(%s);',
             (probe_tv_ids,),
         )
-        found_tv_tmdb_ids = {row["tmdbId"] for row in cur.fetchall()}
+        tv_rows = {row["tmdbId"]: row for row in cur.fetchall()}
 
-        missing_probes = []
+        missing_probes: list[dict[str, Any]] = []
+        found_movie_tmdb_ids: set[int] = set()
+        found_tv_tmdb_ids: set[int] = set()
+
         for p in probes:
             media_type = p["media_type"].upper()
             tmdb_id = p["tmdb_id"]
-            if media_type == "MOVIE" and tmdb_id not in found_movie_tmdb_ids:
-                missing_probes.append(p)
-            elif media_type == "TV" and tmdb_id not in found_tv_tmdb_ids:
-                missing_probes.append(p)
+            expected_title = p["title"]
+
+            if media_type == "MOVIE":
+                row = movie_rows.get(tmdb_id)
+                if row is None:
+                    missing_probes.append(p)
+                else:
+                    stored_title = row.get("title")
+                    stored_orig = row.get("originalTitle")
+                    if not matches_probe_identity(
+                        expected_title=expected_title,
+                        stored_title=stored_title,
+                        stored_original_title=stored_orig,
+                        media_type="MOVIE",
+                        tmdb_id=tmdb_id,
+                    ):
+                        raise ProbeIdentityMismatchError(
+                            probe_id=p["probe_id"],
+                            expected_title=expected_title,
+                            actual_title=stored_title or stored_orig or "<empty>",
+                            media_type="MOVIE",
+                            tmdb_id=tmdb_id,
+                        )
+                    found_movie_tmdb_ids.add(tmdb_id)
+
+            elif media_type == "TV":
+                row = tv_rows.get(tmdb_id)
+                if row is None:
+                    missing_probes.append(p)
+                else:
+                    stored_title = row.get("name")
+                    stored_orig = row.get("originalName")
+                    if not matches_probe_identity(
+                        expected_title=expected_title,
+                        stored_title=stored_title,
+                        stored_original_title=stored_orig,
+                        media_type="TV",
+                        tmdb_id=tmdb_id,
+                    ):
+                        raise ProbeIdentityMismatchError(
+                            probe_id=p["probe_id"],
+                            expected_title=expected_title,
+                            actual_title=stored_title or stored_orig or "<empty>",
+                            media_type="TV",
+                            tmdb_id=tmdb_id,
+                        )
+                    found_tv_tmdb_ids.add(tmdb_id)
 
     return {
         "total_movies": total_movies,
@@ -981,8 +1122,25 @@ def prepare_catalogue_snapshot(
         return 1
 
     try:
-        # 3. Verify Database Sufficiency and Probe Presence
-        stats = verify_database_readiness(conn, probes)
+        # 3. Verify Database Sufficiency, Probe Presence, and Identity
+        try:
+            stats = verify_database_readiness(conn, probes)
+        except ProbeIdentityMismatchError as e:
+            print("\n" + "!" * 80, file=sys.stderr)
+            print("[STOP CONDITION TRIGGERED — PROBE IDENTITY MISMATCH]", file=sys.stderr)
+            print(f"  * {e}", file=sys.stderr)
+            print("\nUnder Section 7 Stop Conditions:", file=sys.stderr)
+            print(
+                "  - We MUST NOT allow unrelated records to satisfy mandatory benchmark probes.",
+                file=sys.stderr,
+            )
+            print(
+                "  - Data extraction MUST fail closed until catalogue records match "
+                "probe definitions.",
+                file=sys.stderr,
+            )
+            print("!" * 80, file=sys.stderr)
+            return 1
         print("\n--- Database Catalogue Readiness Audit ---")
         print(f"Total Movies in DB:               {stats['total_movies']:,}")
         print(

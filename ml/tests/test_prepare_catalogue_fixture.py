@@ -35,12 +35,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from ml.benchmark.scripts.prepare_catalogue_fixture import (
     ALLOWED_STRATA,
+    APPROVED_PROBE_ALIASES,
     FORBIDDEN_TABLES,
     REQUIRED_MOVIES_TOTAL,
     REQUIRED_TV_SHOWS_TOTAL,
     SYNTHETIC_MOVIE_EXCLUSION_PATTERN,
     SYNTHETIC_TV_EXCLUSION_PATTERN,
     InvalidProbeDefinitionError,
+    ProbeIdentityMismatchError,
     PublicationCleanupError,
     PublicationRollbackError,
     build_manifest,
@@ -48,6 +50,8 @@ from ml.benchmark.scripts.prepare_catalogue_fixture import (
     create_readonly_connection,
     fetch_full_metadata,
     get_cast_selection_sql,
+    matches_probe_identity,
+    normalize_probe_title,
     prepare_catalogue_snapshot,
     publish_artifacts,
     serialize_canonical_text,
@@ -228,13 +232,18 @@ def test_verify_database_readiness_missing_probes(valid_50_probes: list[dict[str
         {"total_movies": 2000, "movies_with_overview": 1800},
         {"total_tv_shows": 1000, "tv_shows_with_overview": 800},
     ]
-    movie_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "movie"]
-    tv_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "tv"]
+    movie_probes = [p for p in valid_50_probes if p["media_type"] == "movie"]
+    tv_probes = [p for p in valid_50_probes if p["media_type"] == "tv"]
 
     # Omit the first movie probe
     mock_cur.fetchall.side_effect = [
-        [{"tmdbId": mid} for mid in movie_probe_ids[1:]],  # 1 missing
-        [{"tmdbId": tid} for tid in tv_probe_ids],  # all 12 found
+        [
+            {"tmdbId": p["tmdb_id"], "title": p["title"], "originalTitle": None}
+            for p in movie_probes[1:]
+        ],  # 1 missing
+        [
+            {"tmdbId": p["tmdb_id"], "name": p["title"], "originalName": None} for p in tv_probes
+        ],  # all 12 found
     ]
 
     stats = verify_database_readiness(mock_conn, valid_50_probes)
@@ -255,12 +264,15 @@ def test_verify_database_readiness_insufficient_movies(valid_50_probes: list[dic
         {"total_movies": 1249, "movies_with_overview": 307},  # Deficit
         {"total_tv_shows": 1000, "tv_shows_with_overview": 700},
     ]
-    movie_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "movie"]
-    tv_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "tv"]
+    movie_probes = [p for p in valid_50_probes if p["media_type"] == "movie"]
+    tv_probes = [p for p in valid_50_probes if p["media_type"] == "tv"]
 
     mock_cur.fetchall.side_effect = [
-        [{"tmdbId": mid} for mid in movie_probe_ids],
-        [{"tmdbId": tid} for tid in tv_probe_ids],
+        [
+            {"tmdbId": p["tmdb_id"], "title": p["title"], "originalTitle": None}
+            for p in movie_probes
+        ],
+        [{"tmdbId": p["tmdb_id"], "name": p["title"], "originalName": None} for p in tv_probes],
     ]
 
     stats = verify_database_readiness(mock_conn, valid_50_probes)
@@ -281,12 +293,15 @@ def test_verify_database_readiness_insufficient_tv(valid_50_probes: list[dict[st
         {"total_movies": 2000, "movies_with_overview": 1500},
         {"total_tv_shows": 2174, "tv_shows_with_overview": 302},  # Deficit
     ]
-    movie_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "movie"]
-    tv_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "tv"]
+    movie_probes = [p for p in valid_50_probes if p["media_type"] == "movie"]
+    tv_probes = [p for p in valid_50_probes if p["media_type"] == "tv"]
 
     mock_cur.fetchall.side_effect = [
-        [{"tmdbId": mid} for mid in movie_probe_ids],
-        [{"tmdbId": tid} for tid in tv_probe_ids],
+        [
+            {"tmdbId": p["tmdb_id"], "title": p["title"], "originalTitle": None}
+            for p in movie_probes
+        ],
+        [{"tmdbId": p["tmdb_id"], "name": p["title"], "originalName": None} for p in tv_probes],
     ]
 
     stats = verify_database_readiness(mock_conn, valid_50_probes)
@@ -315,12 +330,18 @@ def test_candidate_selection_excludes_probes(tmp_path: Path, valid_50_probes: li
         {"total_tv_shows": 2000, "tv_shows_with_overview": 1500},
     ]
 
-    movie_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "movie"]
-    tv_probe_ids = [p["tmdb_id"] for p in valid_50_probes if p["media_type"] == "tv"]
+    movie_probes = [p for p in valid_50_probes if p["media_type"] == "movie"]
+    tv_probes = [p for p in valid_50_probes if p["media_type"] == "tv"]
+    movie_probe_ids = [p["tmdb_id"] for p in movie_probes]
+    tv_probe_ids = [p["tmdb_id"] for p in tv_probes]
 
-    # Probes presence queries
-    presence_movie_rows = [{"tmdbId": mid} for mid in movie_probe_ids]
-    presence_tv_rows = [{"tmdbId": tid} for tid in tv_probe_ids]
+    # Probes presence & identity queries
+    presence_movie_rows = [
+        {"tmdbId": p["tmdb_id"], "title": p["title"], "originalTitle": None} for p in movie_probes
+    ]
+    presence_tv_rows = [
+        {"tmdbId": p["tmdb_id"], "name": p["title"], "originalName": None} for p in tv_probes
+    ]
 
     # Additional candidates queries
     add_movie_rows = [{"tmdbId": 50000 + i} for i in range(1362)]
@@ -1861,3 +1882,435 @@ def test_personal_library_tables_never_queried():
             f"Forbidden table '{forbidden}' detected in executable code/SQL of "
             f"prepare_catalogue_fixture.py"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test 25: Title normalization for identity matching
+# ---------------------------------------------------------------------------
+def test_normalize_probe_title_case_whitespace_punctuation():
+    """Verifies that title normalization strips harmless variations while preserving semantics."""
+    assert normalize_probe_title("  Inception  ") == "inception"
+    assert normalize_probe_title("The   Dark   Knight") == "the dark knight"
+    assert normalize_probe_title("Twin Peaks: The Return") == "twin peaks the return"
+    assert normalize_probe_title("Pan's Labyrinth") == "pans labyrinth"
+    assert normalize_probe_title("Spider-Man: No Way Home") == "spider man no way home"
+    assert normalize_probe_title(None) == ""
+    assert normalize_probe_title("") == ""
+    assert normalize_probe_title("   ") == ""
+
+
+# ---------------------------------------------------------------------------
+# Test 26: Movie identity matching passes for valid titles and original titles
+# ---------------------------------------------------------------------------
+def test_matches_probe_identity_correct_movie():
+    """Verifies that valid movie titles and original titles pass conservative matching."""
+    # Exact match
+    assert matches_probe_identity(
+        expected_title="Inception",
+        stored_title="Inception",
+        stored_original_title="Inception",
+        media_type="MOVIE",
+        tmdb_id=27205,
+    )
+    # Case & whitespace normalization
+    assert matches_probe_identity(
+        expected_title="The Dark Knight",
+        stored_title="  the dark knight  ",
+        stored_original_title=None,
+        media_type="MOVIE",
+        tmdb_id=155,
+    )
+    # Punctuation normalization
+    assert matches_probe_identity(
+        expected_title="Pan's Labyrinth",
+        stored_title="Pans Labyrinth",
+        stored_original_title="El laberinto del fauno",
+        media_type="MOVIE",
+        tmdb_id=1417,
+    )
+    # Match via original title fallback
+    assert matches_probe_identity(
+        expected_title="Amélie",
+        stored_title="The Fabulous Destiny of Amélie Poulain",
+        stored_original_title="Amélie",
+        media_type="MOVIE",
+        tmdb_id=194,
+    )
+    # Complete mismatch fails
+    assert not matches_probe_identity(
+        expected_title="Manchester by the Sea",
+        stored_title="Lion",
+        stored_original_title="Lion",
+        media_type="MOVIE",
+        tmdb_id=334543,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 27: TV show identity matching passes for valid titles
+# ---------------------------------------------------------------------------
+def test_matches_probe_identity_correct_tv():
+    """Verifies that correct TV show names pass conservative identity matching."""
+    assert matches_probe_identity(
+        expected_title="The Wire",
+        stored_title="The Wire",
+        stored_original_title="The Wire",
+        media_type="TV",
+        tmdb_id=1438,
+    )
+    assert matches_probe_identity(
+        expected_title="Better Call Saul",
+        stored_title="better call saul",
+        stored_original_title=None,
+        media_type="TV",
+        tmdb_id=60059,
+    )
+    # Complete mismatch fails
+    assert not matches_probe_identity(
+        expected_title="The Wire",
+        stored_title="Wilfred",
+        stored_original_title="Wilfred",
+        media_type="TV",
+        tmdb_id=3297,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 28: Approved PB-45 alias passes, unapproved alias fails
+# ---------------------------------------------------------------------------
+def test_matches_probe_identity_approved_pb45_alias():
+    """Verifies that PB-45 passes via explicit approved alias, but unapproved aliases fail."""
+    assert ("TV", 1920) in APPROVED_PROBE_ALIASES
+    # PB-45 (TV, 1920): Twin Peaks is the parent show representing Twin Peaks: The Return
+    assert matches_probe_identity(
+        expected_title="Twin Peaks: The Return",
+        stored_title="Twin Peaks",
+        stored_original_title="Twin Peaks",
+        media_type="TV",
+        tmdb_id=1920,
+    )
+    # Another TV show named "Twin Peaks" with a different tmdb_id does NOT get the alias
+    assert not matches_probe_identity(
+        expected_title="Twin Peaks: The Return",
+        stored_title="Twin Peaks",
+        stored_original_title=None,
+        media_type="TV",
+        tmdb_id=999999,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 29: Wrong movie title raises ProbeIdentityMismatchError
+# ---------------------------------------------------------------------------
+def test_verify_database_readiness_wrong_movie_title_fails(
+    valid_50_probes: list[dict[str, Any]],
+):
+    """Verifies that an existing TMDB ID with unrelated movie title raises mismatch error."""
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    mock_cur.fetchone.side_effect = [
+        {"total_movies": 5000, "movies_with_overview": 4000},
+        {"total_tv_shows": 2000, "tv_shows_with_overview": 1500},
+    ]
+
+    movie_probes = [p for p in valid_50_probes if p["media_type"] == "movie"]
+    tv_probes = [p for p in valid_50_probes if p["media_type"] == "tv"]
+
+    # First movie probe (PB-01, expected "Title 1") has a corrupted/wrong title in DB
+    movie_rows = [
+        {
+            "tmdbId": movie_probes[0]["tmdb_id"],
+            "title": "Completely Unrelated Movie Title",
+            "originalTitle": "Totally Different",
+        }
+    ] + [
+        {"tmdbId": p["tmdb_id"], "title": p["title"], "originalTitle": None}
+        for p in movie_probes[1:]
+    ]
+
+    tv_rows = [
+        {"tmdbId": p["tmdb_id"], "name": p["title"], "originalName": None} for p in tv_probes
+    ]
+
+    mock_cur.fetchall.side_effect = [movie_rows, tv_rows]
+
+    with pytest.raises(ProbeIdentityMismatchError) as exc_info:
+        verify_database_readiness(mock_conn, valid_50_probes)
+
+    err = exc_info.value
+    assert err.probe_id == movie_probes[0]["probe_id"]
+    assert err.expected_title == movie_probes[0]["title"]
+    assert err.actual_title == "Completely Unrelated Movie Title"
+    assert err.media_type == "MOVIE"
+    assert err.tmdb_id == movie_probes[0]["tmdb_id"]
+
+
+# ---------------------------------------------------------------------------
+# Test 30: Wrong TV show title raises ProbeIdentityMismatchError
+# ---------------------------------------------------------------------------
+def test_verify_database_readiness_wrong_tv_title_fails(
+    valid_50_probes: list[dict[str, Any]],
+):
+    """Verifies that an existing TMDB ID with unrelated TV show name raises mismatch error."""
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    mock_cur.fetchone.side_effect = [
+        {"total_movies": 5000, "movies_with_overview": 4000},
+        {"total_tv_shows": 2000, "tv_shows_with_overview": 1500},
+    ]
+
+    movie_probes = [p for p in valid_50_probes if p["media_type"] == "movie"]
+    tv_probes = [p for p in valid_50_probes if p["media_type"] == "tv"]
+
+    movie_rows = [
+        {"tmdbId": p["tmdb_id"], "title": p["title"], "originalTitle": None} for p in movie_probes
+    ]
+
+    # First TV probe has wrong name
+    tv_rows = [
+        {
+            "tmdbId": tv_probes[0]["tmdb_id"],
+            "name": "Unrelated Sitcom",
+            "originalName": None,
+        }
+    ] + [{"tmdbId": p["tmdb_id"], "name": p["title"], "originalName": None} for p in tv_probes[1:]]
+
+    mock_cur.fetchall.side_effect = [movie_rows, tv_rows]
+
+    with pytest.raises(ProbeIdentityMismatchError) as exc_info:
+        verify_database_readiness(mock_conn, valid_50_probes)
+
+    err = exc_info.value
+    assert err.probe_id == tv_probes[0]["probe_id"]
+    assert err.expected_title == tv_probes[0]["title"]
+    assert err.actual_title == "Unrelated Sitcom"
+    assert err.media_type == "TV"
+    assert err.tmdb_id == tv_probes[0]["tmdb_id"]
+
+
+# ---------------------------------------------------------------------------
+# Test 31: Corrected probe fixture retains 50 entries, 38/12 split, 10 per stratum
+# ---------------------------------------------------------------------------
+def test_corrected_probe_fixture_invariants():
+    """Validates that probes_v1.json conforms to all benchmark structural invariants."""
+    fixture_path = Path("ml/benchmark/fixtures/probes_v1.json")
+    with open(fixture_path, encoding="utf-8") as f:
+        probes = json.load(f)
+
+    assert len(probes) == 50
+    movies = [p for p in probes if p["media_type"] == "movie"]
+    tv_shows = [p for p in probes if p["media_type"] == "tv"]
+    assert len(movies) == 38
+    assert len(tv_shows) == 12
+
+    # Check strata distribution: exactly 10 per stratum
+    strata_counts: dict[str, int] = {}
+    for p in probes:
+        s = p["stratum"]
+        strata_counts[s] = strata_counts.get(s, 0) + 1
+
+    assert len(strata_counts) == 5
+    for stratum, count in strata_counts.items():
+        assert count == 10, f"Stratum '{stratum}' has {count} probes; expected 10."
+
+    # Validate specific corrected IDs
+    probe_by_id = {p["probe_id"]: p for p in probes}
+
+    # PB-27: Manchester by the Sea must be 334541 (not 334543)
+    assert probe_by_id["PB-27"]["tmdb_id"] == 334541
+    assert probe_by_id["PB-27"]["title"] == "Manchester by the Sea"
+    assert probe_by_id["PB-27"]["media_type"] == "movie"
+
+    # PB-40: The Wire must be 1438 (not 3297)
+    assert probe_by_id["PB-40"]["tmdb_id"] == 1438
+    assert probe_by_id["PB-40"]["title"] == "The Wire"
+    assert probe_by_id["PB-40"]["media_type"] == "tv"
+
+    # PB-46: Samsara must be 89708 (not 85350)
+    assert probe_by_id["PB-46"]["tmdb_id"] == 89708
+    assert probe_by_id["PB-46"]["title"] == "Samsara"
+    assert probe_by_id["PB-46"]["media_type"] == "movie"
+
+    # PB-45: Twin Peaks: The Return preserved as 1920 (approved alias)
+    assert probe_by_id["PB-45"]["tmdb_id"] == 1920
+    assert probe_by_id["PB-45"]["title"] == "Twin Peaks: The Return"
+    assert probe_by_id["PB-45"]["media_type"] == "tv"
+
+
+# ---------------------------------------------------------------------------
+# Test 32: Fixture generator fails closed on probe identity mismatch
+# ---------------------------------------------------------------------------
+def test_prepare_catalogue_snapshot_fails_closed_on_identity_mismatch(
+    tmp_path: Path, valid_50_probes: list[dict[str, Any]]
+):
+    """Verifies prepare_catalogue_snapshot exits code 1 and writes no files on mismatch."""
+    probes_file = tmp_path / "probes.json"
+    with open(probes_file, "w", encoding="utf-8") as f:
+        json.dump(valid_50_probes, f)
+
+    out_dir = tmp_path / "out"
+
+    mock_conn = MagicMock()
+    mock_cur = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+
+    mock_cur.fetchone.side_effect = [
+        {"total_movies": 5000, "movies_with_overview": 4000},
+        {"total_tv_shows": 2000, "tv_shows_with_overview": 1500},
+    ]
+
+    movie_probes = [p for p in valid_50_probes if p["media_type"] == "movie"]
+    tv_probes = [p for p in valid_50_probes if p["media_type"] == "tv"]
+
+    # First movie has wrong title in database
+    movie_rows = [
+        {
+            "tmdbId": movie_probes[0]["tmdb_id"],
+            "title": "Wrong Title In DB",
+            "originalTitle": None,
+        }
+    ] + [
+        {"tmdbId": p["tmdb_id"], "title": p["title"], "originalTitle": None}
+        for p in movie_probes[1:]
+    ]
+    tv_rows = [
+        {"tmdbId": p["tmdb_id"], "name": p["title"], "originalName": None} for p in tv_probes
+    ]
+
+    mock_cur.fetchall.side_effect = [movie_rows, tv_rows]
+
+    with patch("psycopg2.connect", return_value=mock_conn):
+        code = prepare_catalogue_snapshot(
+            db_url="postgresql://localhost:5432/cinesphere",
+            probes_file=probes_file,
+            output_dir=out_dir,
+        )
+
+    assert code == 1
+    assert not (out_dir / "catalogue_snapshot_v1.jsonl").exists()
+    assert not (out_dir / "catalogue_snapshot_v1.manifest.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# Test 33: PostgreSQL integration coverage for probe identity validation
+# ---------------------------------------------------------------------------
+def test_postgres_probe_identity_verification_integration():
+    """Verifies probe identity validation directly against PostgreSQL disposable tables.
+
+    Tests that matching probe titles pass and mismatched probe titles raise
+    ProbeIdentityMismatchError at the database query layer.
+    """
+    conn = _connect_test_db()
+    if conn is None:
+        pytest.skip("NOT VERIFIED — Disposable PostgreSQL integration environment unavailable.")
+
+    test_prefix = f"ident_test_{uuid.uuid4().hex[:8]}"
+    movies_table = f"{test_prefix}_movies"
+    tv_table = f"{test_prefix}_tv"
+
+    test_probes = [
+        {
+            "probe_id": "PB-01",
+            "media_type": "movie",
+            "tmdb_id": 27205,
+            "title": "Inception",
+            "stratum": "Mainstream",
+            "selection_rationale": "Sci-fi heist",
+        },
+        {
+            "probe_id": "PB-31",
+            "media_type": "tv",
+            "tmdb_id": 1396,
+            "title": "Breaking Bad",
+            "stratum": "Serialized TV",
+            "selection_rationale": "Crime tragedy",
+        },
+    ]
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                CREATE TEMP TABLE {movies_table} (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    "tmdbId" INT UNIQUE NOT NULL,
+                    title VARCHAR(500) NOT NULL,
+                    "originalTitle" VARCHAR(500),
+                    overview TEXT
+                );
+                CREATE TEMP TABLE {tv_table} (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    "tmdbId" INT UNIQUE NOT NULL,
+                    name VARCHAR(500) NOT NULL,
+                    "originalName" VARCHAR(500),
+                    overview TEXT
+                );
+                """
+            )
+
+            # Insert matching titles
+            cur.execute(
+                f"""
+                INSERT INTO {movies_table} ("tmdbId", title, "originalTitle", overview)
+                VALUES (27205, 'Inception', 'Inception', 'A thief who steals corporate secrets...');
+                INSERT INTO {tv_table} ("tmdbId", name, "originalName", overview)
+                VALUES (1396, 'Breaking Bad', 'Breaking Bad', 'A high school chemistry teacher...');
+                """
+            )
+
+            # Verify that matching rows retrieve and validate identity successfully
+            select_movies_sql = (
+                f'SELECT "tmdbId", title, "originalTitle" FROM {movies_table} '
+                f'WHERE "tmdbId" = ANY(%s);'
+            )
+            cur.execute(select_movies_sql, ([27205],))
+            m_rows = {
+                r[0]: {"tmdbId": r[0], "title": r[1], "originalTitle": r[2]} for r in cur.fetchall()
+            }
+            assert matches_probe_identity(
+                test_probes[0]["title"],
+                m_rows[27205]["title"],
+                m_rows[27205]["originalTitle"],
+                "MOVIE",
+                27205,
+            )
+
+            select_tv_sql = (
+                f'SELECT "tmdbId", name, "originalName" FROM {tv_table} WHERE "tmdbId" = ANY(%s);'
+            )
+            cur.execute(select_tv_sql, ([1396],))
+            t_rows = {
+                r[0]: {"tmdbId": r[0], "name": r[1], "originalName": r[2]} for r in cur.fetchall()
+            }
+            assert matches_probe_identity(
+                test_probes[1]["title"],
+                t_rows[1396]["name"],
+                t_rows[1396]["originalName"],
+                "TV",
+                1396,
+            )
+
+            # Test mismatch on movie: update title and originalTitle to unrelated
+            cur.execute(
+                f"UPDATE {movies_table} "
+                f"SET title = 'Unrelated Film', \"originalTitle\" = 'Unrelated Film' "
+                f'WHERE "tmdbId" = 27205;'
+            )
+            cur.execute(select_movies_sql, ([27205],))
+            m_mismatch = {
+                r[0]: {"tmdbId": r[0], "title": r[1], "originalTitle": r[2]} for r in cur.fetchall()
+            }
+            assert not matches_probe_identity(
+                test_probes[0]["title"],
+                m_mismatch[27205]["title"],
+                m_mismatch[27205]["originalTitle"],
+                "MOVIE",
+                27205,
+            )
+
+    finally:
+        conn.close()
