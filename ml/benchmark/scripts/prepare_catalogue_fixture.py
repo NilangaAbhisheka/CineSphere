@@ -58,6 +58,20 @@ class PublicationRollbackError(Exception):
         )
 
 
+class PublicationCleanupError(Exception):
+    """Raised when artifacts were published successfully,
+
+    but post-publication cleanup of backup files failed.
+    """
+
+    def __init__(self, cleanup_errors: list[Exception]) -> None:
+        self.cleanup_errors = cleanup_errors
+        super().__init__(
+            "Artifacts were published successfully, but post-publication cleanup "
+            f"of backup files encountered errors: {[str(e) for e in cleanup_errors]}"
+        )
+
+
 class MissingMandatoryProbesError(Exception):
     """Raised when one or more predefined benchmark probes are missing from the database."""
 
@@ -115,9 +129,9 @@ FORBIDDEN_TABLES = {
 # Designed to never exclude legitimate titles (e.g. 'The Lego Movie', 'The Daily Show').
 SYNTHETIC_MOVIE_EXCLUSION_PATTERN = (
     r"^(Test|Integration|Detailed|Concurrent|Ingestion|On-Demand|Recent|Rollback|"
-    r"Ownership|Stats|CSV|Notes|Invalid Date|Import|Viewing Event|Duplicate)\s+.*Movie\b|"
-    r"^Test\s+Movie\b|"
-    r"^E-[0-9]+[a-z]?\s+Movie\b|"
+    r"Ownership|Stats|CSV|Notes|Invalid Date|Import|Viewing Event|Duplicate)\s+.*Movie(\s|$)|"
+    r"^Test\s+Movie(\s|$)|"
+    r"^E-[0-9]+[a-z]?\s+Movie(\s|$)|"
     r"^\[E2E\]|"
     r"^(Initial Title|Updated Title|Duplicate|Tagged Movie|Library Movie Excluded|"
     r"Inception (Alpha|Beta|Null Popularity)|Interstellar Gamma)$"
@@ -125,9 +139,9 @@ SYNTHETIC_MOVIE_EXCLUSION_PATTERN = (
 
 SYNTHETIC_TV_EXCLUSION_PATTERN = (
     r"^(Test|Integration|Detailed|Concurrent|Ingestion|On-Demand|Recent|Rollback|"
-    r"Ownership|Stats|CSV|CW|Import|Specials|Viewing Event|Duplicate)\s+.*(Show|Series|TV)\b|"
-    r"^Test\s+(Show|Series)\b|"
-    r"^E-[0-9]+[a-z]?\s+(Show|Series|TV)\b|"
+    r"Ownership|Stats|CSV|CW|Import|Specials|Viewing Event|Duplicate)\s+.*(Show|Series|TV)(\s|$)|"
+    r"^Test\s+(Show|Series)(\s|$)|"
+    r"^E-[0-9]+[a-z]?\s+(Show|Series|TV)(\s|$)|"
     r"^\[E2E\]|^TV Hierarchy|"
     r"^(Show Alpha|Show Beta|Show [A-Za-z0-9]+|TV Show [A-Za-z0-9]+|Completed Show|"
     r"Fully Watched Show|Null WatchedAt Show|Tagged Show|TV Show Missing (Season|Episode)|"
@@ -498,7 +512,7 @@ def fetch_full_metadata(
         # Fetch Movies
         if movie_tmdb_ids:
             cur.execute(
-                """
+                f"""
                 SELECT
                     m.id,
                     m."tmdbId",
@@ -577,7 +591,7 @@ def fetch_full_metadata(
         # Fetch TV Shows
         if tv_tmdb_ids:
             cur.execute(
-                """
+                f"""
                 SELECT
                     t.id,
                     t."tmdbId",
@@ -789,13 +803,21 @@ def publish_artifacts(artifacts: list[tuple[Path, Path]]) -> None:
     2. Records which destinations initially exist: initial_dest_exists[final_path].
     3. Moves existing final_paths to temporary backup files (.old).
     4. Moves tmp_paths to final_paths.
-    5. If any failure occurs during backup or replacement:
+    5. If any failure occurs during backup (Phase 2) or replacement (Phase 3):
        - Restores all backed-up files (.old -> final_path).
        - Deletes any final_paths that did NOT exist initially but were created during replacement.
        - Cleans up leftover .tmp and remaining .old files.
        - If rollback itself encounters errors, raises PublicationRollbackError.
        - If rollback succeeds cleanly, raises RuntimeError detailing the original error.
-    6. On complete success: unlinks all backup files (.old).
+    6. Post-publication cleanup (Phase 4):
+       - Unlinks all backup files (.old).
+       - If any cleanup error occurs, raises PublicationCleanupError without attempting rollback
+         (all artifacts are already fully and successfully published).
+
+    Note: Filesystems (POSIX/NTFS) do not provide multi-file transactional atomicity
+    across distinct renames. This implementation provides a staged two-phase replacement
+    with backup and rollback to prevent split-state publication, surfacing publication,
+    rollback, and cleanup errors explicitly.
     """
     initial_dest_exists: dict[Path, bool] = {}
     backups: dict[Path, Path] = {}
@@ -803,18 +825,24 @@ def publish_artifacts(artifacts: list[tuple[Path, Path]]) -> None:
     rollback_errors: list[Exception] = []
 
     # Phase 1: Preflight check - verify all tmp files exist
-    for tmp_path, _ in artifacts:
-        if not tmp_path.exists():
-            for t, _ in artifacts:
-                try:
-                    if t.exists():
-                        t.unlink()
-                except Exception:
-                    pass
-            raise RuntimeError(
-                f"Artifact publication failed and was rolled back: "
-                f"Temporary artifact {tmp_path} does not exist."
+    missing_tmp = [tmp_path for tmp_path, _ in artifacts if not tmp_path.exists()]
+    if missing_tmp:
+        cleanup_errors: list[Exception] = []
+        for t, _ in artifacts:
+            try:
+                if t.exists():
+                    t.unlink()
+            except Exception as ce:
+                cleanup_errors.append(ce)
+        if cleanup_errors:
+            raise PublicationRollbackError(
+                FileNotFoundError(f"Temporary artifact(s) do not exist: {missing_tmp}"),
+                cleanup_errors,
             )
+        raise RuntimeError(
+            f"Artifact publication preflight failed: "
+            f"Temporary artifact(s) do not exist: {missing_tmp}."
+        )
 
     try:
         # Phase 2: Record initial existence and create backups of existing final files
@@ -833,11 +861,6 @@ def publish_artifacts(artifacts: list[tuple[Path, Path]]) -> None:
             tmp_path.replace(final_path)
             replaced_finals.append(final_path)
 
-        # Phase 4: Clean up backups on complete success
-        for bak_path in backups.values():
-            if bak_path.exists():
-                bak_path.unlink()
-
     except Exception as e:
         # Rollback procedure:
         # 1. For destinations that existed initially: restore from backup
@@ -845,6 +868,12 @@ def publish_artifacts(artifacts: list[tuple[Path, Path]]) -> None:
             try:
                 if bak_path.exists():
                     bak_path.replace(final_path)
+                else:
+                    rollback_errors.append(
+                        FileNotFoundError(
+                            f"Backup {bak_path} does not exist; cannot restore {final_path}"
+                        )
+                    )
             except Exception as rb_err:
                 rollback_errors.append(rb_err)
 
@@ -863,18 +892,30 @@ def publish_artifacts(artifacts: list[tuple[Path, Path]]) -> None:
             try:
                 if tmp_path.exists():
                     tmp_path.unlink()
-            except Exception:
-                pass
+            except Exception as rb_err:
+                rollback_errors.append(rb_err)
         for bak_path in backups.values():
             try:
                 if bak_path.exists():
                     bak_path.unlink()
-            except Exception:
-                pass
+            except Exception as rb_err:
+                rollback_errors.append(rb_err)
 
         if rollback_errors:
             raise PublicationRollbackError(e, rollback_errors) from e
         raise RuntimeError(f"Artifact publication failed and was rolled back: {e}") from e
+
+    # Phase 4: Clean up backups on complete success
+    post_cleanup_errors: list[Exception] = []
+    for bak_path in backups.values():
+        try:
+            if bak_path.exists():
+                bak_path.unlink()
+        except Exception as ce:
+            post_cleanup_errors.append(ce)
+
+    if post_cleanup_errors:
+        raise PublicationCleanupError(post_cleanup_errors)
 
 
 def prepare_catalogue_snapshot(

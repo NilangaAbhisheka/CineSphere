@@ -11,9 +11,9 @@
 | Project           | CineSphere                                                                                                                                                                                                                                                                                                                  |
 | Type              | Personal movie and TV tracking, discovery, recommendation, and analytics platform                                                                                                                                                                                                                                           |
 | Architecture      | TypeScript monorepo (Next.js + NestJS) with separate Python ML package                                                                                                                                                                                                                                                      |
-| Phase             | **Phase 4 — Statistics and Data Import/Export**                                                                                                                                                                                                                                                                             |
-| Current Milestone | Stage 4.5 Complete ✅ (Data Export — Full-fidelity JSON and flat RFC 4180 CSV exports, RepeatableRead snapshot isolation, zero silent data loss enforcement, full JSON and limited CSV round-trip verification, 513 unit tests [21 backend + 18 frontend], 199 integration tests [11 suites], 39 E2E tests [Workflows A–H]) |
-| Last Updated      | 2026-11-18                                                                                                                                                                                                                                                                                                                  |
+| Phase             | **Phase 5 — Recommendation Engine Foundation (Stage 5.0 Benchmark Preparation)**                                                                                                                                                                                                                                            |
+| Current Milestone | Stage 5.0.2 Complete ✅ (Production Extraction Path Verification & Final Fixture Readiness Audit) — Pipeline verified; DB catalogue seeding required before benchmark fixture can be generated                                                                                                                               |
+| Last Updated      | 2026-11-24                                                                                                                                                                                                                                                                                                                  |
 
 ---
 
@@ -24,7 +24,7 @@ Phase 1  — Project Foundation                  ██████████�
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
 Phase 3  — Personal Library and Tracking       ████████████████  100% (Stages 3.0–3.8: DB foundation, integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening — COMPLETE)
 Phase 4  — Statistics and Data Import/Export   ████████████████  100% (Stages 4.1, 4.2, 4.3, 4.4, 4.5 complete — Phase 4 COMPLETE)
-Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  0%
+Phase 5  — Recommendation Engine Foundation    ░░░░░░░░░░░░░░░░  Stage 5.0 Benchmark Design & Pipeline Verified (Production Implementation 0%, TD-08 Open)
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
 Phase 7  — Local LLM Integration               ░░░░░░░░░░░░░░░░  0%
 Phase 8  — Movie Universe                      ░░░░░░░░░░░░░░░░  0%
@@ -610,6 +610,48 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - Recommendation records are stored with reasons.
 
 ---
+
+### 5.0 Candidate Model Evaluation & Benchmark Preparation (Stage 5.0 Pre-Implementation)
+
+**Objective:** Design, specify, and harden the Stage 5.0 candidate embedding model benchmark pipeline before selecting an embedding model (TD-08) or writing production recommendation code.
+
+**Authoritative Specification:** `docs/PHASE_5_TECHNICAL_DESIGN_PROPOSAL_V0.7.4_CORRECTION_ADDENDUM.md` (Internal Version V0.7.8).
+
+- [x] Predefined Evaluation Probes (`ml/benchmark/fixtures/probes_v1.json`)
+  - [x] Exactly 50 evaluation probes across 5 strata (Mainstream, International, Indie, Serialized TV, Stress Cases)
+  - [x] Fixed probe media allocation: 38 movies, 12 TV shows
+  - [x] Unique probe IDs (`PB-01` to `PB-50`), unique composite identities `(media_type, tmdb_id)`
+  - [x] Full probe metadata: `title`, `canonical_title`, `year`, `stratum`, `selection_rationale`, `evaluation_notes`
+- [x] Catalogue Fixture Extraction Pipeline (`ml/benchmark/scripts/prepare_catalogue_fixture.py`)
+  - [x] Quota calculation: 2,000 total items (1,400 movies + 600 TV shows); dynamic quotas (1,362 candidate movies + 588 candidate TV shows)
+  - [x] Section 8.11.1 canonical serialization (`serialize_canonical_text`): bracketed token format, `[YEAR]` for movies, `[FIRST_AIR_YEAR]` for TV, strict null/empty/whitespace omission, zero fabricated scalar fields
+  - [x] Deterministic cast selection: top 5 cast members ordered by `(p.name ASC, p."tmdbId" ASC)` via `get_cast_selection_sql()` helper
+  - [x] Production query SQL interpolation: fixed movie and TV queries in `fetch_full_metadata()`
+  - [x] Synthetic record exclusion: regex patterns anchored with `(\s|$)` for full cross-engine compatibility between PostgreSQL POSIX regex (`~*`) and Python `re`
+  - [x] Strict session read-only enforcement: `conn.set_session(readonly=True, autocommit=True)` and `SET default_transaction_read_only = on`
+  - [x] Section 8.11.3 manifest builder (`build_manifest`): includes all 12 required fields, cross-artifact consistency (`record_count == movie_count + tv_count`), SHA-256 digest
+  - [x] Modular artifact staging (`write_jsonl_snapshot`, `stage_fixture_artifacts`)
+  - [x] Publication rollback & cleanup hardening (`publish_artifacts`): staged replacement, backup of existing files (`.old`), rollback restoring backups and unlinking newly created destinations, `PublicationRollbackError` for dual failures, `PublicationCleanupError` for post-publication backup cleanup errors
+- [x] Pipeline Test Suite & Verification (`ml/tests/test_prepare_catalogue_fixture.py`)
+  - [x] 35 unit and integration tests passing in `test_prepare_catalogue_fixture.py` (39 total in `ml/tests/`)
+  - [x] Real PostgreSQL integration tests for `fetch_full_metadata()` (Movie & TV queries against temporary tables)
+  - [x] Real PostgreSQL POSIX regex integration test (`~*`) confirming portable syntax
+  - [x] Real PostgreSQL session read-only enforcement test on disposable test DB
+  - [x] Publication rollback & cleanup failure scenario tests (Scenarios A, B, C, D, E, F)
+- [ ] Catalogue Data Seeding (PREREQUISITE for Benchmark Fixture Generation)
+  - [ ] Ingest real TMDB catalogue records to satisfy 1,400 movie quota and 600 TV show quota
+  - [ ] Ensure all 50 mandatory benchmark probes are present in database
+  - [ ] Current database status: 138 movies with overview (deficit: 1,262), 106 TV shows with overview (deficit: 494), 0/50 probes present
+  - [ ] Fail-closed status: Extraction pipeline correctly halts under Section 7 Stop Conditions
+- [ ] Candidate Embedding Model Benchmark Execution (Stage 5.0 Scientific Benchmark)
+  - [ ] Generate 2,000-item fixture (`catalogue_snapshot_v1.jsonl`, `.sha256`, `.manifest.json`)
+  - [ ] Benchmark Model A (`sentence-transformers/all-MiniLM-L6-v2`, 384-d)
+  - [ ] Benchmark Model B (`sentence-transformers/all-mpnet-base-v2`, 768-d)
+  - [ ] Benchmark Model C (`nvidia/Nemotron-3.5-Embed-1B-BF16`, 2048-d)
+  - [ ] Multi-faceted relevance grading across 50 probes
+  - [ ] Compute retrieval quality metrics (MRR@10, NDCG@10, MAP@10) and hardware profiling
+  - [ ] Produce Recommendation Decision Record (RDR) to resolve TD-08
+- [ ] Recommendation Engine Implementation (Stage 5.1 — Pending TD-08 Resolution)
 
 ### 5.1 ML Environment Setup
 

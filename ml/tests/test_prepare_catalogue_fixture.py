@@ -41,10 +41,12 @@ from ml.benchmark.scripts.prepare_catalogue_fixture import (
     SYNTHETIC_MOVIE_EXCLUSION_PATTERN,
     SYNTHETIC_TV_EXCLUSION_PATTERN,
     InvalidProbeDefinitionError,
+    PublicationCleanupError,
     PublicationRollbackError,
     build_manifest,
     calculate_additional_quotas,
     create_readonly_connection,
+    fetch_full_metadata,
     get_cast_selection_sql,
     prepare_catalogue_snapshot,
     publish_artifacts,
@@ -738,6 +740,144 @@ def test_synthetic_record_exclusion_patterns():
 
 
 # ---------------------------------------------------------------------------
+# Test 17b: PostgreSQL regex engine synthetic exclusion verification
+# ---------------------------------------------------------------------------
+def test_postgres_regex_synthetic_exclusion():
+    """Verifies synthetic exclusion patterns directly against PostgreSQL's POSIX regex engine (~*).
+
+    Ensures that PostgreSQL evaluates the expressions identically to Python's re module,
+    guaranteeing that legitimate titles are eligible and synthetic records are excluded.
+    Uses disposable test DB; skips with NOT VERIFIED if unavailable.
+    """
+    conn = _connect_test_db()
+    if conn is None:
+        pytest.skip("NOT VERIFIED — Disposable PostgreSQL integration environment unavailable.")
+
+    synthetic_movies = [
+        "Test Movie 828800201",
+        "Test Movie 104",
+        "Integration Movie 503",
+        "Detailed Movie 748314838",
+        "Concurrent Movie 822050293",
+        "Ingestion Movie 812794626",
+        "On-Demand Movie 906241586",
+        "E-3 Movie",
+        "[E2E] Movie Test",
+        "Initial Title",
+        "Updated Title",
+        "Duplicate",
+        "Tagged Movie",
+        "Library Movie Excluded",
+        "Notes Test Movie",
+        "Rollback Test Movie A",
+        "Viewing Event Missing WatchedAt Movie",
+        "CSV CreatedAt Movie",
+        "CSV Multi Movie 1",
+    ]
+
+    legitimate_movies = [
+        "The Lego Movie",
+        "Scary Movie",
+        "Bee Movie",
+        "The Simpsons Movie",
+        "Testament of Youth",
+        "The Test",
+        "Testing the Waters",
+        "Test Pilot",
+        "The Movie",
+        "Movie 43",
+        "Inception",
+        "The Dark Knight",
+        "Spider-Man: No Way Home",
+        "Blade Runner 2049",
+        "Alien",
+        "Arrival",
+        "Heat",
+        "The Test Movie",
+        "A Test Movie",
+        "My Test Movie",
+    ]
+
+    synthetic_tv = [
+        "Test Show 101",
+        "Integration Show 202",
+        "Detailed TV Show 303",
+        "Concurrent TV Show 404",
+        "Ingestion TV Show 800815289",
+        "On-Demand TV Show 505",
+        "E-1 Show",
+        "E-2 Show 1",
+        "[E2E] Breaking Test Series",
+        "TV Hierarchy 701562702",
+        "Show Alpha",
+        "Show Beta",
+        "Show 1",
+        "TV Show A",
+        "Completed Show",
+        "Fully Watched Show",
+        "Null WatchedAt Show",
+        "Tagged Show",
+        "Specials Show 800815295",
+        "Breaking Cosmos",
+        "Better Call Cosmos",
+        "TV Show Missing Season",
+    ]
+
+    legitimate_tv = [
+        "The Daily Show",
+        "The Truman Show",
+        "Regular Show",
+        "The Show",
+        "Freakshow",
+        "Testament",
+        "Chernobyl",
+        "Doctor Who",
+        "Fargo",
+        "Lioness",
+        "Severance",
+        "Succession",
+        "The Wire",
+        "True Detective",
+        "Breaking Bad",
+        "The Test Show",
+        "A Test Show",
+        "The Daily Test Series",
+    ]
+
+    try:
+        with conn.cursor() as cur:
+            # Test synthetic movies are excluded (~* returns True)
+            for title in synthetic_movies:
+                cur.execute("SELECT %s ~* %s;", (title, SYNTHETIC_MOVIE_EXCLUSION_PATTERN))
+                is_excluded = cur.fetchone()[0]
+                assert is_excluded, f"PostgreSQL regex did not exclude synthetic movie: '{title}'"
+
+            # Test legitimate movies remain eligible (~* returns False)
+            for title in legitimate_movies:
+                cur.execute("SELECT %s ~* %s;", (title, SYNTHETIC_MOVIE_EXCLUSION_PATTERN))
+                is_excluded = cur.fetchone()[0]
+                assert not is_excluded, (
+                    f"PostgreSQL regex incorrectly excluded legitimate movie: '{title}'"
+                )
+
+            # Test synthetic TV shows are excluded (~* returns True)
+            for name in synthetic_tv:
+                cur.execute("SELECT %s ~* %s;", (name, SYNTHETIC_TV_EXCLUSION_PATTERN))
+                is_excluded = cur.fetchone()[0]
+                assert is_excluded, f"PostgreSQL regex did not exclude synthetic TV show: '{name}'"
+
+            # Test legitimate TV shows remain eligible (~* returns False)
+            for name in legitimate_tv:
+                cur.execute("SELECT %s ~* %s;", (name, SYNTHETIC_TV_EXCLUSION_PATTERN))
+                is_excluded = cur.fetchone()[0]
+                assert not is_excluded, (
+                    f"PostgreSQL regex incorrectly excluded legitimate TV show: '{name}'"
+                )
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Test 18: Deterministic cast SQL selection via real PostgreSQL
 # ---------------------------------------------------------------------------
 def test_deterministic_cast_selection_real_sql():
@@ -862,6 +1002,282 @@ def test_deterministic_cast_selection_real_sql():
         assert list(result_1) == list(result_2), (
             "Cast selection is non-deterministic: repeated queries returned different results."
         )
+    finally:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 18b: Actual fetch_full_metadata() movie production query against PostgreSQL
+# ---------------------------------------------------------------------------
+def test_fetch_full_metadata_movie_production_sql():
+    """Executes the actual production fetch_full_metadata() function for movies
+    against disposable PostgreSQL tables.
+
+    Verifies:
+    1. Movie query executes successfully (no SQL syntax/interpolation errors).
+    2. Fields mapped correctly: title, originalTitle, year, genres, keywords, cast.
+    3. Exactly 5 cast members selected from >5 available, sorted by (name ASC, tmdbId ASC).
+    4. Canonical text format conforms to Section 8.11.1.
+    5. Probe metadata associated correctly when item is in probes_map.
+    Uses disposable test DB; skips with NOT VERIFIED if unavailable.
+    """
+    conn = _connect_test_db()
+    if conn is None:
+        pytest.skip("NOT VERIFIED — Disposable PostgreSQL integration environment unavailable.")
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TEMP TABLE movies (
+                    id uuid PRIMARY KEY,
+                    "tmdbId" integer NOT NULL,
+                    title varchar NOT NULL,
+                    "originalTitle" varchar,
+                    overview text,
+                    "releaseDate" date,
+                    popularity double precision,
+                    "voteAverage" double precision,
+                    "voteCount" integer
+                );
+                CREATE TEMP TABLE genres ("tmdbId" integer PRIMARY KEY, name varchar NOT NULL);
+                CREATE TEMP TABLE keywords ("tmdbId" integer PRIMARY KEY, name varchar NOT NULL);
+                CREATE TEMP TABLE "_GenreToMovie" ("A" integer, "B" uuid);
+                CREATE TEMP TABLE "_KeywordToMovie" ("A" integer, "B" uuid);
+                CREATE TEMP TABLE persons (
+                    id uuid PRIMARY KEY,
+                    "tmdbId" integer NOT NULL,
+                    name varchar NOT NULL
+                );
+                CREATE TEMP TABLE person_credits (
+                    id uuid PRIMARY KEY,
+                    "personId" uuid NOT NULL,
+                    "movieId" uuid,
+                    "tvShowId" uuid
+                );
+                """
+            )
+
+            movie_id = str(uuid.uuid4())
+            tmdb_id = 99001
+            cur.execute(
+                """
+                INSERT INTO movies VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
+                """,
+                (
+                    movie_id,
+                    tmdb_id,
+                    "Galactic Odyssey",
+                    "Odyssée Galactique",
+                    "A journey beyond the stars.",
+                    "2023-07-21",
+                    145.8,
+                    8.2,
+                    4500,
+                ),
+            )
+            cur.execute("INSERT INTO genres VALUES (878, 'Science Fiction');")
+            cur.execute('INSERT INTO "_GenreToMovie" VALUES (878, %s);', (movie_id,))
+            cur.execute("INSERT INTO keywords VALUES (9882, 'space exploration');")
+            cur.execute('INSERT INTO "_KeywordToMovie" VALUES (9882, %s);', (movie_id,))
+
+            actors = [
+                ("Zoe Saldana", 8691),
+                ("Bradley Cooper", 51329),
+                ("Chris Pratt", 73457),
+                ("Dave Bautista", 543530),
+                ("Karen Gillan", 543261),
+                ("Michael Rooker", 8516),
+                ("Vin Diesel", 12835),
+            ]
+            for name, actor_tmdb_id in reversed(actors):
+                pid = str(uuid.uuid4())
+                cur.execute("INSERT INTO persons VALUES (%s, %s, %s);", (pid, actor_tmdb_id, name))
+                cur.execute(
+                    "INSERT INTO person_credits VALUES (%s, %s, %s, NULL);",
+                    (str(uuid.uuid4()), pid, movie_id),
+                )
+            conn.commit()
+
+        probes_map = {("MOVIE", tmdb_id): {"probe_id": "PB-01", "stratum": "Mainstream"}}
+        records = fetch_full_metadata(conn, [tmdb_id], [], probes_map)
+
+        assert len(records) == 1, f"Expected 1 record, got {len(records)}"
+        rec = records[0]
+        assert rec["media_type"] == "MOVIE"
+        assert rec["tmdb_id"] == tmdb_id
+        assert rec["title"] == "Galactic Odyssey"
+        assert rec["original_title"] == "Odyssée Galactique"
+        assert rec["year"] == 2023
+        assert rec["genres"] == ["Science Fiction"]
+        assert rec["keywords"] == ["space exploration"]
+        assert rec["is_probe"] is True
+        assert rec["probe_id"] == "PB-01"
+        assert rec["stratum"] == "Mainstream"
+
+        expected_cast = [
+            "Bradley Cooper",
+            "Chris Pratt",
+            "Dave Bautista",
+            "Karen Gillan",
+            "Michael Rooker",
+        ]
+        assert len(rec["cast"]) == 5, f"Expected 5 cast members, got {len(rec['cast'])}"
+        assert rec["cast"] == expected_cast, f"Cast ordering mismatch: {rec['cast']}"
+
+        assert "[TITLE] Galactic Odyssey" in rec["canonical_text"]
+        assert "[ORIGINAL_TITLE] Odyssée Galactique" in rec["canonical_text"]
+        assert "[YEAR] 2023" in rec["canonical_text"]
+        assert "[GENRES] Science Fiction" in rec["canonical_text"]
+        assert (
+            "[CAST] Bradley Cooper, Chris Pratt, Dave Bautista, Karen Gillan, Michael Rooker"
+            in rec["canonical_text"]
+        )
+        assert "[KEYWORDS] space exploration" in rec["canonical_text"]
+        assert "[OVERVIEW] A journey beyond the stars." in rec["canonical_text"]
+
+    finally:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 18c: Actual fetch_full_metadata() TV production query against PostgreSQL
+# ---------------------------------------------------------------------------
+def test_fetch_full_metadata_tv_production_sql():
+    """Executes the actual production fetch_full_metadata() function for TV shows
+    against disposable PostgreSQL tables.
+
+    Verifies:
+    1. TV query executes successfully (no SQL syntax/interpolation errors).
+    2. Fields mapped correctly: title (from name), originalName, firstAirDate year.
+    3. Exactly 5 cast members selected from >5 available, sorted deterministically.
+    4. Canonical text format conforms to Section 8.11.1 (uses [FIRST_AIR_YEAR]).
+    5. Probe metadata associated correctly when item is in probes_map.
+    Uses disposable test DB; skips with NOT VERIFIED if unavailable.
+    """
+    conn = _connect_test_db()
+    if conn is None:
+        pytest.skip("NOT VERIFIED — Disposable PostgreSQL integration environment unavailable.")
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TEMP TABLE tv_shows (
+                    id uuid PRIMARY KEY,
+                    "tmdbId" integer NOT NULL,
+                    name varchar NOT NULL,
+                    "originalName" varchar,
+                    overview text,
+                    "firstAirDate" date,
+                    popularity double precision,
+                    "voteAverage" double precision,
+                    "voteCount" integer
+                );
+                CREATE TEMP TABLE genres ("tmdbId" integer PRIMARY KEY, name varchar NOT NULL);
+                CREATE TEMP TABLE keywords ("tmdbId" integer PRIMARY KEY, name varchar NOT NULL);
+                CREATE TEMP TABLE "_GenreToTvShow" ("A" integer, "B" uuid);
+                CREATE TEMP TABLE "_KeywordToTvShow" ("A" integer, "B" uuid);
+                CREATE TEMP TABLE persons (
+                    id uuid PRIMARY KEY,
+                    "tmdbId" integer NOT NULL,
+                    name varchar NOT NULL
+                );
+                CREATE TEMP TABLE person_credits (
+                    id uuid PRIMARY KEY,
+                    "personId" uuid NOT NULL,
+                    "movieId" uuid,
+                    "tvShowId" uuid
+                );
+                """
+            )
+
+            tv_id = str(uuid.uuid4())
+            tmdb_id = 88001
+            cur.execute(
+                """
+                INSERT INTO tv_shows VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
+                """,
+                (
+                    tv_id,
+                    tmdb_id,
+                    "Cosmic Mystery",
+                    "Mystère Cosmique",
+                    "Detectives solving interstellar crimes.",
+                    "2021-09-15",
+                    95.2,
+                    8.6,
+                    3200,
+                ),
+            )
+            cur.execute("INSERT INTO genres VALUES (18, 'Drama');")
+            cur.execute('INSERT INTO "_GenreToTvShow" VALUES (18, %s);', (tv_id,))
+            cur.execute("INSERT INTO keywords VALUES (200, 'investigation');")
+            cur.execute('INSERT INTO "_KeywordToTvShow" VALUES (200, %s);', (tv_id,))
+
+            actors = [
+                ("Zoe Saldana", 8691),
+                ("Bradley Cooper", 51329),
+                ("Chris Pratt", 73457),
+                ("Dave Bautista", 543530),
+                ("Karen Gillan", 543261),
+                ("Michael Rooker", 8516),
+                ("Vin Diesel", 12835),
+            ]
+            for name, actor_tmdb_id in reversed(actors):
+                pid = str(uuid.uuid4())
+                cur.execute("INSERT INTO persons VALUES (%s, %s, %s);", (pid, actor_tmdb_id, name))
+                cur.execute(
+                    "INSERT INTO person_credits VALUES (%s, %s, NULL, %s);",
+                    (str(uuid.uuid4()), pid, tv_id),
+                )
+            conn.commit()
+
+        probes_map = {("TV", tmdb_id): {"probe_id": "PB-39", "stratum": "Serialized TV"}}
+        records = fetch_full_metadata(conn, [], [tmdb_id], probes_map)
+
+        assert len(records) == 1, f"Expected 1 record, got {len(records)}"
+        rec = records[0]
+        assert rec["media_type"] == "TV"
+        assert rec["tmdb_id"] == tmdb_id
+        assert rec["title"] == "Cosmic Mystery"
+        assert rec["original_title"] == "Mystère Cosmique"
+        assert rec["year"] == 2021
+        assert rec["genres"] == ["Drama"]
+        assert rec["keywords"] == ["investigation"]
+        assert rec["is_probe"] is True
+        assert rec["probe_id"] == "PB-39"
+        assert rec["stratum"] == "Serialized TV"
+
+        expected_cast = [
+            "Bradley Cooper",
+            "Chris Pratt",
+            "Dave Bautista",
+            "Karen Gillan",
+            "Michael Rooker",
+        ]
+        assert len(rec["cast"]) == 5, f"Expected 5 cast members, got {len(rec['cast'])}"
+        assert rec["cast"] == expected_cast
+
+        assert "[FIRST_AIR_YEAR] 2021" in rec["canonical_text"]
+        assert "[TITLE] Cosmic Mystery" in rec["canonical_text"]
+        assert "[ORIGINAL_TITLE] Mystère Cosmique" in rec["canonical_text"]
+        assert "[GENRES] Drama" in rec["canonical_text"]
+        assert (
+            "[CAST] Bradley Cooper, Chris Pratt, Dave Bautista, Karen Gillan, Michael Rooker"
+            in rec["canonical_text"]
+        )
+        assert "[KEYWORDS] investigation" in rec["canonical_text"]
+        assert "[OVERVIEW] Detectives solving interstellar crimes." in rec["canonical_text"]
+
     finally:
         try:
             conn.rollback()
@@ -1301,6 +1717,90 @@ def test_publish_artifacts_rollback_failure_raises_composite_error(tmp_path: Pat
     assert len(err.rollback_errors) > 0, (
         "rollback_errors must be non-empty when rollback itself fails."
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 22e: Post-publication backup cleanup failure raises PublicationCleanupError
+# ---------------------------------------------------------------------------
+def test_publish_artifacts_post_publication_cleanup_failure(tmp_path: Path):
+    """Scenario E: All artifacts are published successfully (Phase 3 complete),
+    but unlinking backup (.old) files in Phase 4 encounters an error.
+    Verifies:
+    1. PublicationCleanupError is raised.
+    2. Published destination files remain intact and contain new content (no rollback).
+    3. The cleanup error is explicitly reported (not swallowed).
+    """
+    out_dir = tmp_path / "fixtures_e"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    dest_1 = out_dir / "catalogue_snapshot_v1.jsonl"
+    dest_2 = out_dir / "catalogue_snapshot_v1.sha256"
+    dest_3 = out_dir / "catalogue_snapshot_v1.manifest.json"
+
+    dest_1.write_text("INITIAL_A\n", encoding="utf-8")
+    dest_2.write_text("INITIAL_B\n", encoding="utf-8")
+    dest_3.write_text("INITIAL_C\n", encoding="utf-8")
+
+    tmp_1 = out_dir / "catalogue_snapshot_v1.jsonl.tmp"
+    tmp_2 = out_dir / "catalogue_snapshot_v1.sha256.tmp"
+    tmp_3 = out_dir / "catalogue_snapshot_v1.manifest.json.tmp"
+    tmp_1.write_text("NEW_A\n", encoding="utf-8")
+    tmp_2.write_text("NEW_B\n", encoding="utf-8")
+    tmp_3.write_text("NEW_C\n", encoding="utf-8")
+
+    artifacts = [(tmp_1, dest_1), (tmp_2, dest_2), (tmp_3, dest_3)]
+
+    original_unlink = Path.unlink
+
+    def failing_unlink(self: Path, *args: Any, **kwargs: Any) -> None:
+        if str(self).endswith(".old"):
+            raise PermissionError("Injected failure during backup cleanup.")
+        original_unlink(self, *args, **kwargs)
+
+    with patch.object(Path, "unlink", failing_unlink):
+        with pytest.raises(PublicationCleanupError) as exc_info:
+            publish_artifacts(artifacts)
+
+    # All destinations MUST have the new content (publication was successful!)
+    assert dest_1.read_text(encoding="utf-8") == "NEW_A\n"
+    assert dest_2.read_text(encoding="utf-8") == "NEW_B\n"
+    assert dest_3.read_text(encoding="utf-8") == "NEW_C\n"
+
+    err = exc_info.value
+    assert isinstance(err, PublicationCleanupError)
+    assert len(err.cleanup_errors) > 0
+
+
+# ---------------------------------------------------------------------------
+# Test 22f: Preflight check detects missing temporary artifact
+# ---------------------------------------------------------------------------
+def test_publish_artifacts_preflight_missing_file_raises_and_cleans_up(tmp_path: Path):
+    """Scenario F: Preflight fails because one of the tmp files is missing.
+    Verifies:
+    1. RuntimeError is raised with preflight details.
+    2. Any existing tmp files are cleaned up.
+    3. Destination files remain untouched.
+    """
+    out_dir = tmp_path / "fixtures_f"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    dest_1 = out_dir / "catalogue_snapshot_v1.jsonl"
+    dest_1.write_text("ORIGINAL\n", encoding="utf-8")
+
+    tmp_1 = out_dir / "catalogue_snapshot_v1.jsonl.tmp"
+    tmp_1.write_text("NEW\n", encoding="utf-8")
+    tmp_missing = out_dir / "catalogue_snapshot_v1.sha256.tmp"
+    # tmp_missing does not exist
+
+    artifacts = [(tmp_1, dest_1), (tmp_missing, out_dir / "catalogue_snapshot_v1.sha256")]
+
+    with pytest.raises(RuntimeError, match="Artifact publication preflight failed"):
+        publish_artifacts(artifacts)
+
+    # Destination untouched
+    assert dest_1.read_text(encoding="utf-8") == "ORIGINAL\n"
+    # tmp_1 was cleaned up
+    assert not tmp_1.exists()
 
 
 # ---------------------------------------------------------------------------
