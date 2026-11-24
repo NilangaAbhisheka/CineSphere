@@ -2,9 +2,9 @@
 
 **Document Status:** Corrected Technical Architecture & Execution Plan (Planning Only — Ingestion Not Authorized)<br>
 **Date:** 2026-11-24<br>
-**Internal Revision:** V2.1.0 (Reconciled with Stage 5.0.3-A.2 Baseline)<br>
+**Internal Revision:** V2.2.0 (Stage 5.0.3-B.1 Arithmetic Correction)<br>
 **Author:** Antigravity AI (Senior ML Engineer, Data Engineer & Technical Auditor)<br>
-**Baseline Commit:** `cdda3c0d37e61d853b25c5ad8a38f26c50f6c0c3`<br>
+**Baseline Commit:** `cedf46123016446a96b6c57c6814bdbbf23e56ba`<br>
 **Repository:** `NilangaAbhisheka/CineSphere` (`main` branch)
 
 ---
@@ -393,16 +393,22 @@ A read-only audit of the primary database (`cinesphere`) was executed during Sta
 
 The arithmetic in the previous plan contained discrepancies between additional needed counts and final totals. The exact, corrected calculations are presented below.
 
+> [!IMPORTANT]
+> Stage 5.0.3-B.1 identified and corrected two arithmetic errors that persisted in this document since V2.1.0.
+> The formula `⌈1,224 × 1.15⌉` evaluates to **1,408** (not 1,412), and `⌈482 × 1.15⌉` evaluates to **555**
+> (not 556). The cascade corrections to totals, attrition projections, and API request estimates are applied
+> throughout Sections 10 and 11.
+
 ### 10.1 Net Deficit Breakdown
 
 - **Movies:**
-  - Existing Eligible: **138**
+  - Existing Eligible: **138** _(2026-11-24 audit baseline — may differ on re-audit before execution)_
   - Required Quota: **1,400**
   - Total Deficit: $1,400 - 138 = \mathbf{1,262}$
   - Mandatory Probes: **38**
   - Additional Non-Probe Candidates Needed: $1,262 - 38 = \mathbf{1,224}$
 - **TV Shows:**
-  - Existing Eligible: **106**
+  - Existing Eligible: **106** _(2026-11-24 audit baseline — may differ on re-audit before execution)_
   - Required Quota: **600**
   - Total Deficit: $600 - 106 = \mathbf{494}$
   - Mandatory Probes: **12**
@@ -412,18 +418,25 @@ The arithmetic in the previous plan contained discrepancies between additional n
 
 To account for potential runtime attrition (e.g. unexpected empty overviews, deleted TMDB entries, or rare regex collisions), a $+15\%$ gross buffer is applied to additional candidate targets:
 
-$$\text{Gross Movie Candidates} = \lceil 1,224 \times 1.15 \rceil = 1,408 \implies \mathbf{1,412}\text{ candidates}$$
-$$\text{Total Movie Ingestion Target} = 38\text{ probes} + 1,412\text{ candidates} = \mathbf{1,450}\text{ movies}$$
+$$\text{Gross Movie Candidates} = \lceil 1{,}224 \times 1.15 \rceil = \lceil 1{,}407.6 \rceil = \mathbf{1{,}408}\text{ candidates}$$
+$$\text{Total Movie Ingestion Target} = 38\text{ probes} + 1{,}408\text{ candidates} = \mathbf{1{,}446}\text{ movies}$$
 
-$$\text{Gross TV Candidates} = \lceil 482 \times 1.15 \rceil = 555 \implies \mathbf{556}\text{ candidates}$$
-$$\text{Total TV Ingestion Target} = 12\text{ probes} + 556\text{ candidates} = \mathbf{568}\text{ TV shows}$$
+$$\text{Gross TV Candidates} = \lceil 482 \times 1.15 \rceil = \lceil 554.3 \rceil = \mathbf{555}\text{ candidates}$$
+$$\text{Total TV Ingestion Target} = 12\text{ probes} + 555\text{ candidates} = \mathbf{567}\text{ TV shows}$$
 
 ### 10.3 Expected Post-Ingestion Totals & Attrition Tolerance
 
-| Entity       | Existing Eligible | Ingestion Target | Total if 100% Valid |    Total with 10% Attrition    | Required Quota |       Safety Margin        |
-| :----------- | :---------------: | :--------------: | :-----------------: | :----------------------------: | :------------: | :------------------------: |
-| **Movies**   |        138        |      1,450       |      **1,588**      | $138 + 1,305 = \mathbf{1,443}$ |     1,400      | $+43$ movies ($\ge 100\%$) |
-| **TV Shows** |        106        |       568        |       **674**       |   $106 + 511 = \mathbf{617}$   |      600       | $+17$ shows ($\ge 100\%$)  |
+A 10% attrition rate on new candidates is applied as the conservative floor projection
+(candidates that fail `prepare_catalogue_fixture.py` validation post-ingestion):
+
+| Entity       | Existing Eligible | Ingestion Target | Total if 100% Valid |                           Total with 10% Attrition                            | Required Quota |       Safety Margin       |
+| :----------- | :---------------: | :--------------: | :-----------------: | :---------------------------------------------------------------------------: | :------------: | :-----------------------: |
+| **Movies**   |        138        |      1,446       |      **1,584**      | $138 + \lfloor 1{,}408 \times 0.9 \rfloor = 138 + 1{,}267 = \mathbf{1{,}405}$ |     1,400      | $+5$ movies ($\ge 100\%$) |
+| **TV Shows** |        106        |       567        |       **673**       |       $106 + \lfloor 555 \times 0.9 \rfloor = 106 + 499 = \mathbf{605}$       |      600       | $+5$ shows ($\ge 100\%$)  |
+
+> [!NOTE]
+> The safety margins above assume exactly 10% post-ingestion attrition. If the actual rejection rate
+> exceeds 10%, an additional discovery pass should be run before benchmark fixture generation.
 
 ---
 
@@ -452,22 +465,24 @@ Total verified HTTP requests for 12 TV probes: **12 headers + 55 seasons = 67 re
 
 ### 11.2 Comprehensive Request Volume Estimate
 
+_Candidate counts reflect the corrected arithmetic from Section 10.2 (1,408 movie candidates, 555 TV candidates)._
+
 | Category                          | Item Count | Requests per Item |           Total HTTP Requests            |
 | :-------------------------------- | :--------: | :---------------: | :--------------------------------------: |
 | **Movie Probes**                  |     38     |         1         |                    38                    |
-| **Candidate Movies**              |   1,412    |         1         |                  1,412                   |
+| **Candidate Movies**              |   1,408    |         1         |                  1,408                   |
 | **Movie Discovery Pagination**    | ~70 pages  |         1         |                    70                    |
 | **TV Probes (Headers + Seasons)** |     12     |  Verified exact   |                    67                    |
-| **Candidate TV Headers**          |    556     |         1         |                   556                    |
-| **Candidate TV Seasons**          |    556     | Estimated 3.2 avg |        1,779 (range: 1,600–2,000)        |
+| **Candidate TV Headers**          |    555     |         1         |                   555                    |
+| **Candidate TV Seasons**          |    555     | Estimated 3.2 avg |        1,776 (range: 1,598–1,998)        |
 | **TV Discovery Pagination**       | ~30 pages  |         1         |                    30                    |
-| **Transient Retries (~2%)**       |     —      |         —         |                   ~80                    |
-| **Total Estimated Requests**      |     —      |         —         | **~4,032 requests** (range: 3,800–4,300) |
+| **Transient Retries (~2%)**       |     —      |         —         |                   ~79                    |
+| **Total Estimated Requests**      |     —      |         —         | **~4,023 requests** (range: 3,789–4,245) |
 
 ### 11.3 Execution Runtime Estimates
 
-- At **10 requests/second** aggregate: $\approx 403\text{ seconds}$ ($\approx \mathbf{6.7\text{ minutes}}$).
-- At **5 requests/second** conservative: $\approx 806\text{ seconds}$ ($\approx \mathbf{13.4\text{ minutes}}$).
+- At **10 requests/second** aggregate: $\approx 402\text{ seconds}$ ($\approx \mathbf{6.7\text{ minutes}}$).
+- At **5 requests/second** conservative: $\approx 805\text{ seconds}$ ($\approx \mathbf{13.4\text{ minutes}}$).
 
 ---
 

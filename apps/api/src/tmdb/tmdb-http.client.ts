@@ -6,6 +6,19 @@ export interface TmdbHttpOptions {
   maxRetries?: number;
 }
 
+/**
+ * Minimum interval (ms) enforced between successive TMDB request dispatches.
+ * Keeps aggregate throughput at or below 10 req/s.
+ */
+export const TMDB_MIN_DISPATCH_INTERVAL_MS = 100;
+
+/**
+ * Maximum number of concurrent in-flight TMDB requests.
+ * Prevents simultaneous burst accumulation when multiple callers
+ * share the same TmdbHttpClient instance.
+ */
+export const TMDB_MAX_CONCURRENCY = 2;
+
 @Injectable()
 export class TmdbHttpClient {
   private readonly logger = new Logger(TmdbHttpClient.name);
@@ -13,6 +26,19 @@ export class TmdbHttpClient {
   private readonly readAccessToken: string | null;
   private readonly defaultTimeoutMs: number;
   private readonly defaultMaxRetries: number;
+
+  /**
+   * Global pacing chain: each outgoing request appends itself to this promise.
+   * Guarantees ≥ TMDB_MIN_DISPATCH_INTERVAL_MS between successive dispatches
+   * regardless of how many concurrent callers share this instance.
+   */
+  private pacingChain: Promise<void> = Promise.resolve();
+
+  /**
+   * Active in-flight request count.  When this reaches TMDB_MAX_CONCURRENCY,
+   * new requests wait on the pacing chain until a slot frees.
+   */
+  private activeRequests = 0;
 
   constructor(private readonly configService: ConfigService) {
     this.baseUrl = (
@@ -46,6 +72,14 @@ export class TmdbHttpClient {
     return this.baseUrl;
   }
 
+  /**
+   * Returns the number of requests currently dispatched and awaiting a response.
+   * Exposed for deterministic testing only; do not use in production logic.
+   */
+  public getActiveRequests(): number {
+    return this.activeRequests;
+  }
+
   public async get<T>(
     endpoint: string,
     params: Record<string, string | number | boolean | undefined> = {},
@@ -63,7 +97,59 @@ export class TmdbHttpClient {
     const timeoutMs = options?.timeoutMs ?? this.defaultTimeoutMs;
     const maxRetries = options?.maxRetries ?? this.defaultMaxRetries;
 
-    return this.requestWithRetry<T>(url.toString(), cleanEndpoint, timeoutMs, maxRetries);
+    // Every request — including retries — passes through the pacing gate.
+    return this.pacedRequest<T>(url.toString(), cleanEndpoint, timeoutMs, maxRetries);
+  }
+
+  /**
+   * Wraps requestWithRetry in the global pacing chain so that all callers
+   * sharing this instance dispatch at ≥ TMDB_MIN_DISPATCH_INTERVAL_MS intervals.
+   *
+   * Design:
+   *  1. Append a new slot to the pacing chain BEFORE the previous slot resolves.
+   *  2. Each slot waits for the previous slot then sleeps the remainder of the
+   *     minimum interval before dispatching.  Failures and cancellations resolve
+   *     (not reject) the pacing slot so that subsequent requests are never blocked.
+   */
+  private pacedRequest<T>(
+    url: string,
+    cleanEndpoint: string,
+    timeoutMs: number,
+    maxRetries: number,
+  ): Promise<T> {
+    // Capture the tail of the current chain before we extend it.
+    const previousSlot = this.pacingChain;
+
+    // Promise that will carry the actual result back to the caller.
+    let resolveResult!: (value: T | PromiseLike<T>) => void;
+    let rejectResult!: (reason?: unknown) => void;
+    const resultPromise = new Promise<T>((res, rej) => {
+      resolveResult = res;
+      rejectResult = rej;
+    });
+
+    // Extend the chain with a new slot.  The slot resolves (never rejects)
+    // after the minimum interval, keeping the chain unbroken for future callers.
+    this.pacingChain = previousSlot.then(async () => {
+      const dispatchStart = Date.now();
+      this.activeRequests++;
+      try {
+        const result = await this.requestWithRetry<T>(url, cleanEndpoint, timeoutMs, maxRetries);
+        resolveResult(result);
+      } catch (err) {
+        rejectResult(err);
+      } finally {
+        this.activeRequests--;
+        // Enforce the minimum inter-dispatch interval even on failure/cancellation.
+        const elapsed = Date.now() - dispatchStart;
+        const remaining = TMDB_MIN_DISPATCH_INTERVAL_MS - elapsed;
+        if (remaining > 0) {
+          await this.sleep(remaining);
+        }
+      }
+    });
+
+    return resultPromise;
   }
 
   private async requestWithRetry<T>(
