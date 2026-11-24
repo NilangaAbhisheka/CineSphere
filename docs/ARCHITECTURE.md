@@ -120,7 +120,7 @@ flowchart TD
 
 - `DatabaseModule`: Global database access via `PrismaService`, `VectorRepository` (pgvector raw SQL operations), `SingleUserBootstrap` (validates and seeds deterministic user anchor), and `DatabaseErrorMapper` (maps Prisma/Postgres/trigger errors to HTTP exceptions).
 - `HealthModule`: System health checks and pgvector status diagnostics (`GET /api/health`).
-- `TmdbModule`: TMDB integration with `TmdbHttpClient` (Bearer token auth, exponential retry, rate limiting), `TmdbMapper`, `CatalogueRepository`, `TmdbService`, `DiscoverController`, and `TmdbController`.
+- `TmdbModule`: TMDB integration with `TmdbHttpClient` (Bearer token auth, transport-level pacing with $\ge$100ms serialized promise chain, exponential retry, rate limiting), `TmdbMapper`, `CatalogueRepository`, `TmdbService`, `DiscoverController`, and `TmdbController`.
 - `CatalogueModule`: Local database catalogue browsing, filtering, search, and details endpoints (`GET /api/catalogue/movies`, `/tv`, `/movies/:id`, `/tv/:id`).
 - `LibraryModule`: Personal library management (`POST/GET/PATCH/DELETE /api/library`, viewing events, episode progress, mark-all-watched, season ratings).
 - `DashboardModule`: Consolidated dashboard data aggregation (`GET /api/dashboard/overview`, `/stats`, `/continue-watching`, `/recent-activity`, `/quick-picks`).
@@ -162,7 +162,8 @@ flowchart TD
 - Ruff linting and formatting configured and clean across `ml/`.
 - Predefined Evaluation Probes (`ml/benchmark/fixtures/probes_v1.json`): 50 probes across 5 strata (38 movies, 12 TV shows) with verified canonical TMDB IDs and PB-45 approved alias handling.
 - Catalogue Fixture Extraction Pipeline (`ml/benchmark/scripts/prepare_catalogue_fixture.py`): bracketed canonical text serialization, deterministic cast ordering, synthetic-title regex filtering, read-only session enforcement, staged artifact publication with atomic rollback, and probe identity validation (`matches_probe_identity()`, `APPROVED_PROBE_ALIASES`, `ProbeIdentityMismatchError`).
-- Pytest suite configured with 48 automated unit and integration tests passing in `ml/tests/` (including disposable PostgreSQL integration tests for metadata queries, POSIX regex execution, and probe identity validation).
+- Seeding Pipeline Infrastructure (`ml/benchmark/scripts/generate_candidate_manifest.py`, `run_seeding_batch.py`): Candidate manifest generation with TMDB discovery endpoints, 25% non-English language quota, probe exclusion, atomic write, deterministic SHA-256 digest; resumable batch runner with dry-run default, dual `--execute` + `CINESPHERE_ALLOW_CATALOGUE_SEEDING=true` safeguards, atomic checkpointing, and partial TV retry queue.
+- Pytest suite configured with 105 automated unit and integration tests passing in `ml/tests/` (including disposable PostgreSQL integration tests and 57 tests for candidate validation, diversity quotas, execution safeguards, checkpoints, and partial TV recovery).
 
 **Planned ML Responsibilities (Phase 5+):**
 
