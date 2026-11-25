@@ -1,8 +1,8 @@
 # CineSphere — Project Plan
 
-**Status:** Phase 4 Complete; Phase 5 Stage 5.0 Benchmark Preparation & Hardened Seeding Pipeline Verified (B.2-D Snapshot Connection Consistency Corrected; Catalogue Seeding Execution Pending Authorization)<br>
+**Status:** Phase 4 Complete; Phase 5 Stage 5.0 Benchmark Preparation & Hardened Seeding Pipeline Verified (B.2-D/B.2-E Snapshot Connection & Transaction Semantics Verified; Catalogue Seeding Execution Pending Authorization)<br>
 **Last Updated:** 2026-11-25<br>
-**Version:** 2.0
+**Version:** 2.1
 
 ---
 

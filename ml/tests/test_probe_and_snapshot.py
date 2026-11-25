@@ -11,6 +11,7 @@ import json
 import os
 import pathlib
 import urllib.error
+import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -45,6 +46,7 @@ from ml.benchmark.scripts.verify_personal_data_snapshot import (
     compare_personal_snapshots,
     compute_table_fingerprint,
     fetch_sql_db_identity,
+    open_snapshot_connection,
     parse_safe_db_identity,
     save_snapshot_atomic,
     strip_prisma_schema_param,
@@ -772,10 +774,10 @@ class TestSnapshotConnectionConsistency:
                 capture_personal_snapshot(self._DB_URL)
 
     # ------------------------------------------------------------------
-    # 4. REPEATABLE READ READ ONLY transaction is established
+    # 4. REPEATABLE READ READ ONLY transaction is established via set_session
     # ------------------------------------------------------------------
     def test_repeatable_read_transaction_established(self) -> None:
-        """BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY must be executed."""
+        """set_session(REPEATABLE READ, readonly=True, autocommit=False) before queries."""
         executed_statements: list[str] = []
 
         mock_cursor = MagicMock()
@@ -801,16 +803,14 @@ class TestSnapshotConnectionConsistency:
         ):
             capture_personal_snapshot(self._DB_URL)
 
-        # Verify that the transaction-begin statement was issued
-        begin_stmts = [
-            s
-            for s in executed_statements
-            if "BEGIN" in s.upper() and "REPEATABLE READ" in s.upper()
-        ]
-        assert begin_stmts, (
-            "Expected a BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY statement; "
-            f"got: {executed_statements}"
+        mock_conn.set_session.assert_called_once_with(
+            isolation_level="REPEATABLE READ",
+            readonly=True,
+            autocommit=False,
         )
+        # No redundant raw BEGIN should be sent after implicit transaction setup.
+        begin_stmts = [s for s in executed_statements if s.upper().startswith("BEGIN")]
+        assert begin_stmts == [], f"Unexpected redundant BEGIN statements: {begin_stmts}"
 
     # ------------------------------------------------------------------
     # 5. All six table SELECTs execute on the same connection/cursor
@@ -969,3 +969,179 @@ class TestSnapshotConnectionConsistency:
         assert snap.database_identity["server_port"] == 5433
         assert snap.database_identity["system_identifier"] == "9999888877776666"
         assert snap.database_identity["database_oid"] == 12345
+
+
+# ===========================================================================
+# Tests: Real PostgreSQL Transaction Semantics Integration (B.2-E)
+# ===========================================================================
+def _get_disposable_test_db_url() -> str | None:
+    """Return a safe disposable test DB URL containing 'test' or 'e2e'."""
+    for env_var in ("CINESPHERE_TEST_DATABASE_URL", "CINESPHERE_E2E_DATABASE_URL"):
+        url = os.environ.get(env_var)
+        if url:
+            lower = url.lower()
+            if "test" not in lower and "e2e" not in lower:
+                raise RuntimeError(f"SAFETY: {env_var}={url!r} does not contain 'test' or 'e2e'.")
+            return url
+    return "postgresql://cinesphere_user:cinesphere_dev_password@localhost:5432/cinesphere_test"
+
+
+def _require_disposable_test_db() -> str:
+    """Connect to the disposable test DB or skip with NOT VERIFIED if unreachable."""
+    try:
+        import psycopg2  # noqa: PLC0415
+    except ImportError:
+        pytest.skip("NOT VERIFIED — psycopg2 is not installed.")
+
+    url = _get_disposable_test_db_url()
+    if url is None:
+        pytest.skip("NOT VERIFIED — No disposable test database URL configured.")
+    if "test" not in url.lower() and "e2e" not in url.lower():
+        pytest.fail(f"SAFETY: Refusing to run integration test against non-test DB {url!r}.")
+
+    try:
+        probe = psycopg2.connect(strip_prisma_schema_param(url))
+        probe.close()
+    except Exception as exc:
+        pytest.skip(f"NOT VERIFIED — Disposable test DB not reachable: {exc}")
+    return url
+
+
+class TestSnapshotTransactionPostgresIntegration:
+    """
+    Real PostgreSQL integration tests (against disposable cinesphere_test only)
+    proving effective REPEATABLE READ isolation, READ ONLY enforcement,
+    concurrent-commit snapshot consistency, zero-warning transaction setup,
+    and proper connection cleanup.
+    """
+
+    def test_effective_repeatable_read_and_readonly_in_live_snapshot(self) -> None:
+        """SHOW transaction_isolation == 'repeatable read', SHOW transaction_read_only == 'on',
+        no PostgreSQL warnings, and same backend PID across identity + table reads."""
+        url = _require_disposable_test_db()
+        observed: dict[str, Any] = {}
+
+        def _inspect_tx(conn: Any) -> None:
+            with conn.cursor() as cur:
+                cur.execute("SHOW transaction_isolation;")
+                observed["isolation"] = cur.fetchone()[0]
+                cur.execute("SHOW transaction_read_only;")
+                observed["read_only"] = cur.fetchone()[0]
+                cur.execute("SELECT pg_backend_pid();")
+                observed["pid"] = cur.fetchone()[0]
+            observed["notices"] = list(getattr(conn, "notices", []))
+            observed["conn_ref"] = conn
+
+        snap = capture_personal_snapshot(url, _after_identity_hook=_inspect_tx)
+
+        assert observed["isolation"] == "repeatable read", (
+            f"Expected 'repeatable read', got {observed['isolation']!r} "
+            "(silent fallback to READ COMMITTED must fail)."
+        )
+        assert observed["read_only"] == "on", (
+            f"Expected 'on', got {observed['read_only']!r} "
+            "(silent fallback to READ WRITE must fail)."
+        )
+        assert observed["notices"] == [], (
+            f"Expected zero PostgreSQL warnings (no redundant BEGIN), got {observed['notices']!r}"
+        )
+        assert observed["conn_ref"].closed != 0, "Connection must be closed after capture."
+        assert len(snap.row_counts) == len(PERSONAL_DATA_TABLES)
+        assert len(snap.table_fingerprints) == len(PERSONAL_DATA_TABLES)
+
+    def test_snapshot_connection_rejects_writes(self) -> None:
+        """open_snapshot_connection() must reject writes with SQLSTATE 25006."""
+        from psycopg2.errors import ReadOnlySqlTransaction  # noqa: PLC0415
+
+        url = _require_disposable_test_db()
+        conn = open_snapshot_connection(url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SHOW transaction_isolation;")
+                assert cur.fetchone()[0] == "repeatable read"
+                cur.execute("SHOW transaction_read_only;")
+                assert cur.fetchone()[0] == "on"
+                with pytest.raises(ReadOnlySqlTransaction):
+                    cur.execute(
+                        'INSERT INTO "system_configs" ("key", "value", "updatedAt") '
+                        "VALUES ('__b2e_ro_probe__', 'should_fail', NOW());"
+                    )
+                conn.rollback()
+        finally:
+            conn.close()
+        assert conn.closed != 0
+
+    def test_concurrent_commit_invisible_to_active_snapshot(self) -> None:
+        """A second connection committing a row after snapshot start must NOT be seen
+        by the active REPEATABLE READ snapshot (fails if silently READ COMMITTED)."""
+        import psycopg2  # noqa: PLC0415
+
+        url = _require_disposable_test_db()
+        clean_url = strip_prisma_schema_param(url)
+        probe_key = f"__b2e_concurrency_{uuid.uuid4().hex[:12]}__"
+
+        baseline = capture_personal_snapshot(url)
+        baseline_count = baseline.row_counts["system_configs"]
+        baseline_fp = baseline.table_fingerprints["system_configs"]["fingerprint"]
+
+        hook_state: dict[str, Any] = {}
+
+        def _commit_on_second_connection(conn: Any) -> None:
+            with conn.cursor() as cur:
+                cur.execute("SHOW transaction_isolation;")
+                hook_state["isolation"] = cur.fetchone()[0]
+                cur.execute("SHOW transaction_read_only;")
+                hook_state["read_only"] = cur.fetchone()[0]
+
+            writer = psycopg2.connect(clean_url)
+            try:
+                with writer.cursor() as wc:
+                    wc.execute(
+                        'INSERT INTO "system_configs" ("key", "value", "updatedAt") '
+                        "VALUES (%s, %s, NOW());",
+                        (probe_key, "concurrent_commit_value"),
+                    )
+                writer.commit()
+                hook_state["committed"] = True
+            finally:
+                writer.close()
+
+        try:
+            during = capture_personal_snapshot(
+                url, _after_identity_hook=_commit_on_second_connection
+            )
+            assert hook_state.get("committed") is True
+            assert hook_state.get("isolation") == "repeatable read"
+            assert hook_state.get("read_only") == "on"
+
+            # Under REPEATABLE READ, the active snapshot MUST still match baseline.
+            assert during.row_counts["system_configs"] == baseline_count
+            assert during.table_fingerprints["system_configs"]["fingerprint"] == baseline_fp
+
+            # A subsequent snapshot MUST see the committed row.
+            after = capture_personal_snapshot(url)
+            assert after.row_counts["system_configs"] == baseline_count + 1
+            assert after.table_fingerprints["system_configs"]["fingerprint"] != baseline_fp
+        finally:
+            cleanup = psycopg2.connect(clean_url)
+            try:
+                with cleanup.cursor() as cc:
+                    cc.execute('DELETE FROM "system_configs" WHERE "key" = %s;', (probe_key,))
+                cleanup.commit()
+            finally:
+                cleanup.close()
+
+    def test_live_failure_aborts_and_closes_connection(self) -> None:
+        """If an error occurs mid-transaction on a live DB, snapshot raises and closes conn."""
+        url = _require_disposable_test_db()
+        captured_conn: list[Any] = []
+
+        def _failing_hook(conn: Any) -> None:
+            captured_conn.append(conn)
+            raise RuntimeError("simulated mid-snapshot failure")
+
+        with pytest.raises(PersonalDataIntegrityError, match="simulated mid-snapshot failure"):
+            capture_personal_snapshot(url, _after_identity_hook=_failing_hook)
+
+        assert len(captured_conn) == 1
+        assert captured_conn[0].closed != 0

@@ -1,5 +1,5 @@
 """
-CineSphere — Stage 5.0.3-B.2-D: Personal Data Integrity & Target Verification
+CineSphere — Stage 5.0.3-B.2-E: Personal Data Integrity & Target Verification
 ===============================================================================
 
 Provides:
@@ -34,7 +34,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -499,48 +499,69 @@ class SnapshotComparisonResult:
         }
 
 
-def capture_personal_snapshot(database_url: str) -> PersonalDataSnapshot:
+def open_snapshot_connection(database_url: str) -> Any:
+    """
+    Open a single PostgreSQL connection configured with ``REPEATABLE READ``
+    isolation, ``READ ONLY`` mode, and ``autocommit=False`` via psycopg2's
+    native ``set_session()`` API before any query executes.
+    """
+    if psycopg2 is None:
+        raise ImportError("psycopg2 is required to capture personal-data snapshots.")
+
+    clean_url = strip_prisma_schema_param(database_url)
+    conn = None
+    try:
+        conn = psycopg2.connect(clean_url)
+        conn.set_session(isolation_level="REPEATABLE READ", readonly=True, autocommit=False)
+        return conn
+    except Exception as exc:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        safe_msg = _redact_url_credentials(str(exc), database_url)
+        raise PersonalDataIntegrityError(
+            f"Failed to open PostgreSQL connection for personal snapshot: {safe_msg}"
+        ) from exc
+
+
+def capture_personal_snapshot(
+    database_url: str,
+    *,
+    _after_identity_hook: Callable[[Any], None] | None = None,
+) -> PersonalDataSnapshot:
     """
     Capture read-only row counts, content-integrity fingerprints, and SQL
     instance identity for all personal/configuration tables using a single
-    PostgreSQL connection and a consistent ``REPEATABLE READ`` transaction
-    snapshot.
+    PostgreSQL connection and a consistent ``REPEATABLE READ READ ONLY``
+    transaction snapshot.
 
-    Design (B.2-D):
-    - One connection is opened; it handles both the SQL identity query and all
-      six personal-data table reads.
-    - A ``BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`` transaction is
-      started before the first query so that every subsequent ``SELECT``
-      operates on the **same** consistent database snapshot.
-    - The database identity fields are queried through this same connection and
-      transaction, so the identity provably describes the exact endpoint that
-      supplied the fingerprinted rows.
-    - Autocommit is left at its default (``False``) so that psycopg2 uses an
-      explicit transaction; ``COMMIT`` / ``ROLLBACK`` is handled via the
-      context manager.
-    - The connection is always closed in the ``finally`` block, on both success
-      and failure, without committing any writes (the transaction is read-only).
+    Design (B.2-D / B.2-E):
+    - One connection is opened via ``open_snapshot_connection()`` with
+      ``set_session(isolation_level="REPEATABLE READ", readonly=True, autocommit=False)``
+      before any query executes.
+    - Psycopg2 starts the transaction with ``REPEATABLE READ`` and ``READ ONLY``
+      on the first statement (no redundant ``BEGIN`` after an implicit ``BEGIN``).
+    - The database identity fields are queried first through this same
+      connection and transaction, establishing the consistent snapshot and
+      binding identity to the exact connection that reads all six tables.
+    - All six personal/configuration tables are read within that same
+      transaction.
+    - The connection is always rolled back and closed in ``finally`` on both
+      success and failure.
 
     Never persists personal row values or credentials.
     """
     if psycopg2 is None:
         raise ImportError("psycopg2 is required to capture personal-data snapshots.")
 
-    clean_url = strip_prisma_schema_param(database_url)
-    try:
-        conn = psycopg2.connect(clean_url)
-    except Exception as exc:
-        safe_msg = _redact_url_credentials(str(exc), database_url)
-        raise PersonalDataIntegrityError(
-            f"Failed to open PostgreSQL connection for personal snapshot: {safe_msg}"
-        ) from exc
+    conn = open_snapshot_connection(database_url)
 
     try:
-        # Single consistent snapshot: REPEATABLE READ ensures all SELECTs
-        # within this transaction see the same database state.
+        # Single consistent snapshot: set_session(REPEATABLE READ, readonly=True)
+        # ensures the first statement starts the transaction with those exact modes.
         with conn.cursor() as cur:
-            cur.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;")
-
             # --- Query SQL instance identity through this same connection ---
             cur.execute(
                 """
@@ -555,6 +576,9 @@ def capture_personal_snapshot(database_url: str) -> PersonalDataSnapshot:
                 """
             )
             identity_row = cur.fetchone()
+
+        if _after_identity_hook is not None:
+            _after_identity_hook(conn)
 
         if not identity_row:
             raise PersonalDataIntegrityError(
