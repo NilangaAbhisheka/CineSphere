@@ -376,9 +376,9 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
     - Personal library REST API (`LibraryModule`)
     - Deterministic single-user bootstrapping (`SingleUserBootstrap`)
     - Centralized database error mapping (`DatabaseErrorMapper`)
-    - 271 backend unit tests passing across 21 suites
+    - 283 backend unit tests passing across 22 suites
     - 199 PostgreSQL integration tests passing across 11 suites with real transactions and triggers
-    - Total monorepo unit tests: 513 passing unit tests (271 backend + 242 frontend)
+    - Total monorepo unit tests: 525 passing unit tests (283 backend + 242 frontend)
   - **End-to-End Testing & Hardening** ([`apps/web/e2e`](apps/web/e2e)):
     - Playwright E2E infrastructure with dedicated test database isolation (`CINESPHERE_E2E_DATABASE_URL`), fail-closed validation, and server isolation
     - 39 comprehensive workflow tests passing across 8 suites (Workflows A through H)
@@ -391,8 +391,8 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
   - Authoritative candidate embedding model evaluation specification (`PHASE_5_TECHNICAL_DESIGN_PROPOSAL_V0.7.4_CORRECTION_ADDENDUM.md`, V0.7.8)
   - Predefined benchmark evaluation probes (`ml/benchmark/fixtures/probes_v1.json`): 50 probes across 5 strata (38 movies, 12 TV shows), with verified canonical TMDB IDs and PB-45 approved alias handling
   - Hardened catalogue fixture extraction pipeline (`ml/benchmark/scripts/prepare_catalogue_fixture.py`): bracketed canonical serialization, deterministic cast selection, cross-engine synthetic regex exclusions, read-only session enforcement, staged artifact publication with atomic rollback, and probe identity validation (`matches_probe_identity()`, `APPROVED_PROBE_ALIASES`, `ProbeIdentityMismatchError`)
-  - Resumable TMDB seeding & probe-ingestion pipelines (`generate_candidate_manifest.py`, `run_seeding_batch.py`, `run_probe_ingestion.py`, `verify_personal_data_snapshot.py`, `TmdbHttpClient`): transport-level 100ms pacing (`TMDB_MAX_CONCURRENCY = 1`), independent runner-boundary probe ID rejection, separate 50-probe ingestion workflow, fail-closed `--execution-ready` database audits, strict `is_executable is True` gate, recomputed language diversity with metadata cross-checks, canonical target enforcement, extended SHA-256 digest protection, read-only personal-data pre/post snapshots, API/DB target verification, atomic disk checkpointing, local target safeguards, structured `ExecutionSummary` reporting, and partial TV retry queue
-  - Python ML test suite: 169 automated tests passing in `ml/tests/` (including disposable PostgreSQL integration tests for metadata extraction, POSIX regex execution, probe identity matching, adversarial seeding-pipeline tampering tests, probe-ingestion workflow tests, and personal-data snapshot tests)
+  - Resumable TMDB seeding & probe-ingestion pipelines (`generate_candidate_manifest.py`, `run_seeding_batch.py`, `run_probe_ingestion.py`, `verify_personal_data_snapshot.py`, `TmdbHttpClient`): transport-level 100ms pacing (`TMDB_MAX_CONCURRENCY = 1`), independent runner-boundary probe ID rejection, separate 50-probe ingestion workflow, fail-closed `--execution-ready` database audits, strict `is_executable is True` gate, recomputed language diversity with metadata cross-checks, canonical target enforcement, extended SHA-256 digest protection, read-only personal-data row-count + SHA-256 content-integrity snapshots, SQL instance-identity parity (`system_identifier`, `database_oid`, `inet_server_addr`, `inet_server_port`, `current_database`), atomic disk checkpointing, local target safeguards, structured `ExecutionSummary` reporting, and partial TV retry queue
+  - Python ML test suite: 183 automated tests passing in `ml/tests/` (including disposable PostgreSQL integration tests for metadata extraction, POSIX regex execution, probe identity matching, adversarial seeding-pipeline tampering tests, probe-ingestion workflow tests, content-integrity fingerprint tests, and SQL instance-identity verification tests)
 - **Continuous Integration (`.github/workflows/ci.yml`):**
   - Three distinct, reliable jobs: TypeScript Monorepo, Python ML Package (with minimal `ci` dependency group), and Playwright E2E (with fail-closed service readiness loops)
 

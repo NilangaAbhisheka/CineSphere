@@ -1,26 +1,31 @@
 """
-CineSphere — Stage 5.0.3-B.2: Personal Data Isolation & Target Verification
-===========================================================================
+CineSphere — Stage 5.0.3-B.2-C: Personal Data Integrity & Target Verification
+=============================================================================
 
 Provides:
-  1. Read-only PostgreSQL row-count snapshots for all personal-data tables
-     defined in apps/api/prisma/schema.prisma:
+  1. Read-only PostgreSQL row-count AND deterministic content-integrity
+     fingerprints for all personal-data / configuration tables defined in
+     apps/api/prisma/schema.prisma:
        - users
        - user_library_entries
        - viewing_events
        - episode_progress
        - season_ratings
        - system_configs
-  2. Pre/post snapshot comparison that fails closed if any personal-data table
-     changes during catalogue seeding.
-  3. Safe, credential-free database & API target verification for preflight checks.
+  2. Pre/post snapshot comparison that fails closed if any row count,
+     content fingerprint, schema column set, or database instance identity
+     is missing or changed.
+  3. SQL-grounded database & API target instance verification for preflight checks.
 
-Never logs or persists database passwords, usernames, API tokens, or full URLs.
+Never logs or persists personal row data, database passwords, usernames,
+API tokens, or full connection strings.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import ipaddress
 import json
 import logging
 import os
@@ -29,10 +34,13 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 try:
     import psycopg2
@@ -41,23 +49,52 @@ except ImportError:  # pragma: no cover - optional in minimal unit-test envs
 
 logger = logging.getLogger("personal_snapshot")
 
-SNAPSHOT_SCHEMA_VERSION = "1.0.0"
+SNAPSHOT_SCHEMA_VERSION = "2.0.0"
 
-#: Authoritative list of personal-data & system-config tables from prisma/schema.prisma
-PERSONAL_DATA_TABLES: tuple[str, ...] = (
-    "users",
-    "user_library_entries",
-    "viewing_events",
-    "episode_progress",
-    "season_ratings",
-    "system_configs",
-)
+#: Authoritative column sets per personal/configuration table (prisma/schema.prisma).
+#: Order is canonical; fingerprints bind both table name and column list.
+PERSONAL_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "users": ("id", "displayName", "createdAt", "updatedAt"),
+    "user_library_entries": (
+        "id",
+        "user_id",
+        "media_type",
+        "movie_id",
+        "tv_show_id",
+        "status",
+        "personal_rating",
+        "notes",
+        "created_at",
+        "updated_at",
+    ),
+    "viewing_events": ("id", "library_entry_id", "watched_at", "rating", "notes"),
+    "episode_progress": ("library_entry_id", "episode_id", "watched_at"),
+    "season_ratings": (
+        "id",
+        "library_entry_id",
+        "season_id",
+        "rating",
+        "created_at",
+        "updated_at",
+    ),
+    "system_configs": ("key", "value", "updatedAt"),
+}
+
+PERSONAL_DATA_TABLES: tuple[str, ...] = tuple(PERSONAL_TABLE_COLUMNS.keys())
 
 LOCAL_DB_HOSTS: frozenset[str] = frozenset({"localhost", "127.0.0.1", "::1", "postgres"})
 
+MANDATORY_SQL_IDENTITY_FIELDS: tuple[str, ...] = (
+    "database_name",
+    "server_address",
+    "server_port",
+    "system_identifier",
+    "database_oid",
+)
+
 
 class PersonalDataIntegrityError(Exception):
-    """Raised when personal-data table counts change between pre and post snapshots."""
+    """Raised when personal-data snapshots fail validation or integrity checks."""
 
 
 class TargetVerificationError(Exception):
@@ -77,7 +114,7 @@ def strip_prisma_schema_param(database_url: str) -> str:
 
 def parse_safe_db_identity(database_url: str) -> dict[str, Any]:
     """
-    Extract non-secret database identity (database_name, host, port) from a URL.
+    Extract non-secret database URL metadata (database_name, host, port).
     Never returns username, password, query secrets, or raw URL.
     """
     if not database_url or not database_url.strip():
@@ -107,19 +144,112 @@ def _is_local_api_host(api_url: str) -> bool:
     return host in {"localhost", "127.0.0.1", "::1"}
 
 
+def _is_local_server_ip(server_address: str | None) -> bool:
+    """Return True if PostgreSQL inet_server_addr() is loopback or private/Docker."""
+    if not server_address:
+        return False
+    addr_str = server_address.split("/")[0].strip()
+    if not addr_str:
+        return False
+    try:
+        ip = ipaddress.ip_address(addr_str)
+        return ip.is_loopback or ip.is_private
+    except ValueError:
+        return False
+
+
+def _redact_url_credentials(text: str, database_url: str | None = None) -> str:
+    """Ensure credentials from database_url never appear in error messages."""
+    if not database_url:
+        return text
+    parsed = urllib.parse.urlparse(database_url)
+    sanitized = text.replace(database_url, "<REDACTED_DATABASE_URL>")
+    if parsed.password:
+        sanitized = sanitized.replace(parsed.password, "<REDACTED>")
+    if parsed.username:
+        sanitized = sanitized.replace(parsed.username, "<REDACTED>")
+    return sanitized
+
+
+def fetch_sql_db_identity(database_url: str) -> dict[str, Any]:
+    """
+    Independently query PostgreSQL instance identity over a read-only SQL connection.
+    Fails closed if psycopg2 is unavailable, connection fails, or any mandatory
+    identity field is missing.
+    """
+    if psycopg2 is None:
+        raise TargetVerificationError(
+            "psycopg2 is required to verify PostgreSQL instance identity."
+        )
+    url_meta = parse_safe_db_identity(database_url)
+    clean_url = strip_prisma_schema_param(database_url)
+    try:
+        conn = psycopg2.connect(clean_url)
+    except Exception as exc:
+        safe_msg = _redact_url_credentials(str(exc), database_url)
+        raise TargetVerificationError(
+            f"Direct PostgreSQL connection failed during target verification: {safe_msg}"
+        ) from exc
+
+    try:
+        conn.set_session(readonly=True, autocommit=True)
+        with conn.cursor() as cur:
+            cur.execute("SET default_transaction_read_only = on;")
+            cur.execute(
+                """
+                SELECT
+                    current_database() AS database_name,
+                    CAST(inet_server_addr() AS TEXT) AS server_address,
+                    inet_server_port() AS server_port,
+                    (SELECT system_identifier::TEXT FROM pg_control_system()) AS system_identifier,
+                    (SELECT oid::INT FROM pg_database WHERE datname = current_database())
+                        AS database_oid
+                """
+            )
+            row = cur.fetchone()
+    except Exception as exc:
+        safe_msg = _redact_url_credentials(str(exc), database_url)
+        raise TargetVerificationError(
+            f"PostgreSQL instance identity query failed (fail-closed): {safe_msg}"
+        ) from exc
+    finally:
+        conn.close()
+
+    if not row:
+        raise TargetVerificationError("PostgreSQL instance identity query returned no rows.")
+
+    identity: dict[str, Any] = {
+        "database_name": row[0],
+        "server_address": row[1],
+        "server_port": int(row[2]) if row[2] is not None else None,
+        "system_identifier": str(row[3]) if row[3] is not None else None,
+        "database_oid": int(row[4]) if row[4] is not None else None,
+        "url_host": url_meta["host"],
+        "is_local_host": url_meta["is_local_host"],
+    }
+    missing = [f for f in MANDATORY_SQL_IDENTITY_FIELDS if not identity.get(f)]
+    if missing:
+        raise TargetVerificationError(
+            f"Direct PostgreSQL identity missing mandatory fields: {missing}."
+        )
+    return identity
+
+
 def verify_api_and_db_target(
     api_base_url: str,
     database_url: str | None,
     *,
     allow_remote: bool = False,
     health_payload: dict[str, Any] | None = None,
+    direct_db_identity: dict[str, Any] | None = None,
     timeout_s: int = 10,
 ) -> dict[str, Any]:
     """
-    Verify that the NestJS API and local scripts target the exact same intended
-    local database without printing any credentials.
+    Verify that the NestJS API and Python process connect to the exact same
+    PostgreSQL cluster and database instance, using SQL-derived identity fields.
 
-    Fails closed with TargetVerificationError on any mismatch or unreachability.
+    Fails closed with TargetVerificationError on any missing field, mismatch,
+    remote target (unless allow_remote=True), or unreachable API/DB.
     """
     if not allow_remote and not _is_local_api_host(api_base_url):
         raise TargetVerificationError(f"API target {api_base_url!r} is not a local loopback host.")
@@ -128,17 +258,17 @@ def verify_api_and_db_target(
         raise TargetVerificationError(
             "DATABASE_URL is required to verify database target identity."
         )
-    db_identity = parse_safe_db_identity(database_url)
-    if not allow_remote and not db_identity["is_local_host"]:
+    url_meta = parse_safe_db_identity(database_url)
+    if not allow_remote and not url_meta["is_local_host"]:
         raise TargetVerificationError(
-            f"Database host {db_identity['host']!r} is not a recognized local host."
+            f"Database host {url_meta['host']!r} is not a recognized local host."
         )
 
     if health_payload is None:
         health_url = f"{api_base_url.rstrip('/')}/api/health"
-        req = urllib.request.Request(health_url, method="GET")
+        req = urllib.request.Request(health_url, method="GET")  # noqa: S310
         try:
-            with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310
                 if resp.status != 200:
                     raise TargetVerificationError(f"API health check returned HTTP {resp.status}.")
                 health_payload = json.loads(resp.read().decode("utf-8"))
@@ -156,34 +286,158 @@ def verify_api_and_db_target(
     if api_db.get("connected") is not True:
         raise TargetVerificationError("API reports database is not connected.")
 
-    api_db_name = api_db.get("databaseName")
-    api_db_port = api_db.get("port")
-    api_db_host = (api_db.get("host") or "").lower() or None
-
-    if api_db_name is not None and api_db_name != db_identity["database_name"]:
+    # Require ALL mandatory SQL identity fields from API /api/health
+    api_identity = {
+        "database_name": api_db.get("databaseName"),
+        "server_address": api_db.get("serverAddress"),
+        "server_port": api_db.get("port"),
+        "system_identifier": api_db.get("systemIdentifier"),
+        "database_oid": api_db.get("databaseOid"),
+    }
+    missing_api = [f for f in MANDATORY_SQL_IDENTITY_FIELDS if not api_identity.get(f)]
+    if missing_api:
         raise TargetVerificationError(
-            f"Database name mismatch: API uses {api_db_name!r}, "
-            f"manifest/audit uses {db_identity['database_name']!r}."
+            f"API /api/health missing mandatory SQL identity fields: {missing_api}. "
+            "Cannot verify database instance parity."
         )
 
-    if api_db_port is not None and int(api_db_port) != int(db_identity["port"]):
+    # Independently query Python's direct PostgreSQL connection
+    sql_identity = (
+        direct_db_identity
+        if direct_db_identity is not None
+        else fetch_sql_db_identity(database_url)
+    )
+    missing_sql = [f for f in MANDATORY_SQL_IDENTITY_FIELDS if not sql_identity.get(f)]
+    if missing_sql:
         raise TargetVerificationError(
-            f"Database port mismatch: API uses {api_db_port}, "
-            f"manifest/audit uses {db_identity['port']}."
+            f"Direct PostgreSQL identity missing mandatory fields: {missing_sql}."
         )
 
-    if api_db_host is not None and not allow_remote and api_db_host not in LOCAL_DB_HOSTS:
-        raise TargetVerificationError(f"API database host {api_db_host!r} is not a local host.")
+    if not allow_remote and not _is_local_server_ip(sql_identity.get("server_address")):
+        raise TargetVerificationError(
+            f"PostgreSQL serverAddress {sql_identity.get('server_address')!r} "
+            "is not a local/private address."
+        )
+
+    # Compare every mandatory SQL identity field between API and Python
+    mismatches: list[str] = []
+    if str(api_identity["database_name"]) != str(sql_identity["database_name"]):
+        mismatches.append(
+            f"database_name (API={api_identity['database_name']!r}, "
+            f"Python={sql_identity['database_name']!r})"
+        )
+    if int(api_identity["server_port"]) != int(sql_identity["server_port"]):
+        mismatches.append(
+            f"server_port (API={api_identity['server_port']}, Python={sql_identity['server_port']})"
+        )
+    if str(api_identity["server_address"]) != str(sql_identity["server_address"]):
+        mismatches.append(
+            f"server_address (API={api_identity['server_address']!r}, "
+            f"Python={sql_identity['server_address']!r})"
+        )
+    if str(api_identity["system_identifier"]) != str(sql_identity["system_identifier"]):
+        mismatches.append(
+            f"system_identifier (API={api_identity['system_identifier']!r}, "
+            f"Python={sql_identity['system_identifier']!r})"
+        )
+    if int(api_identity["database_oid"]) != int(sql_identity["database_oid"]):
+        mismatches.append(
+            f"database_oid (API={api_identity['database_oid']}, "
+            f"Python={sql_identity['database_oid']})"
+        )
+
+    if mismatches:
+        raise TargetVerificationError(
+            "API and Python target different PostgreSQL instances: " + "; ".join(mismatches)
+        )
 
     return {
         "verified": True,
         "api_url": api_base_url.rstrip("/"),
-        "database_name": db_identity["database_name"],
-        "database_host": db_identity["host"],
-        "database_port": db_identity["port"],
-        "api_reported_database_name": api_db_name,
-        "api_reported_port": api_db_port,
-        "api_reported_host": api_db_host,
+        "database_name": sql_identity["database_name"],
+        "server_address": sql_identity["server_address"],
+        "server_port": int(sql_identity["server_port"]),
+        "system_identifier": str(sql_identity["system_identifier"]),
+        "database_oid": int(sql_identity["database_oid"]),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Objective A: Deterministic Content-Integrity Fingerprinting
+# ---------------------------------------------------------------------------
+def canonicalize_value(val: Any) -> dict[str, Any]:
+    """
+    Deterministically canonicalize a database column value for hashing.
+    Handles None, bool, int, Decimal, float, datetime (UTC), date, UUID, str, JSON.
+    """
+    if val is None:
+        return {"t": "null"}
+    if isinstance(val, bool):
+        return {"t": "bool", "v": val}
+    if isinstance(val, int):
+        return {"t": "int", "v": val}
+    if isinstance(val, Decimal):
+        normalized = val.normalize()
+        return {"t": "dec", "v": format(normalized, "f")}
+    if isinstance(val, float):
+        return {"t": "dec", "v": format(Decimal(str(val)).normalize(), "f")}
+    if isinstance(val, datetime):
+        dt = val.astimezone(UTC) if val.tzinfo is not None else val.replace(tzinfo=UTC)
+        return {"t": "dt", "v": dt.isoformat()}
+    if isinstance(val, date):
+        return {"t": "date", "v": val.isoformat()}
+    if isinstance(val, UUID):
+        return {"t": "uuid", "v": str(val).lower()}
+    if isinstance(val, (dict, list)):
+        return {
+            "t": "json",
+            "v": json.dumps(val, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+        }
+    return {"t": "str", "v": str(val)}
+
+
+def compute_table_fingerprint(
+    table: str,
+    columns: Sequence[str],
+    rows: Iterable[Sequence[Any]],
+) -> dict[str, Any]:
+    """
+    Compute an order-independent SHA-256 content-integrity fingerprint for a table.
+    Binds table name, column list, row count, and sorted per-row hashes.
+    Never returns or stores raw row values.
+    """
+    col_list = list(columns)
+    row_hashes: list[str] = []
+    for row in rows:
+        if len(row) != len(col_list):
+            raise PersonalDataIntegrityError(
+                f"Row width mismatch for table {table!r}: expected {len(col_list)}, got {len(row)}."
+            )
+        canonical_row = {
+            "table": table,
+            "columns": col_list,
+            "values": [canonicalize_value(v) for v in row],
+        }
+        row_bytes = json.dumps(
+            canonical_row, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+        row_hashes.append(hashlib.sha256(row_bytes).hexdigest())
+
+    row_hashes.sort()
+    table_payload = {
+        "schema_version": SNAPSHOT_SCHEMA_VERSION,
+        "table": table,
+        "columns": col_list,
+        "row_count": len(row_hashes),
+        "row_hashes": row_hashes,
+    }
+    table_bytes = json.dumps(
+        table_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return {
+        "fingerprint": hashlib.sha256(table_bytes).hexdigest(),
+        "columns": col_list,
+        "row_count": len(row_hashes),
     }
 
 
@@ -193,6 +447,7 @@ class PersonalDataSnapshot:
     captured_at: str = ""
     database_identity: dict[str, Any] = field(default_factory=dict)
     row_counts: dict[str, int] = field(default_factory=dict)
+    table_fingerprints: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -200,6 +455,7 @@ class PersonalDataSnapshot:
             "captured_at": self.captured_at,
             "database_identity": self.database_identity,
             "row_counts": dict(self.row_counts),
+            "table_fingerprints": dict(self.table_fingerprints),
         }
 
     @classmethod
@@ -209,24 +465,35 @@ class PersonalDataSnapshot:
             captured_at=str(data.get("captured_at", "")),
             database_identity=dict(data.get("database_identity") or {}),
             row_counts={str(k): int(v) for k, v in (data.get("row_counts") or {}).items()},
+            table_fingerprints={
+                str(k): dict(v) for k, v in (data.get("table_fingerprints") or {}).items()
+            },
         )
 
 
 @dataclass
 class SnapshotComparisonResult:
     passed: bool
+    row_count_passed: bool
+    fingerprint_passed: bool
+    identity_passed: bool
     pre_captured_at: str
     post_captured_at: str
-    deltas: dict[str, dict[str, int]] = field(default_factory=dict)
+    deltas: dict[str, dict[str, Any]] = field(default_factory=dict)
     changed_tables: list[str] = field(default_factory=list)
+    fingerprint_mismatches: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "passed": self.passed,
+            "row_count_passed": self.row_count_passed,
+            "fingerprint_passed": self.fingerprint_passed,
+            "identity_passed": self.identity_passed,
             "pre_captured_at": self.pre_captured_at,
             "post_captured_at": self.post_captured_at,
             "changed_tables": self.changed_tables,
+            "fingerprint_mismatches": self.fingerprint_mismatches,
             "errors": self.errors,
             "deltas": self.deltas,
         }
@@ -234,31 +501,30 @@ class SnapshotComparisonResult:
 
 def capture_personal_snapshot(database_url: str) -> PersonalDataSnapshot:
     """
-    Capture read-only row counts for all personal-data tables.
-    Enforces read-only PostgreSQL session mode and never writes to the database.
+    Capture read-only row counts, content-integrity fingerprints, and SQL
+    instance identity for all personal/configuration tables.
+    Never persists personal row values or credentials.
     """
     if psycopg2 is None:
         raise ImportError("psycopg2 is required to capture personal-data snapshots.")
 
-    db_identity = parse_safe_db_identity(database_url)
+    db_identity = fetch_sql_db_identity(database_url)
     clean_url = strip_prisma_schema_param(database_url)
 
     conn = psycopg2.connect(clean_url)
     try:
         conn.set_session(readonly=True, autocommit=True)
         row_counts: dict[str, int] = {}
+        table_fingerprints: dict[str, dict[str, Any]] = {}
         with conn.cursor() as cur:
             cur.execute("SET default_transaction_read_only = on;")
-            cur.execute("SELECT current_database(), inet_server_port();")
-            sql_row = cur.fetchone()
-            if sql_row:
-                db_identity["sql_current_database"] = sql_row[0]
-                db_identity["sql_server_port"] = sql_row[1]
-
-            for table in PERSONAL_DATA_TABLES:
-                cur.execute(f'SELECT COUNT(*) FROM "{table}";')
-                count_row = cur.fetchone()
-                row_counts[table] = int(count_row[0]) if count_row else 0
+            for table, columns in PERSONAL_TABLE_COLUMNS.items():
+                col_sql = ", ".join(f'"{c}"' for c in columns)
+                cur.execute(f'SELECT {col_sql} FROM "{table}";')
+                rows = cur.fetchall()
+                fp_info = compute_table_fingerprint(table, columns, rows)
+                row_counts[table] = fp_info["row_count"]
+                table_fingerprints[table] = fp_info
     finally:
         conn.close()
 
@@ -267,6 +533,7 @@ def capture_personal_snapshot(database_url: str) -> PersonalDataSnapshot:
         captured_at=datetime.now(UTC).isoformat(),
         database_identity=db_identity,
         row_counts=row_counts,
+        table_fingerprints=table_fingerprints,
     )
 
 
@@ -301,39 +568,101 @@ def compare_personal_snapshots(
 ) -> SnapshotComparisonResult:
     """
     Compare pre- and post-ingestion personal-data snapshots.
-    Fails if any personal table row count changed or if table coverage is incomplete.
+    Fails closed if database instance identity, row counts, content fingerprints,
+    or expected column sets are missing or mismatched.
     """
     errors: list[str] = []
     changed_tables: list[str] = []
-    deltas: dict[str, dict[str, int]] = {}
+    fingerprint_mismatches: list[str] = []
+    deltas: dict[str, dict[str, Any]] = {}
 
-    pre_db = pre.database_identity.get("database_name")
-    post_db = post.database_identity.get("database_name")
-    if pre_db and post_db and pre_db != post_db:
-        errors.append(f"Snapshot database mismatch: pre={pre_db!r}, post={post_db!r}.")
+    # 1. Verify mandatory SQL database instance identity
+    identity_passed = True
+    for field_name in MANDATORY_SQL_IDENTITY_FIELDS:
+        pre_val = pre.database_identity.get(field_name)
+        post_val = post.database_identity.get(field_name)
+        if not pre_val or not post_val:
+            identity_passed = False
+            errors.append(
+                f"Snapshot missing mandatory database identity field {field_name!r} "
+                f"(pre={pre_val!r}, post={post_val!r})."
+            )
+        elif str(pre_val) != str(post_val):
+            identity_passed = False
+            errors.append(
+                f"Snapshot database identity mismatch for {field_name!r}: "
+                f"pre={pre_val!r}, post={post_val!r}."
+            )
 
-    for table in PERSONAL_DATA_TABLES:
+    # 2. Verify row counts & content fingerprints for all 6 tables
+    row_count_passed = True
+    fingerprint_passed = True
+
+    for table, expected_cols in PERSONAL_TABLE_COLUMNS.items():
         if table not in pre.row_counts or table not in post.row_counts:
+            row_count_passed = False
             errors.append(f"Missing row count for required personal table {table!r}.")
             continue
+        if table not in pre.table_fingerprints or table not in post.table_fingerprints:
+            fingerprint_passed = False
+            errors.append(f"Missing content fingerprint for required personal table {table!r}.")
+            continue
+
         before = pre.row_counts[table]
         after = post.row_counts[table]
         delta = after - before
-        deltas[table] = {"pre": before, "post": after, "delta": delta}
+
+        pre_fp = pre.table_fingerprints[table]
+        post_fp = post.table_fingerprints[table]
+
+        pre_cols = tuple(pre_fp.get("columns") or ())
+        post_cols = tuple(post_fp.get("columns") or ())
+        if pre_cols != expected_cols or post_cols != expected_cols:
+            fingerprint_passed = False
+            errors.append(
+                f"Column set mismatch for table {table!r}: "
+                f"expected={list(expected_cols)}, pre={list(pre_cols)}, post={list(post_cols)}."
+            )
+
+        pre_hash = pre_fp.get("fingerprint")
+        post_hash = post_fp.get("fingerprint")
+        if not pre_hash or not post_hash:
+            fingerprint_passed = False
+            errors.append(f"Empty content fingerprint hash for table {table!r}.")
+        elif pre_hash != post_hash:
+            fingerprint_passed = False
+            fingerprint_mismatches.append(table)
+            errors.append(
+                f"Content fingerprint mismatch for personal table {table!r} "
+                f"(pre={str(pre_hash)[:12]}…, post={str(post_hash)[:12]}…)."
+            )
+
         if delta != 0:
+            row_count_passed = False
             changed_tables.append(table)
             errors.append(
-                f"Personal table {table!r} mutated during seeding: "
+                f"Personal table {table!r} row count changed: "
                 f"pre={before}, post={after}, delta={delta:+d}."
             )
 
-    passed = len(changed_tables) == 0 and len(errors) == 0
+        deltas[table] = {
+            "pre": before,
+            "post": after,
+            "delta": delta,
+            "fingerprint_match": bool(pre_hash and post_hash and pre_hash == post_hash),
+        }
+
+    passed = identity_passed and row_count_passed and fingerprint_passed and len(errors) == 0
     return SnapshotComparisonResult(
         passed=passed,
+        row_count_passed=row_count_passed,
+        fingerprint_passed=fingerprint_passed,
+        identity_passed=identity_passed,
         pre_captured_at=pre.captured_at,
         post_captured_at=post.captured_at,
         deltas=deltas,
         changed_tables=changed_tables,
+        fingerprint_mismatches=fingerprint_mismatches,
         errors=errors,
     )
 
@@ -398,12 +727,12 @@ def main(argv: list[str] | None = None) -> int:
             logger.error("Personal data verification FAILED: %s", "; ".join(result.errors))
             return 1
         logger.info(
-            "Personal data verification PASSED (0 mutations across %d tables).",
+            "Personal data verification PASSED: row counts and content fingerprints "
+            "unchanged across %d tables.",
             len(PERSONAL_DATA_TABLES),
         )
         return 0
 
-    # --mode verify
     if not args.pre_snapshot or not args.post_snapshot:
         logger.error("--pre-snapshot and --post-snapshot are required for --mode verify.")
         return 2
@@ -417,7 +746,8 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("Personal data verification FAILED: %s", "; ".join(result.errors))
         return 1
     logger.info(
-        "Personal data verification PASSED (0 mutations across %d tables).",
+        "Personal data verification PASSED: row counts and content fingerprints "
+        "unchanged across %d tables.",
         len(PERSONAL_DATA_TABLES),
     )
     return 0

@@ -11,6 +11,9 @@ export interface HealthCheckResponse {
     databaseName?: string;
     host?: string;
     port?: number;
+    serverAddress?: string;
+    systemIdentifier?: string;
+    databaseOid?: number;
     error?: string;
   };
   pgvector: VectorExtensionStatus;

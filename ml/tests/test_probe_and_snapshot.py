@@ -10,6 +10,9 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import urllib.error
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -34,10 +37,13 @@ from ml.benchmark.scripts.run_probe_ingestion import (
 )
 from ml.benchmark.scripts.verify_personal_data_snapshot import (
     PERSONAL_DATA_TABLES,
+    PERSONAL_TABLE_COLUMNS,
     PersonalDataSnapshot,
     TargetVerificationError,
     capture_personal_snapshot,
     compare_personal_snapshots,
+    compute_table_fingerprint,
+    fetch_sql_db_identity,
     parse_safe_db_identity,
     save_snapshot_atomic,
     strip_prisma_schema_param,
@@ -64,6 +70,85 @@ def _make_probe(
         tmdb_id=tmdb_id,
         title=title,
         stratum=stratum,
+    )
+
+
+def _sample_sql_identity(
+    *,
+    database_name: str = "cinesphere",
+    server_address: str = "172.20.0.2/32",
+    server_port: int = 5432,
+    system_identifier: str = "7704763478273589286",
+    database_oid: int = 16384,
+) -> dict[str, Any]:
+    return {
+        "database_name": database_name,
+        "server_address": server_address,
+        "server_port": server_port,
+        "system_identifier": system_identifier,
+        "database_oid": database_oid,
+        "url_host": "localhost",
+        "is_local_host": True,
+    }
+
+
+def _sample_health_payload(
+    *,
+    database_name: str = "cinesphere",
+    server_address: str = "172.20.0.2/32",
+    port: int = 5432,
+    system_identifier: str = "7704763478273589286",
+    database_oid: int = 16384,
+) -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "database": {
+            "connected": True,
+            "databaseName": database_name,
+            "host": "localhost",
+            "port": port,
+            "serverAddress": server_address,
+            "systemIdentifier": system_identifier,
+            "databaseOid": database_oid,
+        },
+    }
+
+
+def _build_full_snapshot(
+    *,
+    identity: dict[str, Any] | None = None,
+    row_overrides: dict[str, list[tuple[Any, ...]]] | None = None,
+) -> PersonalDataSnapshot:
+    ident = identity or _sample_sql_identity()
+    row_counts: dict[str, int] = {}
+    table_fingerprints: dict[str, dict[str, Any]] = {}
+    overrides = row_overrides or {}
+
+    for tbl, cols in PERSONAL_TABLE_COLUMNS.items():
+        if tbl in overrides:
+            rows = overrides[tbl]
+        elif tbl == "users":
+            rows = [
+                (
+                    "u1",
+                    "CineSphere User",
+                    datetime(2026, 1, 1, tzinfo=UTC),
+                    datetime(2026, 1, 1, tzinfo=UTC),
+                )
+            ]
+        elif tbl == "system_configs":
+            rows = [("theme", "dark", datetime(2026, 1, 1, tzinfo=UTC))]
+        else:
+            rows = []
+        fp = compute_table_fingerprint(tbl, cols, rows)
+        row_counts[tbl] = fp["row_count"]
+        table_fingerprints[tbl] = fp
+
+    return PersonalDataSnapshot(
+        captured_at="2026-11-25T00:00:00Z",
+        database_identity=ident,
+        row_counts=row_counts,
+        table_fingerprints=table_fingerprints,
     )
 
 
@@ -235,7 +320,7 @@ class TestProbeIngestionWorkflow:
         ):
             summary = run_probe_ingestion(probes, cp, cp_path, "http://localhost:4000")
 
-        assert called == ["PB-40"]  # PB-01 skipped because already complete
+        assert called == ["PB-40"]
         assert summary.success is True
         assert summary.completed_count == 2
         assert summary.partial_tv_count == 0
@@ -278,122 +363,130 @@ class TestProbeIngestionWorkflow:
 
 
 # ===========================================================================
-# Tests: Personal Data Snapshot & Target Verification (Steps 3 & 4)
+# Tests: Personal Data Content-Integrity Fingerprints (Objective A)
 # ===========================================================================
-class TestPersonalSnapshotAndTargetVerification:
-    def test_strip_prisma_schema_param(self) -> None:
-        url = "postgresql://user:pass@localhost:5432/cinesphere?schema=public"
-        assert strip_prisma_schema_param(url) == "postgresql://user:pass@localhost:5432/cinesphere"
+class TestPersonalDataFingerprints:
+    def test_identical_contents_produce_identical_fingerprints(self) -> None:
+        cols = ("id", "library_entry_id", "watched_at", "rating", "notes")
+        dt = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+        rows_a = [("ev1", "le1", dt, Decimal("8.50"), "Great")]
+        rows_b = [("ev1", "le1", dt.astimezone(UTC), Decimal("8.5"), "Great")]
+        fp_a = compute_table_fingerprint("viewing_events", cols, rows_a)
+        fp_b = compute_table_fingerprint("viewing_events", cols, rows_b)
+        assert fp_a["fingerprint"] == fp_b["fingerprint"]
 
-    def test_parse_safe_db_identity_redacts_credentials(self) -> None:
-        url = "postgresql://secret_user:super_secret_pw@localhost:5432/cinesphere?schema=public"
-        ident = parse_safe_db_identity(url)
-        assert ident == {
-            "database_name": "cinesphere",
-            "host": "localhost",
-            "port": 5432,
-            "is_local_host": True,
-        }
-        serialized = json.dumps(ident)
-        assert "secret_user" not in serialized
-        assert "super_secret_pw" not in serialized
-
-    def test_verify_api_and_db_target_passes_on_matching_local(self) -> None:
-        health = {
-            "status": "ok",
-            "database": {
-                "connected": True,
-                "databaseName": "cinesphere",
-                "host": "localhost",
-                "port": 5432,
-            },
-        }
-        res = verify_api_and_db_target(
-            "http://localhost:4000",
-            "postgresql://u:p@localhost:5432/cinesphere?schema=public",
-            health_payload=health,
+    def test_row_ordering_does_not_affect_fingerprint(self) -> None:
+        cols = ("key", "value", "updatedAt")
+        dt = datetime(2026, 1, 1, tzinfo=UTC)
+        rows_a = [("k1", "v1", dt), ("k2", "v2", dt)]
+        rows_b = [("k2", "v2", dt), ("k1", "v1", dt)]
+        assert (
+            compute_table_fingerprint("system_configs", cols, rows_a)["fingerprint"]
+            == compute_table_fingerprint("system_configs", cols, rows_b)["fingerprint"]
         )
-        assert res["verified"] is True
-        assert res["database_name"] == "cinesphere"
 
-    def test_verify_api_and_db_target_fails_on_db_name_mismatch(self) -> None:
-        health = {
-            "status": "ok",
-            "database": {
-                "connected": True,
-                "databaseName": "cinesphere_e2e",
-                "host": "localhost",
-                "port": 5432,
-            },
-        }
-        with pytest.raises(TargetVerificationError, match="Database name mismatch"):
-            verify_api_and_db_target(
-                "http://localhost:4000",
-                "postgresql://u:p@localhost:5432/cinesphere?schema=public",
-                health_payload=health,
-            )
+    def test_cross_table_isolation_prevents_identical_row_collision(self) -> None:
+        cols = ("a", "b")
+        rows = [("x", "y")]
+        fp_a = compute_table_fingerprint("users", cols, rows)["fingerprint"]
+        fp_b = compute_table_fingerprint("system_configs", cols, rows)["fingerprint"]
+        assert fp_a != fp_b
 
-    def test_verify_api_and_db_target_fails_on_port_mismatch(self) -> None:
-        health = {
-            "status": "ok",
-            "database": {
-                "connected": True,
-                "databaseName": "cinesphere",
-                "host": "localhost",
-                "port": 5433,
-            },
-        }
-        with pytest.raises(TargetVerificationError, match="Database port mismatch"):
-            verify_api_and_db_target(
-                "http://localhost:4000",
-                "postgresql://u:p@localhost:5432/cinesphere?schema=public",
-                health_payload=health,
-            )
-
-    def test_verify_api_and_db_target_rejects_remote_db_host(self) -> None:
-        with pytest.raises(TargetVerificationError, match="not a recognized local host"):
-            verify_api_and_db_target(
-                "http://localhost:4000",
-                "postgresql://u:p@prod.db.example.com:5432/cinesphere",
-                health_payload={"status": "ok", "database": {"connected": True}},
-            )
-
-    def test_compare_personal_snapshots_passes_when_unchanged(self) -> None:
-        counts = {tbl: idx * 10 for idx, tbl in enumerate(PERSONAL_DATA_TABLES, start=1)}
-        pre = PersonalDataSnapshot(
-            captured_at="2026-11-25T00:00:00Z",
-            database_identity={"database_name": "cinesphere"},
-            row_counts=counts,
-        )
-        post = PersonalDataSnapshot(
-            captured_at="2026-11-25T00:10:00Z",
-            database_identity={"database_name": "cinesphere"},
-            row_counts=dict(counts),
+    def test_update_preserving_row_count_detected(self) -> None:
+        pre = _build_full_snapshot()
+        post = _build_full_snapshot(
+            row_overrides={
+                "users": [
+                    (
+                        "u1",
+                        "Modified User Name",
+                        datetime(2026, 1, 1, tzinfo=UTC),
+                        datetime(2026, 1, 1, tzinfo=UTC),
+                    )
+                ]
+            }
         )
         res = compare_personal_snapshots(pre, post)
-        assert res.passed is True
-        assert res.changed_tables == []
-
-    def test_compare_personal_snapshots_fails_on_mutation(self) -> None:
-        counts = {tbl: 10 for tbl in PERSONAL_DATA_TABLES}
-        mutated = dict(counts)
-        mutated["user_library_entries"] = 11
-        pre = PersonalDataSnapshot(
-            captured_at="t1", database_identity={"database_name": "cinesphere"}, row_counts=counts
-        )
-        post = PersonalDataSnapshot(
-            captured_at="t2", database_identity={"database_name": "cinesphere"}, row_counts=mutated
-        )
-        res = compare_personal_snapshots(pre, post)
+        assert res.row_count_passed is True
+        assert res.fingerprint_passed is False
         assert res.passed is False
-        assert res.changed_tables == ["user_library_entries"]
-        assert res.deltas["user_library_entries"]["delta"] == 1
+        assert res.changed_tables == []
+        assert res.fingerprint_mismatches == ["users"]
+
+    def test_delete_then_insert_preserving_row_count_detected(self) -> None:
+        pre = _build_full_snapshot(
+            row_overrides={"system_configs": [("k1", "v1", datetime(2026, 1, 1, tzinfo=UTC))]}
+        )
+        post = _build_full_snapshot(
+            row_overrides={"system_configs": [("k2", "v1", datetime(2026, 1, 1, tzinfo=UTC))]}
+        )
+        res = compare_personal_snapshots(pre, post)
+        assert res.row_count_passed is True
+        assert res.fingerprint_passed is False
+        assert res.passed is False
+        assert res.fingerprint_mismatches == ["system_configs"]
+
+    def test_missing_fingerprint_metadata_fails_closed(self) -> None:
+        pre = _build_full_snapshot()
+        post = _build_full_snapshot()
+        del post.table_fingerprints["users"]
+        res = compare_personal_snapshots(pre, post)
+        assert res.fingerprint_passed is False
+        assert res.passed is False
+
+    def test_missing_required_table_row_count_fails_closed(self) -> None:
+        pre = _build_full_snapshot()
+        post = _build_full_snapshot()
+        del post.row_counts["episode_progress"]
+        res = compare_personal_snapshots(pre, post)
+        assert res.row_count_passed is False
+        assert res.passed is False
+
+    def test_column_set_mismatch_fails_closed(self) -> None:
+        pre = _build_full_snapshot()
+        post = _build_full_snapshot()
+        post.table_fingerprints["users"]["columns"] = ["id", "displayName"]
+        res = compare_personal_snapshots(pre, post)
+        assert res.fingerprint_passed is False
+        assert res.passed is False
+
+    def test_different_database_identity_fails_closed(self) -> None:
+        pre = _build_full_snapshot(identity=_sample_sql_identity(system_identifier="111"))
+        post = _build_full_snapshot(identity=_sample_sql_identity(system_identifier="222"))
+        res = compare_personal_snapshots(pre, post)
+        assert res.identity_passed is False
+        assert res.passed is False
+
+    def test_snapshot_artifact_never_persists_raw_personal_data(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        snap = _build_full_snapshot(
+            row_overrides={
+                "users": [
+                    (
+                        "u1",
+                        "SecretPersonalDisplayName123",
+                        datetime(2026, 1, 1, tzinfo=UTC),
+                        datetime(2026, 1, 1, tzinfo=UTC),
+                    )
+                ]
+            }
+        )
+        path = tmp_path / "snap.json"
+        save_snapshot_atomic(snap, path)
+        raw_text = path.read_text(encoding="utf-8")
+        assert "SecretPersonalDisplayName123" not in raw_text
 
     def test_capture_personal_snapshot_uses_readonly_session(self) -> None:
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.side_effect = [("cinesphere", 5432)] + [(5,)] * len(
-            PERSONAL_DATA_TABLES
+        mock_cursor.fetchone.return_value = (
+            "cinesphere",
+            "172.20.0.2/32",
+            5432,
+            "7704763478273589286",
+            16384,
         )
+        mock_cursor.fetchall.return_value = []
         mock_conn = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
 
@@ -405,32 +498,18 @@ class TestPersonalSnapshotAndTargetVerification:
                 "postgresql://user:pw@localhost:5432/cinesphere?schema=public"
             )
 
-        mock_connect.assert_called_once_with("postgresql://user:pw@localhost:5432/cinesphere")
-        mock_conn.set_session.assert_called_once_with(readonly=True, autocommit=True)
+        assert mock_connect.call_count == 2
+        mock_conn.set_session.assert_called_with(readonly=True, autocommit=True)
         assert len(snap.row_counts) == len(PERSONAL_DATA_TABLES)
+        assert len(snap.table_fingerprints) == len(PERSONAL_DATA_TABLES)
 
     def test_snapshot_cli_verify_mode_exit_codes(self, tmp_path: pathlib.Path) -> None:
-        counts = {tbl: 42 for tbl in PERSONAL_DATA_TABLES}
         pre_path = tmp_path / "pre.json"
         post_path = tmp_path / "post.json"
         report_path = tmp_path / "report.json"
 
-        save_snapshot_atomic(
-            PersonalDataSnapshot(
-                captured_at="t1",
-                database_identity={"database_name": "cinesphere"},
-                row_counts=counts,
-            ),
-            pre_path,
-        )
-        save_snapshot_atomic(
-            PersonalDataSnapshot(
-                captured_at="t2",
-                database_identity={"database_name": "cinesphere"},
-                row_counts=counts,
-            ),
-            post_path,
-        )
+        save_snapshot_atomic(_build_full_snapshot(), pre_path)
+        save_snapshot_atomic(_build_full_snapshot(), post_path)
         rc_pass = snapshot_main(
             [
                 "--mode",
@@ -444,19 +523,26 @@ class TestPersonalSnapshotAndTargetVerification:
             ]
         )
         assert rc_pass == 0
-        assert json.loads(report_path.read_text(encoding="utf-8"))["passed"] is True
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert report["passed"] is True
+        assert report["row_count_passed"] is True
+        assert report["fingerprint_passed"] is True
+        assert report["identity_passed"] is True
 
-        # Now mutate post snapshot and verify exit code 1
-        mutated = dict(counts)
-        mutated["users"] = 43
-        save_snapshot_atomic(
-            PersonalDataSnapshot(
-                captured_at="t2",
-                database_identity={"database_name": "cinesphere"},
-                row_counts=mutated,
-            ),
-            post_path,
+        # Now mutate a user row without changing row count and verify exit code 1
+        mutated = _build_full_snapshot(
+            row_overrides={
+                "users": [
+                    (
+                        "u1",
+                        "Tampered Name",
+                        datetime(2026, 1, 1, tzinfo=UTC),
+                        datetime(2026, 1, 1, tzinfo=UTC),
+                    )
+                ]
+            }
         )
+        save_snapshot_atomic(mutated, post_path)
         rc_fail = snapshot_main(
             [
                 "--mode",
@@ -468,3 +554,123 @@ class TestPersonalSnapshotAndTargetVerification:
             ]
         )
         assert rc_fail == 1
+
+
+# ===========================================================================
+# Tests: SQL Database Instance & Target Verification (Objective B)
+# ===========================================================================
+class TestDatabaseInstanceTargetVerification:
+    def test_strip_prisma_schema_param(self) -> None:
+        url = "postgresql://user:pass@localhost:5432/cinesphere?schema=public"
+        assert strip_prisma_schema_param(url) == "postgresql://user:pass@localhost:5432/cinesphere"
+
+    def test_parse_safe_db_identity_redacts_credentials(self) -> None:
+        url = "postgresql://secret_user:super_secret_pw@localhost:5432/cinesphere?schema=public"
+        ident = parse_safe_db_identity(url)
+        serialized = json.dumps(ident)
+        assert "secret_user" not in serialized
+        assert "super_secret_pw" not in serialized
+
+    def test_exact_sql_identity_match_passes(self) -> None:
+        res = verify_api_and_db_target(
+            "http://localhost:4000",
+            "postgresql://u:p@localhost:5432/cinesphere?schema=public",
+            health_payload=_sample_health_payload(),
+            direct_db_identity=_sample_sql_identity(),
+        )
+        assert res["verified"] is True
+        assert res["system_identifier"] == "7704763478273589286"
+        assert res["database_oid"] == 16384
+
+    def test_different_database_names_rejected(self) -> None:
+        with pytest.raises(TargetVerificationError, match="database_name"):
+            verify_api_and_db_target(
+                "http://localhost:4000",
+                "postgresql://u:p@localhost:5432/cinesphere?schema=public",
+                health_payload=_sample_health_payload(database_name="cinesphere_other"),
+                direct_db_identity=_sample_sql_identity(database_name="cinesphere"),
+            )
+
+    def test_same_name_and_port_different_system_identifier_rejected(self) -> None:
+        with pytest.raises(TargetVerificationError, match="system_identifier"):
+            verify_api_and_db_target(
+                "http://localhost:4000",
+                "postgresql://u:p@localhost:5432/cinesphere?schema=public",
+                health_payload=_sample_health_payload(system_identifier="1111111111111111111"),
+                direct_db_identity=_sample_sql_identity(system_identifier="2222222222222222222"),
+            )
+
+    def test_different_server_address_rejected(self) -> None:
+        with pytest.raises(TargetVerificationError, match="server_address"):
+            verify_api_and_db_target(
+                "http://localhost:4000",
+                "postgresql://u:p@localhost:5432/cinesphere?schema=public",
+                health_payload=_sample_health_payload(server_address="127.0.0.1/32"),
+                direct_db_identity=_sample_sql_identity(server_address="172.20.0.2/32"),
+            )
+
+    def test_missing_api_identity_fields_fails_closed(self) -> None:
+        incomplete_health = _sample_health_payload()
+        del incomplete_health["database"]["systemIdentifier"]
+        with pytest.raises(TargetVerificationError, match="missing mandatory SQL identity"):
+            verify_api_and_db_target(
+                "http://localhost:4000",
+                "postgresql://u:p@localhost:5432/cinesphere?schema=public",
+                health_payload=incomplete_health,
+                direct_db_identity=_sample_sql_identity(),
+            )
+
+    def test_missing_direct_db_identity_fields_fails_closed(self) -> None:
+        incomplete_direct = _sample_sql_identity()
+        incomplete_direct["database_oid"] = None
+        with pytest.raises(TargetVerificationError, match="Direct PostgreSQL identity missing"):
+            verify_api_and_db_target(
+                "http://localhost:4000",
+                "postgresql://u:p@localhost:5432/cinesphere?schema=public",
+                health_payload=_sample_health_payload(),
+                direct_db_identity=incomplete_direct,
+            )
+
+    def test_remote_api_target_rejected(self) -> None:
+        with pytest.raises(TargetVerificationError, match="not a local loopback host"):
+            verify_api_and_db_target(
+                "https://api.example.com",
+                "postgresql://u:p@localhost:5432/cinesphere",
+                health_payload=_sample_health_payload(),
+                direct_db_identity=_sample_sql_identity(),
+            )
+
+    def test_remote_db_target_rejected(self) -> None:
+        with pytest.raises(TargetVerificationError, match="not a recognized local host"):
+            verify_api_and_db_target(
+                "http://localhost:4000",
+                "postgresql://u:p@prod.db.example.com:5432/cinesphere",
+                health_payload=_sample_health_payload(),
+                direct_db_identity=_sample_sql_identity(),
+            )
+
+    def test_unreachable_api_fails_closed(self) -> None:
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=urllib.error.URLError("connection refused"),
+        ):
+            with pytest.raises(TargetVerificationError, match="Failed to query API health"):
+                verify_api_and_db_target(
+                    "http://localhost:19999",
+                    "postgresql://u:p@localhost:5432/cinesphere",
+                    direct_db_identity=_sample_sql_identity(),
+                )
+
+    def test_unavailable_sql_identity_query_fails_closed_and_redacts_credentials(self) -> None:
+        secret_url = (
+            "postgresql://admin_user:TopSecretPass99@localhost:5432/cinesphere?schema=public"
+        )
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            side_effect=RuntimeError(f"auth failed for {secret_url}"),
+        ):
+            with pytest.raises(TargetVerificationError) as exc_info:
+                fetch_sql_db_identity(secret_url)
+        msg = str(exc_info.value)
+        assert "TopSecretPass99" not in msg
+        assert "admin_user" not in msg
