@@ -25,13 +25,40 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     this.logger.log('Prisma disconnected from PostgreSQL');
   }
 
-  async checkConnection(): Promise<{ connected: boolean; latencyMs?: number; error?: string }> {
+  async checkConnection(): Promise<{
+    connected: boolean;
+    latencyMs?: number;
+    databaseName?: string;
+    host?: string;
+    port?: number;
+    error?: string;
+  }> {
     const start = Date.now();
     try {
-      await this.$queryRaw`SELECT 1`;
+      const rows = await this.$queryRaw<Array<{ db: string; port: number | null }>>`
+        SELECT current_database() AS db, inet_server_port() AS port
+      `;
+      const row = Array.isArray(rows) ? rows[0] : undefined;
+      const rawUrl = process.env.CINESPHERE_E2E_DATABASE_URL || process.env.DATABASE_URL;
+      let parsedHost: string | undefined;
+      let parsedPort: number | undefined;
+      let parsedDb: string | undefined;
+      if (rawUrl) {
+        try {
+          const u = new URL(rawUrl);
+          parsedHost = u.hostname || undefined;
+          parsedPort = u.port ? Number(u.port) : 5432;
+          parsedDb = u.pathname.replace(/^\//, '') || undefined;
+        } catch {
+          // Ignore malformed URL; rely on SQL identity below
+        }
+      }
       return {
         connected: true,
         latencyMs: Date.now() - start,
+        databaseName: row?.db ?? parsedDb,
+        host: parsedHost,
+        port: row?.port ?? parsedPort,
       };
     } catch (error) {
       return {

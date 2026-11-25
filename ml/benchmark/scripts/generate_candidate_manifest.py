@@ -305,8 +305,11 @@ def load_existing_catalogue_ids(
         logger.warning("psycopg2 not available — diagnostic mode skipping catalogue exclusion.")
         return {"movie": set(), "tv": set()}, "diagnostic", None
 
+    # Strip Prisma-specific ?schema=... query parameter that psycopg2 rejects.
+    clean_db_url = database_url.split("?schema=")[0] if "?schema=" in database_url else database_url
+
     try:
-        conn = psycopg2.connect(database_url)
+        conn = psycopg2.connect(clean_db_url)
         conn.set_session(readonly=True, autocommit=False)
         with conn.cursor() as cursor:
             cursor.execute('SELECT "tmdbId" FROM movies;')

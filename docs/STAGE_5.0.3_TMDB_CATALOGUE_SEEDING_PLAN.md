@@ -2,10 +2,10 @@
 
 **Document Status:** Corrected Technical Architecture & Execution Plan (Planning & Hardened Pipeline Complete — Ingestion Not Authorized)<br>
 **Date:** 2026-11-24 (Latest Verified Implementation Update: 2026-11-25)<br>
-**Internal Revision:** V2.3.0 (Stage 5.0.3-B.1.2 Final Execution-Readiness Gate Corrections)<br>
+**Internal Revision:** V2.4.0 (Stage 5.0.3-B.2 Pre-Execution Readiness & Safety Closure)<br>
 **Author:** Antigravity AI (Senior ML Engineer, Data Engineer & Technical Auditor)<br>
 **Baseline Commit (Planning):** `cedf46123016446a96b6c57c6814bdbbf23e56ba`<br>
-**Latest Hardening Baseline (B.1.1):** `446988790bd2314d91a60ec393c16ecc027166cc`<br>
+**Latest Hardening Baseline (B.1.2):** `39c5c645656824271af286010b16299063d64806`<br>
 **Repository:** `NilangaAbhisheka/CineSphere` (`main` branch)
 
 ---
@@ -564,16 +564,20 @@ To guarantee complete safety for personal user library data during bulk seeding:
 
 ## 16. Explicit Stage 5.0.3-B Readiness Verdict
 
-### Verdict: **SEEDING PIPELINE IMPLEMENTED & HARDENED (B.1.2 GATE VERIFIED) — STAGE 5.0.3-B.2 EXECUTION PENDING AUTHORIZATION**
+### Verdict: **PRE-EXECUTION READINESS & SAFETY CLOSURE COMPLETE — LIVE STAGE 5.0.3-B.2 EXECUTION PENDING AUTHORIZATION**
 
-The Stage 5.0.3 seeding pipeline infrastructure is fully implemented, independently hardened (Stage 5.0.3-B.1.1 and B.1.2), and verified with 145 automated Python tests and 513 TypeScript unit tests (271 backend + 242 frontend):
+The Stage 5.0.3 seeding pipeline and pre-execution safety controls are fully implemented, hardened, and verified with 169 automated Python tests and 513 TypeScript unit tests (271 backend + 242 frontend):
 
-1. **Probe Inventory & Protection:** Authoritative 50-probe fixture (`probes_v1.json`) loaded directly at runner boundary; candidate manifest generation and ingestion runner both reject any candidate sharing a TMDB ID with any probe.
-2. **Probe Identity Enforcement:** `prepare_catalogue_fixture.py` hardened with `matches_probe_identity()`, approved alias registry, and `ProbeIdentityMismatchError` fail-closed stops.
-3. **Transport-Level Rate Limiting:** Enforced sequentially with `TMDB_MAX_CONCURRENCY = 1` and $\ge 100$ms spacing in `TmdbHttpClient`, backed by 429 Retry-After exponential backoff.
-4. **Candidate Manifest Integrity:** `generate_candidate_manifest.py` enforces fail-closed DB query in `--execution-ready` mode, sets `is_executable=True` only when all quotas and diversity targets are satisfied, and embeds `is_executable`, candidate `(tmdb_id, original_language)` pairs, and canonical targets in the SHA-256 digest.
-5. **Execution Truthfulness & Gate Enforcement:** `run_seeding_batch.py` requires `--execute` and `CINESPHERE_ALLOW_CATALOGUE_SEEDING=true`, enforces strict `is_executable is True` identity, enforces canonical project targets (`1,408` movies, `555` TV shows, `25%` / `20%` non-English), recomputes language diversity directly from candidate entries with metadata cross-checking, guards against remote targets without explicit flag, tracks granular status with `ExecutionSummary`, and returns exit code 1 if any item remains unresolved.
-6. **Zero-Access Personal Data:** Sourcing and ingestion pipelines operate exclusively on public TMDB endpoints and `movies`/`tv_shows` catalogue tables. Personal library tables remain untouched and unqueried.
+1. **Fresh Read-Only Catalogue Audit (2026-11-25):** Verified local PostgreSQL (`cinesphere`) contains `1,249` movies (`138` benchmark-eligible, `1,111` synthetic, `0` non-synthetic empty overviews), `2,174` TV shows (`106` benchmark-eligible, `2,068` synthetic, `0` non-synthetic empty overviews, `0` incomplete seasons), `0/50` benchmark probes present, and `0` duplicate or invalid `person_credits`.
+2. **Separate Probe-Ingestion Workflow:** `ml/benchmark/scripts/run_probe_ingestion.py` provides a dedicated, resumable, dry-run-default workflow for the 50 canonical probes in `probes_v1.json` (preserving PB-45 alias handling, rejecting arbitrary IDs, tracking partial TV retries, and isolating `probe_ingestion_checkpoint.json` from `seeding_checkpoint.json`).
+3. **Personal Data Pre/Post Snapshot Verification:** `ml/benchmark/scripts/verify_personal_data_snapshot.py` captures read-only row counts for all 6 personal/config tables (`users`, `user_library_entries`, `viewing_events`, `episode_progress`, `season_ratings`, `system_configs`) and fails closed on any unexpected delta.
+4. **API & Database Target Preflight:** `/api/health` exposes non-secret `databaseName`, `host`, and `port`; both runners verify API/DB identity parity against `DATABASE_URL` before any live execution.
+5. **Preflight & Dry-Run Commands (Authorized Execution Sequence When Approved):**
+   - Pre-snapshot: `python -m ml.benchmark.scripts.verify_personal_data_snapshot --mode pre --output <pre.json>`
+   - Manifest generation: `python -m ml.benchmark.scripts.generate_candidate_manifest --mode execution_ready`
+   - Dry-run checks: `python -m ml.benchmark.scripts.run_probe_ingestion` and `python -m ml.benchmark.scripts.run_seeding_batch`
+   - Live execution (ONLY when explicitly authorized with `CINESPHERE_ALLOW_CATALOGUE_SEEDING=true`): pass `--execute` to `run_probe_ingestion` and `run_seeding_batch`
+   - Post-snapshot verification: `python -m ml.benchmark.scripts.verify_personal_data_snapshot --mode post --pre-snapshot <pre.json> --output <post.json>`
 
 > [!IMPORTANT]
-> **Execution Boundary:** Stage 5.0.3-B.1, B.1.1, and B.1.2 complete the implementation and hardening of all seeding tools. **No catalogue ingestion has taken place.** Execution of real catalogue seeding (Stage 5.0.3-B.2) requires separate explicit user authorization.
+> **Execution Boundary:** Stage 5.0.3-B.1, B.1.1, B.1.2, and B.2 Pre-Execution Readiness & Safety Closure are complete. **No real catalogue ingestion has taken place.** Live execution of Stage 5.0.3-B.2 requires separate explicit user authorization.

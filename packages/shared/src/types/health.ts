@@ -8,6 +8,9 @@ export interface HealthCheckResponse {
   database: {
     connected: boolean;
     latencyMs?: number;
+    databaseName?: string;
+    host?: string;
+    port?: number;
     error?: string;
   };
   pgvector: VectorExtensionStatus;

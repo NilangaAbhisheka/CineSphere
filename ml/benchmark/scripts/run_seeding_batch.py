@@ -41,6 +41,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ml.benchmark.scripts.verify_personal_data_snapshot import (
+    TargetVerificationError,
+    verify_api_and_db_target,
+)
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -1054,21 +1059,38 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
-        # Validate API target is reachable before first ingestion request.
-        health_url = f"{api_base_url}/api/health"
-        try:
-            req = urllib.request.Request(health_url, method="GET")  # noqa: S310
-            with urllib.request.urlopen(req, timeout=10):  # noqa: S310
-                pass
-            logger.info("API health check passed: %s", health_url)
-        except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "API health check failed for %s: %s. "
-                "Ensure the NestJS API is running before executing seeding.",
-                health_url,
-                exc,
-            )
-            return 2
+        # Validate API target is reachable and (if DATABASE_URL is set) matches intended DB.
+        db_url = os.environ.get("DATABASE_URL")
+        allow_remote = os.environ.get(ALLOW_REMOTE_ENV_VAR, "").strip().lower() == "true"
+        if db_url:
+            try:
+                target_info = verify_api_and_db_target(
+                    api_base_url, db_url, allow_remote=allow_remote
+                )
+                logger.info(
+                    "API & DB target verified: db=%s port=%s api=%s",
+                    target_info["database_name"],
+                    target_info["database_port"],
+                    target_info["api_url"],
+                )
+            except TargetVerificationError as exc:
+                logger.error("API & DB target verification failed: %s", exc)
+                return 2
+        else:
+            health_url = f"{api_base_url}/api/health"
+            try:
+                req = urllib.request.Request(health_url, method="GET")  # noqa: S310
+                with urllib.request.urlopen(req, timeout=10):  # noqa: S310
+                    pass
+                logger.info("API health check passed: %s", health_url)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "API health check failed for %s: %s. "
+                    "Ensure the NestJS API is running before executing seeding.",
+                    health_url,
+                    exc,
+                )
+                return 2
 
         logger.info("Execution safeguards satisfied. Starting ingestion.")
         try:
