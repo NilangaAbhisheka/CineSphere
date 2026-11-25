@@ -2,7 +2,7 @@
 
 **Status:** Phase 4 Complete; Phase 5 Stage 5.0 Benchmark Preparation & Hardened Seeding Pipeline Verified (Catalogue Seeding Execution Pending Authorization)<br>
 **Last Updated:** 2026-11-25<br>
-**Version:** 1.6
+**Version:** 1.7
 
 ---
 

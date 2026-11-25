@@ -8,7 +8,6 @@ No live TMDB requests are made.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import pathlib
@@ -39,12 +38,16 @@ from ml.benchmark.scripts.generate_candidate_manifest import (
 from ml.benchmark.scripts.run_seeding_batch import (
     ALLOW_REMOTE_ENV_VAR,
     ALLOW_SEEDING_ENV_VAR,
+    CANONICAL_MOVIE_TARGET,
+    CANONICAL_TV_TARGET,
     Checkpoint,
     CheckpointValidationError,
     ExecutionSummary,
     IngestResult,
     ManifestValidationError,
+    _recompute_noneng_fraction,
     _record_failure,
+    compute_manifest_digest_from_data,
     is_local_api_target,
     load_checkpoint,
     load_manifest,
@@ -145,18 +148,11 @@ def valid_manifest(tmp_path: pathlib.Path) -> dict[str, Any]:
         for i in range(1, 4)
     ]
 
-    movie_ids = sorted(m["tmdb_id"] for m in movies)
-    tv_ids = sorted(t["tmdb_id"] for t in tv_shows)
-    digest_payload = {
-        "schema_version": "1.0.0",
-        "filtering_criteria": filtering_criteria,
-        "movie_ids": movie_ids,
-        "tv_ids": tv_ids,
-        "is_executable": True,
-    }
-    digest = hashlib.sha256(json.dumps(digest_payload, sort_keys=True).encode()).hexdigest()
-
-    return {
+    # Movies: IDs 1-5; i%2==0 -> "en" (IDs 2,4); i%2!=0 -> "ja" (IDs 1,3,5)
+    # Non-English fraction = 3/5 = 0.6
+    # TV: IDs 101-103 (i in 1..3); i%2==0 -> "en" (ID 102); i%2!=0 -> "ko" (IDs 101,103)
+    # Non-English fraction = 2/3 ≈ 0.6667
+    manifest_dict: dict[str, Any] = {
         "schema_version": "1.0.0",
         "manifest_version": "1.0.0",
         "is_executable": True,
@@ -184,13 +180,23 @@ def valid_manifest(tmp_path: pathlib.Path) -> dict[str, Any]:
             "tv_shows_already_in_catalogue": 0,
         },
         "language_diversity": {
-            "movies": {"non_english_fraction": 0.4},
-            "tv": {"non_english_fraction": 0.333},
+            # Must match the actual fractions computed from the candidate lists above
+            # (Correction B cross-check tolerance is 0.0001).
+            "movies": {"non_english_fraction": 0.6},
+            "tv": {"non_english_fraction": round(2 / 3, 10)},
         },
         "movies": movies,
         "tv_shows": tv_shows,
-        "manifest_digest": digest,
+        "manifest_digest": "",  # Filled in below using canonical digest function
     }
+    # Use the runner's canonical digest function so the fixture always stays in
+    # sync with the extended payload schema (Corrections D).
+    from ml.benchmark.scripts.run_seeding_batch import (
+        compute_manifest_digest_from_data as _compute_digest,
+    )
+
+    manifest_dict["manifest_digest"] = _compute_digest(manifest_dict)
+    return manifest_dict
 
 
 # ===========================================================================
@@ -771,7 +777,7 @@ class TestManifestValidation:
         path = tmp_path / "manifest.json"
         with path.open("w") as fh:
             json.dump(valid_manifest, fh)
-        with pytest.raises(ManifestValidationError, match="is_executable=False"):
+        with pytest.raises(ManifestValidationError, match="must be the explicit boolean true"):
             load_manifest(path, is_execution_mode=True)
 
     def test_digest_verification_passes_for_valid_manifest(
@@ -1024,8 +1030,14 @@ class TestExecutionTruthfulness:
         assert summary.unresolved_count == 0
 
     def test_main_execute_unresolved_returns_exit_code_1(
-        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_MOVIE_TARGET", 5)
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_TV_TARGET", 3)
+        valid_manifest["manifest_digest"] = compute_manifest_digest_from_data(valid_manifest)
         manifest_path = tmp_path / "manifest.json"
         with manifest_path.open("w") as fh:
             json.dump(valid_manifest, fh)
@@ -1059,8 +1071,14 @@ class TestExecutionTruthfulness:
         assert rc == 1
 
     def test_main_execute_all_completed_returns_exit_code_0(
-        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_MOVIE_TARGET", 5)
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_TV_TARGET", 3)
+        valid_manifest["manifest_digest"] = compute_manifest_digest_from_data(valid_manifest)
         manifest_path = tmp_path / "manifest.json"
         with manifest_path.open("w") as fh:
             json.dump(valid_manifest, fh)
@@ -1208,3 +1226,196 @@ class TestCredentialSafety:
             with patch.dict(os.environ, env, clear=True):
                 with pytest.raises(CredentialError):
                     build_manifest(dry_run=False)
+
+
+# ===========================================================================
+# Tests: Adversarial Tampering & Execution-Readiness Gate (Correction E)
+# ===========================================================================
+class TestAdversarialTampering:
+    @staticmethod
+    def _write_manifest(tmp_path: pathlib.Path, manifest: dict[str, Any]) -> pathlib.Path:
+        path = tmp_path / "manifest.json"
+        with path.open("w", encoding="utf-8") as fh:
+            json.dump(manifest, fh)
+        return path
+
+    # --- Readiness tampering (Correction A) ---
+    def test_missing_is_executable_rejected_in_execution_mode(
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_MOVIE_TARGET", 5)
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_TV_TARGET", 3)
+        del valid_manifest["is_executable"]
+        valid_manifest["manifest_digest"] = compute_manifest_digest_from_data(valid_manifest)
+        path = self._write_manifest(tmp_path, valid_manifest)
+
+        with pytest.raises(ManifestValidationError, match="must be the explicit boolean true"):
+            load_manifest(path, is_execution_mode=True)
+
+    @pytest.mark.parametrize("bad_value", [None, False, 0, "true", 1])
+    def test_non_true_is_executable_rejected_in_execution_mode(
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+        bad_value: Any,
+    ) -> None:
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_MOVIE_TARGET", 5)
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_TV_TARGET", 3)
+        valid_manifest["is_executable"] = bad_value
+        valid_manifest["manifest_digest"] = compute_manifest_digest_from_data(valid_manifest)
+        path = self._write_manifest(tmp_path, valid_manifest)
+
+        with pytest.raises(ManifestValidationError, match="must be the explicit boolean true"):
+            load_manifest(path, is_execution_mode=True)
+
+    def test_rejected_readiness_produces_zero_side_effects(
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+    ) -> None:
+        valid_manifest["is_executable"] = "true"
+        valid_manifest["manifest_digest"] = compute_manifest_digest_from_data(valid_manifest)
+        path = self._write_manifest(tmp_path, valid_manifest)
+        cp_path = tmp_path / "checkpoint.json"
+
+        with (
+            patch.dict(os.environ, {ALLOW_SEEDING_ENV_VAR: "true"}),
+            patch("urllib.request.urlopen"),
+            patch("ml.benchmark.scripts.run_seeding_batch.run_ingestion") as mock_ingest,
+        ):
+            rc = main(
+                [
+                    "--execute",
+                    "--manifest",
+                    str(path),
+                    "--checkpoint",
+                    str(cp_path),
+                    "--api-url",
+                    "http://localhost:4000",
+                ]
+            )
+        assert rc == 2
+        mock_ingest.assert_not_called()
+        assert not cp_path.exists()
+
+    # --- Language tampering (Correction B & D) ---
+    def test_language_tampered_without_digest_update_rejected(
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_MOVIE_TARGET", 5)
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_TV_TARGET", 3)
+        # Change a candidate language without updating manifest_digest
+        valid_manifest["movies"][0]["original_language"] = "en"
+        path = self._write_manifest(tmp_path, valid_manifest)
+
+        with pytest.raises(ManifestValidationError, match="digest mismatch"):
+            load_manifest(path, is_execution_mode=True)
+
+    def test_language_tampered_with_digest_update_fails_diversity_threshold(
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_MOVIE_TARGET", 5)
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_TV_TARGET", 3)
+        # Convert all movies to English (0.0 non-English) while keeping reported metadata at 0.6
+        for m in valid_manifest["movies"]:
+            m["original_language"] = "en"
+        valid_manifest["manifest_digest"] = compute_manifest_digest_from_data(valid_manifest)
+        path = self._write_manifest(tmp_path, valid_manifest)
+
+        with pytest.raises(ManifestValidationError, match="recomputed movie non-English fraction"):
+            load_manifest(path, is_execution_mode=True)
+
+    @pytest.mark.parametrize("bad_lang", ["", "   ", None])
+    def test_missing_or_empty_language_raises_manifest_error(self, bad_lang: Any) -> None:
+        candidates = [{"tmdb_id": 1, "original_language": bad_lang}]
+        with pytest.raises(ManifestValidationError, match="invalid or empty original_language"):
+            _recompute_noneng_fraction(candidates)
+
+    # --- Diversity metadata tampering (Correction B cross-check) ---
+    def test_inflated_reported_movie_diversity_rejected(
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_MOVIE_TARGET", 5)
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_TV_TARGET", 3)
+        valid_manifest["manifest_digest"] = compute_manifest_digest_from_data(valid_manifest)
+        # Actual movies: 3/5 = 0.6; forge reported metadata to 0.9
+        valid_manifest["language_diversity"]["movies"]["non_english_fraction"] = 0.9
+        path = self._write_manifest(tmp_path, valid_manifest)
+
+        with pytest.raises(ManifestValidationError, match="manifest-reported movie diversity"):
+            load_manifest(path, is_execution_mode=True)
+
+    def test_inflated_reported_tv_diversity_rejected(
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_MOVIE_TARGET", 5)
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_TV_TARGET", 3)
+        valid_manifest["manifest_digest"] = compute_manifest_digest_from_data(valid_manifest)
+        # Actual TV: 2/3 ≈ 0.6667; forge reported metadata to 0.9
+        valid_manifest["language_diversity"]["tv"]["non_english_fraction"] = 0.9
+        path = self._write_manifest(tmp_path, valid_manifest)
+
+        with pytest.raises(ManifestValidationError, match="manifest-reported TV diversity"):
+            load_manifest(path, is_execution_mode=True)
+
+    # --- Target and quota tampering (Correction C) ---
+    def test_manifest_with_insufficient_movies_rejected_in_execution_mode(
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+    ) -> None:
+        # valid_manifest has 5 movies and targets={"movie_candidate_target": 5};
+        # canonical target (1408) must still be enforced.
+        path = self._write_manifest(tmp_path, valid_manifest)
+        with pytest.raises(
+            ManifestValidationError,
+            match=f"below canonical project target \\({CANONICAL_MOVIE_TARGET}\\)",
+        ):
+            load_manifest(path, is_execution_mode=True)
+
+    def test_manifest_with_insufficient_tv_rejected_in_execution_mode(
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # Satisfy movie target via monkeypatch so TV target check is reached.
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_MOVIE_TARGET", 5)
+        valid_manifest["manifest_digest"] = compute_manifest_digest_from_data(valid_manifest)
+        path = self._write_manifest(tmp_path, valid_manifest)
+        with pytest.raises(
+            ManifestValidationError,
+            match=f"below canonical project target \\({CANONICAL_TV_TARGET}\\)",
+        ):
+            load_manifest(path, is_execution_mode=True)
+
+    # --- Digest integrity & regression ---
+    def test_valid_unmodified_manifest_passes_execution_mode(
+        self,
+        tmp_path: pathlib.Path,
+        valid_manifest: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_MOVIE_TARGET", 5)
+        monkeypatch.setattr("ml.benchmark.scripts.run_seeding_batch.CANONICAL_TV_TARGET", 3)
+        valid_manifest["manifest_digest"] = compute_manifest_digest_from_data(valid_manifest)
+        path = self._write_manifest(tmp_path, valid_manifest)
+        loaded = load_manifest(path, is_execution_mode=True)
+        assert loaded["is_executable"] is True
+        assert loaded["manifest_digest"] == valid_manifest["manifest_digest"]

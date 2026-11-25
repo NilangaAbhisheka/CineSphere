@@ -692,13 +692,37 @@ def compute_manifest_digest(
 ) -> str:
     """
     Deterministic SHA-256 digest of the candidate selection, including execution
-    readiness state and filtering criteria. Excludes timestamps.
+    readiness state, filtering criteria, candidate language values, and canonical
+    execution targets. Excludes timestamps.
+
+    The digest payload is intentionally wide so that any tamper with:
+      - Candidate IDs
+      - Candidate language values
+      - is_executable flag
+      - Canonical targets or diversity thresholds
+
+    …will produce a different digest that the runner will reject.
+
+    This payload schema must stay in sync with
+    run_seeding_batch.compute_manifest_digest_from_data.
     """
+    # (tmdb_id, language) pairs so language tampering invalidates the digest.
+    movie_languages = sorted((c.tmdb_id, c.original_language) for c in movie_candidates)
+    tv_languages = sorted((c.tmdb_id, c.original_language) for c in tv_candidates)
+
     digest_payload = {
         "schema_version": SCHEMA_VERSION,
         "filtering_criteria": filtering_criteria,
         "movie_ids": sorted(c.tmdb_id for c in movie_candidates),
         "tv_ids": sorted(c.tmdb_id for c in tv_candidates),
+        "movie_languages": movie_languages,
+        "tv_languages": tv_languages,
+        # Canonical targets are baked into the digest so a tampered manifest
+        # with weaker targets will not pass integrity verification.
+        "canonical_movie_target": MOVIE_CANDIDATE_TARGET,
+        "canonical_tv_target": TV_CANDIDATE_TARGET,
+        "canonical_movie_noneng_fraction": MOVIE_NONENG_FRACTION,
+        "canonical_tv_noneng_fraction": TV_NONENG_FRACTION,
         "is_executable": is_executable,
     }
     payload_bytes = json.dumps(digest_payload, sort_keys=True).encode("utf-8")

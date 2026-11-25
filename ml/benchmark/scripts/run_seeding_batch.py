@@ -74,6 +74,17 @@ ALLOW_SEEDING_ENV_VAR = "CINESPHERE_ALLOW_CATALOGUE_SEEDING"
 ALLOW_REMOTE_ENV_VAR = "CINESPHERE_ALLOW_REMOTE_SEEDING"
 
 # ---------------------------------------------------------------------------
+# Canonical Execution Targets — enforced at runner boundary (Correction C/D)
+# These are project-authoritative constants derived from the seeding plan
+# (ceil(1,224 × 1.15) = 1,408; ceil(482 × 1.15) = 555).
+# A manifest cannot weaken these requirements by supplying lower values.
+# ---------------------------------------------------------------------------
+CANONICAL_MOVIE_TARGET: int = 1_408
+CANONICAL_TV_TARGET: int = 555
+CANONICAL_MOVIE_NONENG_FRACTION: float = 0.25
+CANONICAL_TV_NONENG_FRACTION: float = 0.20
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 logging.basicConfig(
@@ -254,42 +265,76 @@ def load_manifest(
 
     # In execution mode: ensure manifest is certified execution-ready.
     if is_execution_mode:
-        if manifest.get("is_executable") is False:
+        # --- Correction A: Strict boolean identity check for is_executable ---
+        # Only the explicit boolean True is acceptable.
+        # Missing field, null, false, 0, "true", or any other non-boolean
+        # or truthy-but-not-True value must all be rejected.
+        if manifest.get("is_executable") is not True:
             raise ManifestValidationError(
-                "Execution mode rejected: manifest is marked is_executable=False "
-                "(diagnostic or incomplete)."
+                f"Execution mode rejected: manifest 'is_executable' must be the explicit "
+                f"boolean true. Got: {manifest.get('is_executable')!r}. "
+                "Regenerate the manifest in execution_ready mode before proceeding."
             )
         mode = manifest.get("mode") or manifest.get("status")
-        if mode in {"diagnostic", "incomplete"}:
+        if mode in {"diagnostic", "incomplete", "dry_run"}:
             raise ManifestValidationError(
-                f"Execution mode rejected: manifest has non-executable status '{mode}'."
+                f"Execution mode rejected: manifest has non-executable mode/status '{mode}'."
             )
 
-        targets = manifest.get("targets") or {}
-        min_movies = targets.get("movie_candidate_target", 1408)
-        min_tv = targets.get("tv_candidate_target", 555)
-        if len(movies) < min_movies:
+        # --- Correction C: Enforce canonical project targets; do not trust manifest values ---
+        # The runner always enforces the project-authoritative constants.
+        # A manifest cannot weaken requirements by supplying lower target values.
+        if len(movies) < CANONICAL_MOVIE_TARGET:
             raise ManifestValidationError(
                 f"Execution mode rejected: movie candidates ({len(movies)}) below "
-                f"target ({min_movies})."
+                f"canonical project target ({CANONICAL_MOVIE_TARGET}). "
+                "The manifest cannot reduce this requirement."
             )
-        if len(tv_shows) < min_tv:
+        if len(tv_shows) < CANONICAL_TV_TARGET:
             raise ManifestValidationError(
-                f"Execution mode rejected: TV candidates ({len(tv_shows)}) below target ({min_tv})."
+                f"Execution mode rejected: TV candidates ({len(tv_shows)}) below "
+                f"canonical project target ({CANONICAL_TV_TARGET}). "
+                "The manifest cannot reduce this requirement."
             )
 
-        diversity = manifest.get("language_diversity") or {}
-        movie_noneng = diversity.get("movies", {}).get("non_english_fraction", 0.0)
-        tv_noneng = diversity.get("tv", {}).get("non_english_fraction", 0.0)
-        if movie_noneng < 0.25:
+        # --- Correction B: Recompute language diversity from actual candidate data ---
+        # Do not trust the manifest-reported non_english_fraction metadata.
+        # Classify languages using the same rule as the generator: 'en' == English.
+        movie_noneng = _recompute_noneng_fraction(movies)
+        tv_noneng = _recompute_noneng_fraction(tv_shows)
+
+        if movie_noneng < CANONICAL_MOVIE_NONENG_FRACTION:
             raise ManifestValidationError(
-                f"Execution mode rejected: movie non-English fraction ({movie_noneng:.3f}) "
-                f"below 25% quota."
+                f"Execution mode rejected: recomputed movie non-English fraction "
+                f"({movie_noneng:.4f}) is below the canonical "
+                f"{CANONICAL_MOVIE_NONENG_FRACTION:.0%} quota. "
+                "The manifest-reported diversity metadata is not used for this check."
             )
-        if tv_noneng < 0.20:
+        if tv_noneng < CANONICAL_TV_NONENG_FRACTION:
             raise ManifestValidationError(
-                f"Execution mode rejected: TV non-English fraction ({tv_noneng:.3f}) "
-                f"below 20% quota."
+                f"Execution mode rejected: recomputed TV non-English fraction "
+                f"({tv_noneng:.4f}) is below the canonical "
+                f"{CANONICAL_TV_NONENG_FRACTION:.0%} quota. "
+                "The manifest-reported diversity metadata is not used for this check."
+            )
+
+        # Cross-check: reported diversity metadata must match recomputed values.
+        # This catches manifests where the metadata was forged independently of entries.
+        diversity = manifest.get("language_diversity") or {}
+        reported_movie_noneng = (diversity.get("movies") or {}).get("non_english_fraction")
+        reported_tv_noneng = (diversity.get("tv") or {}).get("non_english_fraction")
+
+        if reported_movie_noneng is not None and abs(reported_movie_noneng - movie_noneng) > 0.0001:
+            raise ManifestValidationError(
+                f"Execution mode rejected: manifest-reported movie diversity fraction "
+                f"({reported_movie_noneng:.4f}) does not match the value recomputed from "
+                f"actual candidates ({movie_noneng:.4f}). The manifest may have been tampered with."
+            )
+        if reported_tv_noneng is not None and abs(reported_tv_noneng - tv_noneng) > 0.0001:
+            raise ManifestValidationError(
+                f"Execution mode rejected: manifest-reported TV diversity fraction "
+                f"({reported_tv_noneng:.4f}) does not match the value recomputed from "
+                f"actual candidates ({tv_noneng:.4f}). The manifest may have been tampered with."
             )
 
         cat_ex = manifest.get("catalogue_exclusion") or {}
@@ -330,16 +375,82 @@ def _validate_candidate_entry(entry: dict[str, Any], media_type: str) -> None:
         )
 
 
+def _is_english(lang: str) -> bool:
+    """Return True if the language code represents English ('en')."""
+    return lang.strip().lower() == "en"
+
+
+def _recompute_noneng_fraction(candidates: list[dict[str, Any]]) -> float:
+    """
+    Recompute the non-English fraction directly from actual candidate entries.
+
+    Language classification rules (consistent with generate_candidate_manifest.py):
+      - A candidate with original_language == 'en' (case-insensitive strip) is English.
+      - Any other non-empty language code is non-English.
+      - A missing or empty language value is treated as INVALID and raises
+        ManifestValidationError — the entry-level validator already rejects
+        empty languages, so this path only fires if the validator was bypassed.
+
+    Returns the non-English fraction [0.0, 1.0].  Returns 0.0 for empty lists.
+    """
+    if not candidates:
+        return 0.0
+    total = len(candidates)
+    non_english = 0
+    for entry in candidates:
+        lang = entry.get("original_language")
+        if not isinstance(lang, str) or not lang.strip():
+            raise ManifestValidationError(
+                f"Candidate (id={entry.get('tmdb_id', '?')}) has an invalid or empty "
+                "original_language value. Cannot determine language diversity."
+            )
+        if not _is_english(lang):
+            non_english += 1
+    return non_english / total
+
+
 def compute_manifest_digest_from_data(manifest: dict[str, Any]) -> str:
-    """Recompute the manifest digest to verify integrity."""
+    """
+    Recompute the manifest digest to verify integrity.
+
+    The digest payload covers every field that determines whether a manifest is
+    safe and eligible for execution:
+      - schema_version
+      - filtering_criteria
+      - movie_ids (sorted) — candidate IDs
+      - tv_ids (sorted) — candidate IDs
+      - movie_languages (sorted list of (tmdb_id, language) pairs)
+      - tv_languages (sorted list of (tmdb_id, language) pairs)
+      - is_executable
+      - canonical_movie_target / canonical_tv_target / canonical fractions
+
+    Language values and canonical targets are included so that tampering with
+    candidate language data or trying to substitute a weaker target cannot
+    silently produce a valid digest.
+    """
     filtering_criteria = manifest.get("filtering_criteria") or {}
-    movie_ids = sorted(c["tmdb_id"] for c in (manifest.get("movies") or []))
-    tv_ids = sorted(c["tmdb_id"] for c in (manifest.get("tv_shows") or []))
+    movies = manifest.get("movies") or []
+    tv_shows = manifest.get("tv_shows") or []
+
+    movie_ids = sorted(c["tmdb_id"] for c in movies)
+    tv_ids = sorted(c["tmdb_id"] for c in tv_shows)
+
+    # Include (tmdb_id, language) pairs so language tampering invalidates the digest.
+    movie_languages = sorted((c["tmdb_id"], c.get("original_language", "")) for c in movies)
+    tv_languages = sorted((c["tmdb_id"], c.get("original_language", "")) for c in tv_shows)
+
     digest_payload: dict[str, Any] = {
         "schema_version": manifest.get("schema_version", ""),
         "filtering_criteria": filtering_criteria,
         "movie_ids": movie_ids,
         "tv_ids": tv_ids,
+        "movie_languages": movie_languages,
+        "tv_languages": tv_languages,
+        # Canonical targets protect against weakened-target manifests.
+        "canonical_movie_target": CANONICAL_MOVIE_TARGET,
+        "canonical_tv_target": CANONICAL_TV_TARGET,
+        "canonical_movie_noneng_fraction": CANONICAL_MOVIE_NONENG_FRACTION,
+        "canonical_tv_noneng_fraction": CANONICAL_TV_NONENG_FRACTION,
     }
     if "is_executable" in manifest:
         digest_payload["is_executable"] = manifest["is_executable"]
