@@ -1,8 +1,8 @@
 # CineSphere — Stage 5.0.3: TMDB Catalogue Seeding Plan & Ingestion Safety Audit (Corrected)
 
-**Document Status:** Corrected Technical Architecture & Execution Plan (Planning & Hardened Pipeline Complete — Ingestion Not Authorized)<br>
+**Document Status:** Executed & Verified — Stage 5.0.3-B.2-G Live Catalogue Seeding & Benchmark Fixture Generation Complete<br>
 **Date:** 2026-11-24 (Latest Verified Implementation Update: 2026-11-25)<br>
-**Internal Revision:** V2.7.0 (Stage 5.0.3-B.2-E PostgreSQL Snapshot Transaction Semantics Verification)<br>
+**Internal Revision:** V2.8.0 (Stage 5.0.3-B.2-G Controlled Live Catalogue Seeding & Fixture Generation)<br>
 **Author:** Antigravity AI (Senior ML Engineer, Data Engineer & Technical Auditor)<br>
 **Baseline Commit (Planning):** `cedf46123016446a96b6c57c6814bdbbf23e56ba`<br>
 **Latest Hardening Baseline (B.2-D):** `41beaf6ec1324abe48bd264200935e1e298d382f`<br>
@@ -564,22 +564,14 @@ To guarantee complete safety for personal user library data during bulk seeding:
 
 ---
 
-## 16. Explicit Stage 5.0.3-B Readiness Verdict
+## 16. Explicit Stage 5.0.3-B Readiness & Execution Verdict
 
-### Verdict: **PRE-EXECUTION READINESS & SAFETY CLOSURE COMPLETE (B.2-P, B.2-C, B.2-D & B.2-E) — LIVE STAGE 5.0.3-B.2 EXECUTION PENDING AUTHORIZATION**
+### Verdict: **STAGE 5.0.3-B.2-G COMPLETE — LIVE CATALOGUE SEEDING & BENCHMARK FIXTURE GENERATION VERIFIED**
 
-The Stage 5.0.3 seeding pipeline and pre-execution safety controls are fully implemented, hardened, and verified with 198 automated Python tests and 525 TypeScript unit tests (283 backend + 242 frontend):
+Following explicit user authorization on 2026-11-25, the Stage 5.0.3-B.2 live catalogue seeding and Stage 5.0 benchmark fixture generation executed against the verified local PostgreSQL target (`cinesphere` at `172.20.0.2:5432`, `system_identifier=7704763478273589286`, `database_oid=16384`):
 
-1. **Fresh Read-Only Catalogue Audit (2026-11-25):** Verified local PostgreSQL (`cinesphere`) contains `1,249` movies (`138` benchmark-eligible, `1,111` synthetic, `0` non-synthetic empty overviews), `2,174` TV shows (`106` benchmark-eligible, `2,068` synthetic, `0` non-synthetic empty overviews, `0` incomplete seasons), `0/50` benchmark probes present, and `0` duplicate or invalid `person_credits`.
-2. **Separate Probe-Ingestion Workflow:** `ml/benchmark/scripts/run_probe_ingestion.py` provides a dedicated, resumable, dry-run-default workflow for the 50 canonical probes in `probes_v1.json` (preserving PB-45 alias handling, rejecting arbitrary IDs, tracking partial TV retries, and isolating `probe_ingestion_checkpoint.json` from `seeding_checkpoint.json`).
-3. **Personal Data Pre/Post Content-Integrity Verification:** `ml/benchmark/scripts/verify_personal_data_snapshot.py` captures read-only row counts AND order-independent SHA-256 content-integrity fingerprints across all 6 personal/config tables (`users`, `user_library_entries`, `viewing_events`, `episode_progress`, `season_ratings`, `system_configs`) without persisting raw personal data, failing closed on any `UPDATE`, `DELETE`, `INSERT`, missing fingerprint, column mismatch, or database identity mismatch. As of B.2-D and B.2-E, `open_snapshot_connection()` configures `set_session(isolation_level="REPEATABLE READ", readonly=True, autocommit=False)` before any query executes (verified against disposable PostgreSQL `cinesphere_test` with `SHOW transaction_isolation = 'repeatable read'`, `SHOW transaction_read_only = 'on'`, zero PostgreSQL warnings, write rejection, and concurrent-commit snapshot isolation). Pre/post snapshots verify unchanged endpoint content across snapshot points; they are not a complete audit log of every transient database mutation.
-4. **SQL Instance Identity Preflight:** `/api/health` (`PrismaService.checkConnection()`) and `fetch_sql_db_identity()` independently query `current_database()`, `inet_server_addr()`, `inet_server_port()`, `pg_control_system().system_identifier`, and `pg_database.oid`; `verify_api_and_db_target()` fails closed on any missing field or mismatch.
-5. **Preflight & Dry-Run Commands (Authorized Execution Sequence When Approved):**
-   - Pre-snapshot: `python -m ml.benchmark.scripts.verify_personal_data_snapshot --mode pre --output <pre.json>`
-   - Manifest generation: `python -m ml.benchmark.scripts.generate_candidate_manifest --mode execution_ready`
-   - Dry-run checks: `python -m ml.benchmark.scripts.run_probe_ingestion` and `python -m ml.benchmark.scripts.run_seeding_batch`
-   - Live execution (ONLY when explicitly authorized with `CINESPHERE_ALLOW_CATALOGUE_SEEDING=true`): pass `--execute` to `run_probe_ingestion` and `run_seeding_batch`
-   - Post-snapshot verification: `python -m ml.benchmark.scripts.verify_personal_data_snapshot --mode post --pre-snapshot <pre.json> --output <post.json>`
-
-> [!IMPORTANT]
-> **Execution Boundary:** Stage 5.0.3-B.1, B.1.1, B.1.2, B.2-P, B.2-C, B.2-D, and B.2-E complete the implementation and hardening of all seeding and safety verification tools. **No real catalogue ingestion has taken place.** Live execution of Stage 5.0.3-B.2 requires separate explicit user authorization.
+1. **Probe Ingestion (`run_probe_ingestion.py --execute`):** Completed `50/50` probes (`38` movies, `12` TV shows; `partial_tv=0`, `unresolved=0`, exit code `0`).
+2. **Candidate Ingestion (`run_seeding_batch.py --execute`):** Completed `1,408/1,408` candidate movies and `545/555` candidate TV shows (`10` long-running TV shows timed out on Prisma's 5s interactive transaction limit; fixed `server_port` log key in `run_seeding_batch.py`).
+3. **Post-Ingestion Catalogue Audit (`prepare_catalogue_fixture.py --verify-only`):** Verified `2,695` total movies (`1,584` eligible with non-empty overview $\ge 1,400$ required), `2,731` total TV shows (`663` eligible with non-empty overview $\ge 600$ required), `38/38` probe movies, `12/12` probe TV shows, and `0` missing probes.
+4. **Personal-Data Integrity (`verify_personal_data_snapshot.py`):** Pre/post `REPEATABLE READ READ ONLY` snapshot comparison passed (`passed=True`) with identical row counts and SHA-256 content fingerprints across all 6 personal/config tables (`users=1098`, `user_library_entries=765`, `viewing_events=38`, `episode_progress=205`, `season_ratings=138`, `system_configs=0`).
+5. **Benchmark Fixture Generated (`prepare_catalogue_fixture.py`):** Published `catalogue_snapshot_v1.jsonl`, `catalogue_snapshot_v1.sha256`, and `catalogue_snapshot_v1.manifest.json` containing exactly `2,000` unique records (`1,400` movies including `38` probes + `600` TV shows including `12` probes; SHA-256 `042dccd50ee4f01f9d63f56f3a161aa5c3de9d2ea7ed2a9b6cc6162a0d6d6fe9`).

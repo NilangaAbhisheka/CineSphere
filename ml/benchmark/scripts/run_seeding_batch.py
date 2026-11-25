@@ -1070,7 +1070,7 @@ def main(argv: list[str] | None = None) -> int:
                 logger.info(
                     "API & DB target verified: db=%s port=%s api=%s",
                     target_info["database_name"],
-                    target_info["database_port"],
+                    target_info["server_port"],
                     target_info["api_url"],
                 )
             except TargetVerificationError as exc:

@@ -525,6 +525,8 @@ class TestTargetSafeguards:
                 [
                     "--manifest",
                     str(manifest_path),
+                    "--checkpoint",
+                    str(tmp_path / "checkpoint.json"),
                     "--api-url",
                     "http://localhost:4000",
                 ]
@@ -546,6 +548,8 @@ class TestTargetSafeguards:
                     "--execute",
                     "--manifest",
                     str(manifest_path),
+                    "--checkpoint",
+                    str(tmp_path / "checkpoint.json"),
                     "--api-url",
                     "http://localhost:4000",
                 ]
@@ -566,6 +570,8 @@ class TestTargetSafeguards:
                     "--execute",
                     "--manifest",
                     str(manifest_path),
+                    "--checkpoint",
+                    str(tmp_path / "checkpoint.json"),
                     "--api-url",
                     "http://localhost:19999",
                 ]
@@ -585,6 +591,8 @@ class TestTargetSafeguards:
                     "--execute",
                     "--manifest",
                     str(manifest_path),
+                    "--checkpoint",
+                    str(tmp_path / "checkpoint.json"),
                     "--api-url",
                     "http://remote.host:4000",
                 ]
@@ -609,6 +617,8 @@ class TestTargetSafeguards:
                     "--execute",
                     "--manifest",
                     str(manifest_path),
+                    "--checkpoint",
+                    str(tmp_path / "checkpoint.json"),
                     "--api-url",
                     "http://remote.host:4000",
                 ]
@@ -1064,6 +1074,8 @@ class TestExecutionTruthfulness:
                     "--execute",
                     "--manifest",
                     str(manifest_path),
+                    "--checkpoint",
+                    str(tmp_path / "checkpoint.json"),
                     "--api-url",
                     "http://localhost:4000",
                 ]
@@ -1105,6 +1117,8 @@ class TestExecutionTruthfulness:
                     "--execute",
                     "--manifest",
                     str(manifest_path),
+                    "--checkpoint",
+                    str(tmp_path / "checkpoint.json"),
                     "--api-url",
                     "http://localhost:4000",
                 ]
