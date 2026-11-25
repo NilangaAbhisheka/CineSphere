@@ -1,0 +1,36 @@
+{
+  "fixture_filename": "catalogue_snapshot_v1.jsonl",
+  "record_count": 2000,
+  "movie_count": 1400,
+  "tv_count": 600,
+  "probe_count": 50,
+  "sha256": "042dccd50ee4f01f9d63f56f3a161aa5c3de9d2ea7ed2a9b6cc6162a0d6d6fe9",
+  "source_identity": "CineSphere PostgreSQL (catalogue tables)",
+  "selection_algorithm_version": "1.0.0-deterministic",
+  "serialization_version": "1.0.0-bracketed-tokens",
+  "generated_at": "2026-11-25T18:23:15.013110+00:00",
+  "probes_by_stratum": {
+    "Indie": 10,
+    "International": 10,
+    "Mainstream": 10,
+    "Serialized TV": 10,
+    "Stress Cases": 10
+  },
+  "selection_parameters": {
+    "movie_overview_required": true,
+    "tv_overview_required": true,
+    "movie_probe_quota": 38,
+    "movie_additional_quota": 1362,
+    "tv_probe_quota": 12,
+    "tv_additional_quota": 588,
+    "candidate_sort_order": [
+      "popularity DESC NULLS LAST",
+      "voteCount DESC NULLS LAST",
+      "date DESC NULLS LAST",
+      "tmdbId ASC"
+    ],
+    "final_sort_order": ["media_type ASC", "tmdb_id ASC"],
+    "synthetic_movie_exclusion_applied": true,
+    "synthetic_tv_exclusion_applied": true
+  }
+}
