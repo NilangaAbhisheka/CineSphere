@@ -1,6 +1,6 @@
 """
-CineSphere — Stage 5.0.3-B.2-C: Personal Data Integrity & Target Verification
-=============================================================================
+CineSphere — Stage 5.0.3-B.2-D: Personal Data Integrity & Target Verification
+===============================================================================
 
 Provides:
   1. Read-only PostgreSQL row-count AND deterministic content-integrity
@@ -502,29 +502,104 @@ class SnapshotComparisonResult:
 def capture_personal_snapshot(database_url: str) -> PersonalDataSnapshot:
     """
     Capture read-only row counts, content-integrity fingerprints, and SQL
-    instance identity for all personal/configuration tables.
+    instance identity for all personal/configuration tables using a single
+    PostgreSQL connection and a consistent ``REPEATABLE READ`` transaction
+    snapshot.
+
+    Design (B.2-D):
+    - One connection is opened; it handles both the SQL identity query and all
+      six personal-data table reads.
+    - A ``BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`` transaction is
+      started before the first query so that every subsequent ``SELECT``
+      operates on the **same** consistent database snapshot.
+    - The database identity fields are queried through this same connection and
+      transaction, so the identity provably describes the exact endpoint that
+      supplied the fingerprinted rows.
+    - Autocommit is left at its default (``False``) so that psycopg2 uses an
+      explicit transaction; ``COMMIT`` / ``ROLLBACK`` is handled via the
+      context manager.
+    - The connection is always closed in the ``finally`` block, on both success
+      and failure, without committing any writes (the transaction is read-only).
+
     Never persists personal row values or credentials.
     """
     if psycopg2 is None:
         raise ImportError("psycopg2 is required to capture personal-data snapshots.")
 
-    db_identity = fetch_sql_db_identity(database_url)
     clean_url = strip_prisma_schema_param(database_url)
-
-    conn = psycopg2.connect(clean_url)
     try:
-        conn.set_session(readonly=True, autocommit=True)
+        conn = psycopg2.connect(clean_url)
+    except Exception as exc:
+        safe_msg = _redact_url_credentials(str(exc), database_url)
+        raise PersonalDataIntegrityError(
+            f"Failed to open PostgreSQL connection for personal snapshot: {safe_msg}"
+        ) from exc
+
+    try:
+        # Single consistent snapshot: REPEATABLE READ ensures all SELECTs
+        # within this transaction see the same database state.
+        with conn.cursor() as cur:
+            cur.execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;")
+
+            # --- Query SQL instance identity through this same connection ---
+            cur.execute(
+                """
+                SELECT
+                    current_database() AS database_name,
+                    CAST(inet_server_addr() AS TEXT) AS server_address,
+                    inet_server_port() AS server_port,
+                    (SELECT system_identifier::TEXT FROM pg_control_system())
+                        AS system_identifier,
+                    (SELECT oid::INT FROM pg_database WHERE datname = current_database())
+                        AS database_oid
+                """
+            )
+            identity_row = cur.fetchone()
+
+        if not identity_row:
+            raise PersonalDataIntegrityError(
+                "PostgreSQL instance identity query returned no rows (fail-closed)."
+            )
+
+        raw_identity: dict[str, Any] = {
+            "database_name": identity_row[0],
+            "server_address": identity_row[1],
+            "server_port": int(identity_row[2]) if identity_row[2] is not None else None,
+            "system_identifier": str(identity_row[3]) if identity_row[3] is not None else None,
+            "database_oid": int(identity_row[4]) if identity_row[4] is not None else None,
+        }
+        missing = [f for f in MANDATORY_SQL_IDENTITY_FIELDS if not raw_identity.get(f)]
+        if missing:
+            raise PersonalDataIntegrityError(
+                f"Snapshot identity query missing mandatory fields: {missing} (fail-closed)."
+            )
+
+        # Enrich with URL-derived non-secret metadata (host/is_local_host)
+        url_meta = parse_safe_db_identity(database_url)
+        db_identity: dict[str, Any] = {
+            **raw_identity,
+            "url_host": url_meta["host"],
+            "is_local_host": url_meta["is_local_host"],
+        }
+
+        # --- Read all six personal/configuration tables in the same transaction ---
         row_counts: dict[str, int] = {}
         table_fingerprints: dict[str, dict[str, Any]] = {}
         with conn.cursor() as cur:
-            cur.execute("SET default_transaction_read_only = on;")
             for table, columns in PERSONAL_TABLE_COLUMNS.items():
                 col_sql = ", ".join(f'"{c}"' for c in columns)
-                cur.execute(f'SELECT {col_sql} FROM "{table}";')
+                cur.execute(f'SELECT {col_sql} FROM "{table}";')  # noqa: S608
                 rows = cur.fetchall()
                 fp_info = compute_table_fingerprint(table, columns, rows)
                 row_counts[table] = fp_info["row_count"]
                 table_fingerprints[table] = fp_info
+
+        conn.rollback()  # Read-only: nothing to commit; explicit rollback is clean.
+    except (PersonalDataIntegrityError, TargetVerificationError):
+        raise
+    except Exception as exc:
+        safe_msg = _redact_url_credentials(str(exc), database_url)
+        raise PersonalDataIntegrityError(f"Personal snapshot capture failed: {safe_msg}") from exc
     finally:
         conn.close()
 

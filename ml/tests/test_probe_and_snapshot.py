@@ -38,6 +38,7 @@ from ml.benchmark.scripts.run_probe_ingestion import (
 from ml.benchmark.scripts.verify_personal_data_snapshot import (
     PERSONAL_DATA_TABLES,
     PERSONAL_TABLE_COLUMNS,
+    PersonalDataIntegrityError,
     PersonalDataSnapshot,
     TargetVerificationError,
     capture_personal_snapshot,
@@ -477,8 +478,10 @@ class TestPersonalDataFingerprints:
         raw_text = path.read_text(encoding="utf-8")
         assert "SecretPersonalDisplayName123" not in raw_text
 
-    def test_capture_personal_snapshot_uses_readonly_session(self) -> None:
+    def test_capture_personal_snapshot_uses_single_connection(self) -> None:
+        """B.2-D: identity and all table reads share one connection (call_count == 1)."""
         mock_cursor = MagicMock()
+        # fetchone() is called once for the identity query.
         mock_cursor.fetchone.return_value = (
             "cinesphere",
             "172.20.0.2/32",
@@ -486,6 +489,7 @@ class TestPersonalDataFingerprints:
             "7704763478273589286",
             16384,
         )
+        # fetchall() is called once per personal table (6 tables).
         mock_cursor.fetchall.return_value = []
         mock_conn = MagicMock()
         mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
@@ -498,8 +502,8 @@ class TestPersonalDataFingerprints:
                 "postgresql://user:pw@localhost:5432/cinesphere?schema=public"
             )
 
-        assert mock_connect.call_count == 2
-        mock_conn.set_session.assert_called_with(readonly=True, autocommit=True)
+        # B.2-D invariant: exactly ONE connection opened.
+        assert mock_connect.call_count == 1
         assert len(snap.row_counts) == len(PERSONAL_DATA_TABLES)
         assert len(snap.table_fingerprints) == len(PERSONAL_DATA_TABLES)
 
@@ -674,3 +678,294 @@ class TestDatabaseInstanceTargetVerification:
         msg = str(exc_info.value)
         assert "TopSecretPass99" not in msg
         assert "admin_user" not in msg
+
+
+# ===========================================================================
+# Tests: Snapshot Connection Consistency (B.2-D)
+# ===========================================================================
+class TestSnapshotConnectionConsistency:
+    """
+    Adversarial tests verifying that capture_personal_snapshot() uses a single
+    PostgreSQL connection and consistent REPEATABLE READ transaction for both
+    the SQL identity query and all six personal-data table reads.
+    """
+
+    _DB_URL = "postgresql://user:pw@localhost:5432/cinesphere?schema=public"
+
+    def _make_mock_conn(
+        self,
+        identity_row: tuple[Any, ...] | None = (
+            "cinesphere",
+            "172.20.0.2/32",
+            5432,
+            "7704763478273589286",
+            16384,
+        ),
+        table_rows: list[Any] | None = None,
+    ) -> MagicMock:
+        """Build a mock psycopg2 connection whose cursor returns the given data."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = identity_row
+        mock_cursor.fetchall.return_value = table_rows if table_rows is not None else []
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        return mock_conn
+
+    # ------------------------------------------------------------------
+    # 1. Identity and all six table reads share exactly one connection
+    # ------------------------------------------------------------------
+    def test_single_connection_opened(self) -> None:
+        mock_conn = self._make_mock_conn()
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            return_value=mock_conn,
+        ) as mock_connect:
+            snap = capture_personal_snapshot(self._DB_URL)
+        assert mock_connect.call_count == 1, (
+            "capture_personal_snapshot must open exactly one PostgreSQL connection."
+        )
+        assert snap.database_identity["database_name"] == "cinesphere"
+        assert len(snap.row_counts) == len(PERSONAL_DATA_TABLES)
+        assert len(snap.table_fingerprints) == len(PERSONAL_DATA_TABLES)
+
+    # ------------------------------------------------------------------
+    # 2. Identity query failure prevents snapshot creation (fail-closed)
+    # ------------------------------------------------------------------
+    def test_identity_query_failure_prevents_snapshot(self) -> None:
+        """If the identity query returns no row, capture_personal_snapshot raises."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = None  # Identity query returned nothing
+        mock_cursor.fetchall.return_value = []
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            return_value=mock_conn,
+        ):
+            with pytest.raises(PersonalDataIntegrityError, match="identity query returned no rows"):
+                capture_personal_snapshot(self._DB_URL)
+
+    # ------------------------------------------------------------------
+    # 3. Table read failure prevents snapshot creation (fail-closed)
+    # ------------------------------------------------------------------
+    def test_table_read_failure_prevents_snapshot(self) -> None:
+        """If a table SELECT raises, capture_personal_snapshot propagates the error."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (
+            "cinesphere",
+            "172.20.0.2/32",
+            5432,
+            "7704763478273589286",
+            16384,
+        )
+        # Raise on the first table fetchall call
+        mock_cursor.fetchall.side_effect = RuntimeError("relation does not exist")
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            return_value=mock_conn,
+        ):
+            with pytest.raises((PersonalDataIntegrityError, RuntimeError)):
+                capture_personal_snapshot(self._DB_URL)
+
+    # ------------------------------------------------------------------
+    # 4. REPEATABLE READ READ ONLY transaction is established
+    # ------------------------------------------------------------------
+    def test_repeatable_read_transaction_established(self) -> None:
+        """BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY must be executed."""
+        executed_statements: list[str] = []
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (
+            "cinesphere",
+            "172.20.0.2/32",
+            5432,
+            "7704763478273589286",
+            16384,
+        )
+        mock_cursor.fetchall.return_value = []
+
+        def _record_execute(sql: str, *args: object, **kwargs: object) -> None:
+            executed_statements.append(sql.strip())
+
+        mock_cursor.execute.side_effect = _record_execute
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            return_value=mock_conn,
+        ):
+            capture_personal_snapshot(self._DB_URL)
+
+        # Verify that the transaction-begin statement was issued
+        begin_stmts = [
+            s
+            for s in executed_statements
+            if "BEGIN" in s.upper() and "REPEATABLE READ" in s.upper()
+        ]
+        assert begin_stmts, (
+            "Expected a BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY statement; "
+            f"got: {executed_statements}"
+        )
+
+    # ------------------------------------------------------------------
+    # 5. All six table SELECTs execute on the same connection/cursor
+    # ------------------------------------------------------------------
+    def test_all_tables_read_via_same_connection(self) -> None:
+        """Every personal-table SELECT must go through the single connection."""
+        executed_selects: list[str] = []
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (
+            "cinesphere",
+            "172.20.0.2/32",
+            5432,
+            "7704763478273589286",
+            16384,
+        )
+        mock_cursor.fetchall.return_value = []
+
+        def _record_execute(sql: str, *args: object, **kwargs: object) -> None:
+            if "SELECT" in sql.upper() and "FROM" in sql.upper() and "current_database" not in sql:
+                executed_selects.append(sql.strip())
+
+        mock_cursor.execute.side_effect = _record_execute
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            return_value=mock_conn,
+        ) as mock_connect:
+            capture_personal_snapshot(self._DB_URL)
+
+        # B.2-D: single connection
+        assert mock_connect.call_count == 1
+
+        # Every personal table must have been SELECTed
+        for table in PERSONAL_DATA_TABLES:
+            matching = [s for s in executed_selects if f'"{table}"' in s]
+            assert matching, f"Expected SELECT for table {table!r} but it was missing."
+
+    # ------------------------------------------------------------------
+    # 6. Connection closes on success
+    # ------------------------------------------------------------------
+    def test_connection_closes_on_success(self) -> None:
+        mock_conn = self._make_mock_conn()
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            return_value=mock_conn,
+        ):
+            capture_personal_snapshot(self._DB_URL)
+        mock_conn.close.assert_called_once()
+
+    # ------------------------------------------------------------------
+    # 7. Connection closes on failure (identity error)
+    # ------------------------------------------------------------------
+    def test_connection_closes_on_identity_failure(self) -> None:
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = None  # causes identity failure
+        mock_cursor.fetchall.return_value = []
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            return_value=mock_conn,
+        ):
+            with pytest.raises(PersonalDataIntegrityError):
+                capture_personal_snapshot(self._DB_URL)
+
+        mock_conn.close.assert_called_once()
+
+    # ------------------------------------------------------------------
+    # 8. Connection closes on failure (table-read error)
+    # ------------------------------------------------------------------
+    def test_connection_closes_on_table_read_failure(self) -> None:
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (
+            "cinesphere",
+            "172.20.0.2/32",
+            5432,
+            "7704763478273589286",
+            16384,
+        )
+        mock_cursor.fetchall.side_effect = RuntimeError("disk I/O error")
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            return_value=mock_conn,
+        ):
+            with pytest.raises((PersonalDataIntegrityError, RuntimeError)):
+                capture_personal_snapshot(self._DB_URL)
+
+        mock_conn.close.assert_called_once()
+
+    # ------------------------------------------------------------------
+    # 9. Missing mandatory identity field fails closed (not silently skipped)
+    # ------------------------------------------------------------------
+    def test_missing_mandatory_identity_field_fails_closed(self) -> None:
+        """system_identifier=None in identity row must raise, not produce a snapshot."""
+        mock_cursor = MagicMock()
+        # system_identifier is None — mandatory field missing
+        mock_cursor.fetchone.return_value = ("cinesphere", "172.20.0.2/32", 5432, None, 16384)
+        mock_cursor.fetchall.return_value = []
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            return_value=mock_conn,
+        ):
+            with pytest.raises(PersonalDataIntegrityError, match="missing mandatory fields"):
+                capture_personal_snapshot(self._DB_URL)
+
+    # ------------------------------------------------------------------
+    # 10. Credential redaction on connection failure
+    # ------------------------------------------------------------------
+    def test_connection_failure_redacts_credentials(self) -> None:
+        secret_url = (
+            "postgresql://secret_user:HighlySecretPW99@localhost:5432/cinesphere?schema=public"
+        )
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            side_effect=RuntimeError("auth failed: password HighlySecretPW99 for secret_user"),
+        ):
+            with pytest.raises(PersonalDataIntegrityError) as exc_info:
+                capture_personal_snapshot(secret_url)
+        msg = str(exc_info.value)
+        assert "HighlySecretPW99" not in msg
+        assert "secret_user" not in msg
+
+    # ------------------------------------------------------------------
+    # 11. Snapshot database_identity reflects the connection that read the rows
+    # ------------------------------------------------------------------
+    def test_snapshot_identity_reflects_actual_connection(self) -> None:
+        """Identity in the snapshot must come from the same connection as row reads."""
+        mock_conn = self._make_mock_conn(
+            identity_row=(
+                "cinesphere_specific",
+                "10.0.0.5/32",
+                5433,
+                "9999888877776666",
+                12345,
+            )
+        )
+        with patch(
+            "ml.benchmark.scripts.verify_personal_data_snapshot.psycopg2.connect",
+            return_value=mock_conn,
+        ):
+            snap = capture_personal_snapshot(
+                "postgresql://user:pw@localhost:5433/cinesphere_specific?schema=public"
+            )
+
+        assert snap.database_identity["database_name"] == "cinesphere_specific"
+        assert snap.database_identity["server_port"] == 5433
+        assert snap.database_identity["system_identifier"] == "9999888877776666"
+        assert snap.database_identity["database_oid"] == 12345
