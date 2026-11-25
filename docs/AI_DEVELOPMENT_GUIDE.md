@@ -1,8 +1,8 @@
 # CineSphere — AI Development Guide
 
 **Status:** Active<br>
-**Last Updated:** 2026-11-24<br>
-**Version:** 1.1<br>
+**Last Updated:** 2026-11-25<br>
+**Version:** 1.2<br>
 **Audience:** AI coding agents (Cursor, Claude, Gemini, Copilot, etc.) and human contributors
 
 > This guide defines how AI coding agents must operate on the CineSphere codebase. These rules apply to every task, every file, and every change.

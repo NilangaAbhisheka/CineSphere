@@ -12,7 +12,7 @@ Endpoints used:
 Usage:
   python -m ml.benchmark.scripts.run_seeding_batch --help
 
-Default mode is DRY RUN (no ingestion).  To ingest:
+Default mode is DRY RUN (no ingestion). To ingest:
   1. Pass --execute
   2. Set CINESPHERE_ALLOW_CATALOGUE_SEEDING=true in the environment.
 
@@ -47,6 +47,7 @@ from typing import Any
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _MANIFEST_PATH = _REPO_ROOT / "ml" / "benchmark" / "fixtures" / "seeding_candidate_manifest.json"
 _CHECKPOINT_PATH = _REPO_ROOT / "ml" / "benchmark" / "fixtures" / "seeding_checkpoint.json"
+_PROBES_PATH = _REPO_ROOT / "ml" / "benchmark" / "fixtures" / "probes_v1.json"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -56,13 +57,11 @@ CHECKPOINT_SCHEMA_VERSION = "1.0.0"
 #: Maximum attempts per item (original + retries).
 MAX_ITEM_ATTEMPTS = 3
 
-#: Delay between batch items (seconds).  The NestJS API enforces its own
-#: transport-level pacing; this delay is advisory and prevents any accidental
-#: burst at the runner level.
+#: Delay between batch items (seconds). The NestJS API enforces its own
+#: transport-level pacing; this delay is advisory and prevents burst load.
 INTER_ITEM_DELAY_S = 0.15
 
-#: Bounded concurrency: runner processes one item at a time (serial dispatch).
-#: The API-side pacing is authoritative for TMDB throughput.
+#: Concurrency: runner processes one item at a time (serial dispatch).
 RUNNER_CONCURRENCY = 1
 
 #: HTTP timeout for ingestion POST requests (seconds).
@@ -70,6 +69,9 @@ INGEST_TIMEOUT_S = 60
 
 #: Safeguard environment variable required when --execute is passed.
 ALLOW_SEEDING_ENV_VAR = "CINESPHERE_ALLOW_CATALOGUE_SEEDING"
+
+#: Safeguard environment variable required if targeting a non-local API URL.
+ALLOW_REMOTE_ENV_VAR = "CINESPHERE_ALLOW_REMOTE_SEEDING"
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -86,27 +88,97 @@ logger = logging.getLogger("seeding_runner")
 # Exceptions
 # ---------------------------------------------------------------------------
 class ManifestValidationError(Exception):
-    """Raised when the manifest fails schema or digest validation."""
+    """Raised when the manifest fails schema, probe, count, or digest validation."""
 
 
 class CheckpointValidationError(Exception):
-    """Raised when a checkpoint is incompatible with the current manifest."""
+    """Raised when a checkpoint is incompatible with the current manifest or API target."""
 
 
 class ExecutionSafeguardError(Exception):
-    """Raised when execution safeguards are not satisfied."""
+    """Raised when execution safeguards or target constraints are not satisfied."""
 
 
 # ---------------------------------------------------------------------------
-# Manifest loading and validation
+# Target URL Helpers & Safeguards
 # ---------------------------------------------------------------------------
-def load_manifest(path: Path) -> dict[str, Any]:
-    """Load and validate the seeding manifest."""
+def normalize_api_url(url: str) -> str:
+    """Normalize an API target URL (strip trailing slashes, lowercase scheme and host)."""
+    parsed = urllib.parse.urlparse(url.strip())
+    scheme = (parsed.scheme or "http").lower()
+    netloc = parsed.netloc.lower()
+    path = parsed.path.rstrip("/")
+    normalized = f"{scheme}://{netloc}{path}"
+    return normalized.rstrip("/")
+
+
+def is_local_api_target(url: str) -> bool:
+    """Return True if URL hostname is a loopback or local address."""
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return host in {"localhost", "127.0.0.1", "::1"}
+
+
+# ---------------------------------------------------------------------------
+# Probe Loading
+# ---------------------------------------------------------------------------
+def load_probe_ids(probes_path: Path = _PROBES_PATH) -> dict[str, set[int]]:
+    """
+    Independently load canonical probe IDs from the authoritative probes fixture.
+    Validates that the fixture contains exactly 38 movie and 12 TV probes.
+    """
+    if not probes_path.exists():
+        raise ManifestValidationError(f"Authoritative probe fixture not found: {probes_path}")
+
+    with probes_path.open("r", encoding="utf-8") as fh:
+        probes: list[dict[str, Any]] = json.load(fh)
+
+    result: dict[str, set[int]] = {"movie": set(), "tv": set()}
+    for p in probes:
+        mt = p.get("media_type", "").lower()
+        tid = p.get("tmdb_id")
+        if mt in result and isinstance(tid, int):
+            result[mt].add(tid)
+
+    if len(result["movie"]) != 38 or len(result["tv"]) != 12:
+        raise ManifestValidationError(
+            f"Corrupted probe fixture at {probes_path}: expected 38 movies and 12 TV shows, "
+            f"found {len(result['movie'])} movies and {len(result['tv'])} TV shows."
+        )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Manifest Loading and Boundary Validation
+# ---------------------------------------------------------------------------
+def load_manifest(
+    path: Path,
+    is_execution_mode: bool = False,
+    probes_path: Path = _PROBES_PATH,
+) -> dict[str, Any]:
+    """
+    Load and thoroughly validate the seeding manifest at the runner boundary.
+
+    Validations enforced:
+      1. File existence and valid JSON.
+      2. Required top-level keys.
+      3. Valid candidate lists (type, tmdb_id, title, original_language).
+      4. No duplicate (media_type, tmdb_id) entries.
+      5. Candidate counts strictly match manifest counts metadata.
+      6. Independent probe exclusion: no candidate may be one of the 50 probes.
+      7. Digest verification against manifest payload.
+      8. In execution mode: manifest must be marked is_executable=True (not diagnostic)
+         and satisfy gross candidate count and language diversity thresholds.
+    """
     if not path.exists():
         raise ManifestValidationError(f"Manifest file not found: {path}")
 
     with path.open("r", encoding="utf-8") as fh:
-        manifest: dict[str, Any] = json.load(fh)
+        try:
+            manifest: dict[str, Any] = json.load(fh)
+        except json.JSONDecodeError as exc:
+            raise ManifestValidationError(f"Malformed manifest JSON: {exc}") from exc
 
     required_keys = {
         "schema_version",
@@ -115,19 +187,116 @@ def load_manifest(path: Path) -> dict[str, Any]:
         "tv_shows",
         "counts",
         "targets",
+        "language_diversity",
+        "filtering_criteria",
     }
     missing = required_keys - manifest.keys()
     if missing:
         raise ManifestValidationError(f"Manifest missing required keys: {missing}")
 
-    movies = manifest.get("movies") or []
-    tv_shows = manifest.get("tv_shows") or []
+    movies = manifest.get("movies")
+    tv_shows = manifest.get("tv_shows")
+    if not isinstance(movies, list) or not isinstance(tv_shows, list):
+        raise ManifestValidationError("Manifest 'movies' and 'tv_shows' must be lists.")
 
-    # Validate each candidate entry.
+    counts_meta = manifest.get("counts") or {}
+    if counts_meta.get("movie_candidates_selected") != len(movies):
+        raise ManifestValidationError(
+            f"Manifest movie count mismatch: counts metadata says "
+            f"{counts_meta.get('movie_candidates_selected')} but found {len(movies)} entries."
+        )
+    if counts_meta.get("tv_candidates_selected") != len(tv_shows):
+        raise ManifestValidationError(
+            f"Manifest TV count mismatch: counts metadata says "
+            f"{counts_meta.get('tv_candidates_selected')} but found {len(tv_shows)} entries."
+        )
+    if counts_meta.get("total_candidates") != (len(movies) + len(tv_shows)):
+        total_len = len(movies) + len(tv_shows)
+        raise ManifestValidationError(
+            f"Manifest total count mismatch: counts metadata says "
+            f"{counts_meta.get('total_candidates')} but actual sum is {total_len}."
+        )
+
+    # Validate individual entries.
     for entry in movies:
         _validate_candidate_entry(entry, "movie")
     for entry in tv_shows:
         _validate_candidate_entry(entry, "tv")
+
+    # Check for duplicate identities.
+    movie_ids = [m["tmdb_id"] for m in movies]
+    if len(movie_ids) != len(set(movie_ids)):
+        duplicates = [x for x in movie_ids if movie_ids.count(x) > 1]
+        raise ManifestValidationError(f"Duplicate movie candidate IDs found: {set(duplicates)}")
+
+    tv_ids = [t["tmdb_id"] for t in tv_shows]
+    if len(tv_ids) != len(set(tv_ids)):
+        duplicates = [x for x in tv_ids if tv_ids.count(x) > 1]
+        raise ManifestValidationError(f"Duplicate TV candidate IDs found: {set(duplicates)}")
+
+    # Independent probe exclusion check.
+    probe_ids = load_probe_ids(probes_path)
+    prohibited_movies = set(movie_ids) & probe_ids["movie"]
+    if prohibited_movies:
+        raise ManifestValidationError(
+            f"Probe exclusion violation: manifest contains prohibited movie probe IDs: "
+            f"{sorted(prohibited_movies)}"
+        )
+    prohibited_tv = set(tv_ids) & probe_ids["tv"]
+    if prohibited_tv:
+        raise ManifestValidationError(
+            f"Probe exclusion violation: manifest contains prohibited TV probe IDs: "
+            f"{sorted(prohibited_tv)}"
+        )
+
+    # Recompute and verify SHA-256 digest.
+    verify_manifest_digest(manifest)
+
+    # In execution mode: ensure manifest is certified execution-ready.
+    if is_execution_mode:
+        if manifest.get("is_executable") is False:
+            raise ManifestValidationError(
+                "Execution mode rejected: manifest is marked is_executable=False "
+                "(diagnostic or incomplete)."
+            )
+        mode = manifest.get("mode") or manifest.get("status")
+        if mode in {"diagnostic", "incomplete"}:
+            raise ManifestValidationError(
+                f"Execution mode rejected: manifest has non-executable status '{mode}'."
+            )
+
+        targets = manifest.get("targets") or {}
+        min_movies = targets.get("movie_candidate_target", 1408)
+        min_tv = targets.get("tv_candidate_target", 555)
+        if len(movies) < min_movies:
+            raise ManifestValidationError(
+                f"Execution mode rejected: movie candidates ({len(movies)}) below "
+                f"target ({min_movies})."
+            )
+        if len(tv_shows) < min_tv:
+            raise ManifestValidationError(
+                f"Execution mode rejected: TV candidates ({len(tv_shows)}) below target ({min_tv})."
+            )
+
+        diversity = manifest.get("language_diversity") or {}
+        movie_noneng = diversity.get("movies", {}).get("non_english_fraction", 0.0)
+        tv_noneng = diversity.get("tv", {}).get("non_english_fraction", 0.0)
+        if movie_noneng < 0.25:
+            raise ManifestValidationError(
+                f"Execution mode rejected: movie non-English fraction ({movie_noneng:.3f}) "
+                f"below 25% quota."
+            )
+        if tv_noneng < 0.20:
+            raise ManifestValidationError(
+                f"Execution mode rejected: TV non-English fraction ({tv_noneng:.3f}) "
+                f"below 20% quota."
+            )
+
+        cat_ex = manifest.get("catalogue_exclusion") or {}
+        if not cat_ex.get("enabled") or cat_ex.get("status") != "verified":
+            raise ManifestValidationError(
+                "Execution mode rejected: fresh catalogue exclusion is not verified in manifest."
+            )
 
     logger.info(
         "Manifest validated: %d movies, %d TV shows (digest=%s…)",
@@ -139,6 +308,10 @@ def load_manifest(path: Path) -> dict[str, Any]:
 
 
 def _validate_candidate_entry(entry: dict[str, Any], media_type: str) -> None:
+    if not isinstance(entry, dict):
+        raise ManifestValidationError(
+            f"Invalid {media_type} entry: expected dict, got {type(entry).__name__}"
+        )
     tmdb_id = entry.get("tmdb_id")
     if not isinstance(tmdb_id, int) or tmdb_id <= 0:
         raise ManifestValidationError(
@@ -149,6 +322,12 @@ def _validate_candidate_entry(entry: dict[str, Any], media_type: str) -> None:
         raise ManifestValidationError(
             f"Invalid {media_type} candidate (id={tmdb_id}): title must be a non-empty string."
         )
+    lang = entry.get("original_language")
+    if not isinstance(lang, str) or not lang.strip():
+        raise ManifestValidationError(
+            f"Invalid {media_type} candidate (id={tmdb_id}): "
+            "original_language must be a non-empty string."
+        )
 
 
 def compute_manifest_digest_from_data(manifest: dict[str, Any]) -> str:
@@ -156,12 +335,14 @@ def compute_manifest_digest_from_data(manifest: dict[str, Any]) -> str:
     filtering_criteria = manifest.get("filtering_criteria") or {}
     movie_ids = sorted(c["tmdb_id"] for c in (manifest.get("movies") or []))
     tv_ids = sorted(c["tmdb_id"] for c in (manifest.get("tv_shows") or []))
-    digest_payload = {
+    digest_payload: dict[str, Any] = {
         "schema_version": manifest.get("schema_version", ""),
         "filtering_criteria": filtering_criteria,
         "movie_ids": movie_ids,
         "tv_ids": tv_ids,
     }
+    if "is_executable" in manifest:
+        digest_payload["is_executable"] = manifest["is_executable"]
     payload_bytes = json.dumps(digest_payload, sort_keys=True).encode("utf-8")
     return hashlib.sha256(payload_bytes).hexdigest()
 
@@ -180,7 +361,7 @@ def verify_manifest_digest(manifest: dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Checkpoint schema
+# Checkpoint Schema
 # ---------------------------------------------------------------------------
 @dataclass
 class Checkpoint:
@@ -243,19 +424,21 @@ class Checkpoint:
 
 
 # ---------------------------------------------------------------------------
-# Checkpoint persistence
+# Checkpoint Persistence
 # ---------------------------------------------------------------------------
 def load_checkpoint(path: Path, manifest_digest: str, api_base_url: str) -> Checkpoint:
     """
     Load an existing checkpoint or create a fresh one.
-    Validates schema version, manifest digest, and API base URL compatibility.
+    Validates schema version, manifest digest, and normalized API base URL compatibility.
     Raises CheckpointValidationError on incompatibility.
     """
+    normalized_target = normalize_api_url(api_base_url)
+
     if not path.exists():
         logger.info("No existing checkpoint — starting fresh.")
         cp = Checkpoint()
         cp.manifest_digest = manifest_digest
-        cp.api_base_url = api_base_url
+        cp.api_base_url = normalized_target
         return cp
 
     with path.open("r", encoding="utf-8") as fh:
@@ -277,10 +460,10 @@ def load_checkpoint(path: Path, manifest_digest: str, api_base_url: str) -> Chec
             "The manifest has changed. Delete the checkpoint to restart."
         )
 
-    if cp.api_base_url != api_base_url:
+    if normalize_api_url(cp.api_base_url) != normalized_target:
         raise CheckpointValidationError(
             f"Checkpoint API target mismatch: "
-            f"checkpoint={cp.api_base_url!r} | current={api_base_url!r} "
+            f"checkpoint={cp.api_base_url!r} | current={normalized_target!r} "
             "Delete the checkpoint to run against a different API target."
         )
 
@@ -312,7 +495,7 @@ def save_checkpoint_atomic(checkpoint: Checkpoint, path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Ingestion HTTP calls
+# Ingestion HTTP Calls
 # ---------------------------------------------------------------------------
 @dataclass
 class IngestResult:
@@ -326,11 +509,8 @@ class IngestResult:
 
 
 def _post_ingest(api_base_url: str, endpoint: str, timeout: float) -> dict[str, Any]:
-    """
-    Issue a POST request to the NestJS ingestion endpoint.
-    Raises urllib.error.HTTPError or OSError on failure.
-    """
-    url = f"{api_base_url.rstrip('/')}{endpoint}"
+    """Issue a POST request to the NestJS ingestion endpoint."""
+    url = f"{normalize_api_url(api_base_url)}{endpoint}"
     req = urllib.request.Request(url, data=b"", method="POST")  # noqa: S310
     req.add_header("Content-Type", "application/json")
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
@@ -407,7 +587,24 @@ def ingest_tv(api_base_url: str, tmdb_id: int) -> IngestResult:
 
 
 # ---------------------------------------------------------------------------
-# Dry-run mode
+# Execution Summary
+# ---------------------------------------------------------------------------
+@dataclass
+class ExecutionSummary:
+    total_manifest_movies: int = 0
+    total_manifest_tv: int = 0
+    completed_movies_count: int = 0
+    completed_tv_count: int = 0
+    partial_tv_count: int = 0
+    failed_count: int = 0
+    skipped_count: int = 0
+    unresolved_count: int = 0
+    success: bool = False
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Dry-run Mode
 # ---------------------------------------------------------------------------
 def dry_run_report(
     manifest: dict[str, Any],
@@ -455,14 +652,14 @@ def dry_run_report(
 
 
 # ---------------------------------------------------------------------------
-# Execution runner
+# Execution Runner
 # ---------------------------------------------------------------------------
 def run_ingestion(
     manifest: dict[str, Any],
     checkpoint: Checkpoint,
     checkpoint_path: Path,
     api_base_url: str,
-) -> None:
+) -> ExecutionSummary:
     """
     Execute batch ingestion against the NestJS API.
 
@@ -471,6 +668,7 @@ def run_ingestion(
     2. Pending TV shows (not in completed_tv_ids), including partial retries.
 
     Checkpoint is saved after every item.
+    Returns a structured ExecutionSummary.
     """
     movies = manifest.get("movies") or []
     tv_shows = manifest.get("tv_shows") or []
@@ -479,7 +677,6 @@ def run_ingestion(
     completed_tv = set(checkpoint.completed_tv_ids)
     partial_tv = set(checkpoint.partial_tv_ids)
 
-    # Merge partial TV into pending TV (they should be retried).
     pending_movies = [m for m in movies if m["tmdb_id"] not in completed_movies]
     pending_tv = [t for t in tv_shows if t["tmdb_id"] not in completed_tv]
 
@@ -494,6 +691,8 @@ def run_ingestion(
         len(pending_tv),
     )
 
+    skipped_items: list[dict[str, Any]] = []
+
     # --- Movies ---
     for idx, entry in enumerate(pending_movies, start=1):
         tmdb_id: int = entry["tmdb_id"]
@@ -506,6 +705,9 @@ def run_ingestion(
                 len(pending_movies),
                 tmdb_id,
                 MAX_ITEM_ATTEMPTS,
+            )
+            skipped_items.append(
+                {"media_type": "movie", "tmdb_id": tmdb_id, "reason": "max_attempts_exceeded"}
             )
             continue
 
@@ -542,10 +744,14 @@ def run_ingestion(
 
         if checkpoint.attempt_counts.get(attempt_key, 0) >= MAX_ITEM_ATTEMPTS:
             logger.warning(
-                "[%d/%d] SKIP tv tmdb_id=%d — exceeded max attempts.",
+                "[%d/%d] SKIP tv tmdb_id=%d — exceeded max attempts (%d).",
                 idx,
                 len(pending_tv),
                 tmdb_id,
+                MAX_ITEM_ATTEMPTS,
+            )
+            skipped_items.append(
+                {"media_type": "tv", "tmdb_id": tmdb_id, "reason": "max_attempts_exceeded"}
             )
             continue
 
@@ -591,23 +797,53 @@ def run_ingestion(
         save_checkpoint_atomic(checkpoint, checkpoint_path)
         time.sleep(INTER_ITEM_DELAY_S)
 
-    # Final summary.
-    logger.info(
-        "Ingestion pass complete. Movies: %d/%d done. TV: %d/%d done (%d partial). Failed: %d.",
-        len(completed_movies),
-        len(movies),
-        len(completed_tv),
-        len(tv_shows),
-        len(partial_tv),
-        len(checkpoint.failed_ids),
+    # Compute execution summary.
+    comp_movies = len(checkpoint.completed_movie_ids)
+    comp_tv = len(checkpoint.completed_tv_ids)
+    part_tv = len(checkpoint.partial_tv_ids)
+    unresolved_m = len(movies) - comp_movies
+    unresolved_t = len(tv_shows) - comp_tv
+    total_unresolved = unresolved_m + unresolved_t
+
+    summary = ExecutionSummary(
+        total_manifest_movies=len(movies),
+        total_manifest_tv=len(tv_shows),
+        completed_movies_count=comp_movies,
+        completed_tv_count=comp_tv,
+        partial_tv_count=part_tv,
+        failed_count=len(checkpoint.failed_ids),
+        skipped_count=len(skipped_items),
+        unresolved_count=total_unresolved,
+        success=(total_unresolved == 0 and part_tv == 0),
+        details={
+            "unresolved_movies": unresolved_m,
+            "unresolved_tv": unresolved_t,
+            "partial_tv_ids": list(checkpoint.partial_tv_ids),
+            "skipped_items": skipped_items,
+        },
     )
 
-    if partial_tv:
+    logger.info(
+        "Ingestion pass complete. Movies: %d/%d done. TV: %d/%d done (%d partial). "
+        "Failed: %d, Skipped: %d, Unresolved: %d.",
+        comp_movies,
+        len(movies),
+        comp_tv,
+        len(tv_shows),
+        part_tv,
+        len(checkpoint.failed_ids),
+        len(skipped_items),
+        total_unresolved,
+    )
+
+    if part_tv:
         logger.warning(
             "%d TV shows remain partial. Re-run to retry: %s",
-            len(partial_tv),
+            part_tv,
             sorted(partial_tv),
         )
+
+    return summary
 
 
 def _record_failure(
@@ -667,12 +903,23 @@ def main(argv: list[str] | None = None) -> int:
 
     manifest_path = Path(args.manifest)
     checkpoint_path = Path(args.checkpoint)
-    api_base_url: str = args.api_url.rstrip("/")
+    api_base_url = normalize_api_url(args.api_url)
 
-    # --- Load & validate manifest ---
+    # --- Target Safeguard ---
+    if args.execute and not is_local_api_target(api_base_url):
+        allow_remote = os.environ.get(ALLOW_REMOTE_ENV_VAR, "").strip().lower() == "true"
+        if not allow_remote:
+            logger.error(
+                "Execution refused: target host in %r is non-local. "
+                "Seeding is restricted to loopback/local targets unless %s=true is set.",
+                api_base_url,
+                ALLOW_REMOTE_ENV_VAR,
+            )
+            return 2
+
+    # --- Load & boundary-validate manifest ---
     try:
-        manifest = load_manifest(manifest_path)
-        verify_manifest_digest(manifest)
+        manifest = load_manifest(manifest_path, is_execution_mode=args.execute)
     except ManifestValidationError as exc:
         logger.error("Manifest validation failed: %s", exc)
         return 2
@@ -696,7 +943,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
-        # Validate API target is reachable.
+        # Validate API target is reachable before first ingestion request.
         health_url = f"{api_base_url}/api/health"
         try:
             req = urllib.request.Request(health_url, method="GET")  # noqa: S310
@@ -714,10 +961,20 @@ def main(argv: list[str] | None = None) -> int:
 
         logger.info("Execution safeguards satisfied. Starting ingestion.")
         try:
-            run_ingestion(manifest, checkpoint, checkpoint_path, api_base_url)
+            summary = run_ingestion(manifest, checkpoint, checkpoint_path, api_base_url)
         except KeyboardInterrupt:
             logger.warning("Interrupted by user. Checkpoint saved. Re-run to resume.")
             return 130
+
+        if not summary.success:
+            logger.error(
+                "Seeding execution finished with %d unresolved items "
+                "(failed, skipped, or partial). Returning exit code 1.",
+                summary.unresolved_count,
+            )
+            return 1
+
+        logger.info("Seeding execution completed successfully with 0 unresolved items.")
         return 0
     else:
         # Dry-run mode (default).

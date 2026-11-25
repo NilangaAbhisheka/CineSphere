@@ -536,44 +536,43 @@ To guarantee complete safety for personal user library data during bulk seeding:
 
 ## 14. Implementation Capabilities: Existing vs. Missing
 
-| System Capability                          | Implementation State | Location in Codebase                        | Action for Stage 5.0.3-B                     |
-| :----------------------------------------- | :------------------: | :------------------------------------------ | :------------------------------------------- |
-| **Movie Ingestion Endpoint**               |      **EXISTS**      | `apps/api/src/tmdb/tmdb.controller.ts`      | Use existing endpoint                        |
-| **TV Ingestion Endpoint**                  |      **EXISTS**      | `apps/api/src/tmdb/tmdb.controller.ts`      | Use existing endpoint                        |
-| **Transactional Upsert Repo**              |      **EXISTS**      | `apps/api/src/tmdb/catalogue.repository.ts` | Use existing repository                      |
-| **DTO Mappers & Deduplication**            |      **EXISTS**      | `apps/api/src/tmdb/tmdb.mapper.ts`          | Use existing mapper                          |
-| **HTTP Client 429 Retry**                  |      **EXISTS**      | `apps/api/src/tmdb/tmdb-http.client.ts`     | Use existing retry logic                     |
-| **Transport-Level Rate Pacer**             |     **MISSING**      | `apps/api/src/tmdb/tmdb-http.client.ts`     | Add 100ms inter-request pacing gate          |
-| **Offline Candidate Manifest Generator**   |     **MISSING**      | `scripts/`                                  | Create `generate_candidate_manifest.py`      |
-| **Resumable Batch Ingestion Runner**       |     **MISSING**      | `scripts/`                                  | Create `seed_catalogue_batch.ts` (or runner) |
-| **Disk Checkpointing (`checkpoint.json`)** |     **MISSING**      | `data/`                                     | Add atomic checkpoint state manager          |
+| System Capability                          |    Implementation State    | Location in Codebase                                  | Action for Stage 5.0.3-B                                                                                                                                                                       |
+| :----------------------------------------- | :------------------------: | :---------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Movie Ingestion Endpoint**               |         **EXISTS**         | `apps/api/src/tmdb/tmdb.controller.ts`                | Use existing endpoint                                                                                                                                                                          |
+| **TV Ingestion Endpoint**                  |         **EXISTS**         | `apps/api/src/tmdb/tmdb.controller.ts`                | Use existing endpoint                                                                                                                                                                          |
+| **Transactional Upsert Repo**              |         **EXISTS**         | `apps/api/src/tmdb/catalogue.repository.ts`           | Use existing repository                                                                                                                                                                        |
+| **DTO Mappers & Deduplication**            |         **EXISTS**         | `apps/api/src/tmdb/tmdb.mapper.ts`                    | Use existing mapper                                                                                                                                                                            |
+| **HTTP Client 429 Retry**                  |         **EXISTS**         | `apps/api/src/tmdb/tmdb-http.client.ts`               | Use existing retry logic                                                                                                                                                                       |
+| **Transport-Level Rate Pacer**             | **IMPLEMENTED & HARDENED** | `apps/api/src/tmdb/tmdb-http.client.ts`               | Implemented in Stage 5.0.3-B.1, hardened in B.1.1 (sequential promise queue, 100ms interval, `TMDB_MAX_CONCURRENCY = 1`, 429 Retry-After parsing)                                              |
+| **Offline Candidate Manifest Generator**   | **IMPLEMENTED & HARDENED** | `ml/benchmark/scripts/generate_candidate_manifest.py` | Implemented in Stage 5.0.3-B.1, hardened in B.1.1 (fail-closed DB audit in `--execution-ready`, `is_executable` flag & digest protection, ceiling diversity quotas)                            |
+| **Resumable Batch Ingestion Runner**       | **IMPLEMENTED & HARDENED** | `ml/benchmark/scripts/run_seeding_batch.py`           | Implemented in Stage 5.0.3-B.1, hardened in B.1.1 (runner-boundary probe ID rejection from `probes_v1.json`, structured `ExecutionSummary`, exit code 1 on unresolved, local target safeguard) |
+| **Disk Checkpointing (`checkpoint.json`)** | **IMPLEMENTED & HARDENED** | `ml/benchmark/scripts/run_seeding_batch.py`           | Implemented in Stage 5.0.3-B.1, hardened in B.1.1 (atomic write, schema/digest/API-target validation, partial TV retry queue)                                                                  |
 
 ---
 
 ## 15. Remaining Risks & Open Decisions
 
-| Risk / Decision                         | Severity | Probability | Mitigation Strategy                                                                                                                                |
-| :-------------------------------------- | :------: | :---------: | :------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Probe ID Mismatches**                 |   Low    |  Resolved   | Resolved in Stage 5.0.3-A.2 (`probes_v1.json` corrected; `matches_probe_identity()` enforces semantic match; only canonical IDs will be ingested). |
-| **TMDB Burst Rate-Limiting**            |  Medium  |   Medium    | Enforce transport-level 100ms pacing in `TmdbHttpClient` across all season requests.                                                               |
-| **Network Interruption during Seeding** |  Medium  |     Low     | Maintain atomic `seeding_checkpoint.json`; runner resumes cleanly without re-ingesting completed IDs.                                              |
-| **Catalogue Attrition > 15%**           |   Low    |     Low     | Gross buffer provides $+188$ movies and $+74$ TV shows over minimum quotas; candidate pre-validation filters short overviews.                      |
+| Risk / Decision                         | Severity | Probability | Mitigation Strategy                                                                                                                                               |
+| :-------------------------------------- | :------: | :---------: | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Probe ID Mismatches**                 |   Low    |  Resolved   | Resolved in Stage 5.0.3-A.2 (`probes_v1.json` corrected; `matches_probe_identity()` enforces semantic match; runner independently rejects probe IDs at boundary). |
+| **TMDB Burst Rate-Limiting**            |   Low    |  Resolved   | Resolved in Stage 5.0.3-B.1 / B.1.1 (`TMDB_MAX_CONCURRENCY = 1`, sequential promise-chain queue with 100ms pacing, 429 retry with Retry-After header parsing).    |
+| **Network Interruption during Seeding** |   Low    |  Resolved   | Resolved in Stage 5.0.3-B.1 / B.1.1 (atomic `seeding_checkpoint.json` with retry queue for partial TV shows and resume capability).                               |
+| **Catalogue Attrition > 15%**           |   Low    |     Low     | Gross buffer provides $+188$ movies and $+74$ TV shows over minimum quotas; candidate pre-validation filters short overviews.                                     |
 
 ---
 
 ## 16. Explicit Stage 5.0.3-B Readiness Verdict
 
-### Verdict: **PLAN COMPLETE — STAGE 5.0.3-B NOT YET AUTHORIZED**
+### Verdict: **SEEDING PIPELINE IMPLEMENTED & HARDENED — STAGE 5.0.3-B.2 EXECUTION PENDING AUTHORIZATION**
 
-The Stage 5.0.3 planning baseline is now fully audited, reconciled with Stage 5.0.3-A.2, and mathematically sound:
+The Stage 5.0.3 seeding pipeline infrastructure is fully implemented, independently hardened (Stage 5.0.3-B.1.1), and verified with 128 automated Python tests and 242 TypeScript tests:
 
-1. **Probe Inventory:** 100% reconciled against `probes_v1.json` (38 movies, 12 TV shows; all 3 verified TMDB ID errors resolved in Stage 5.0.3-A.2).
+1. **Probe Inventory & Protection:** Authoritative 50-probe fixture (`probes_v1.json`) loaded directly at runner boundary; candidate manifest generation and ingestion runner both reject any candidate sharing a TMDB ID with any probe.
 2. **Probe Identity Enforcement:** `prepare_catalogue_fixture.py` hardened with `matches_probe_identity()`, approved alias registry, and `ProbeIdentityMismatchError` fail-closed stops.
-3. **Canonical Seeding Strategy:** Stage 5.0.3-B will ingest strictly the 50 canonical target IDs. No double-seeding of erroneous IDs.
-4. **Transport-Level Rate Limiting:** Flaw in batch-level sleep identified and transport-level 100ms pacer designed.
-5. **Candidate Discovery:** Practical two-stage sourcing workflow established using external manifest generation and existing NestJS ingestion endpoints.
-6. **Mathematical Integrity:** Quotas, gross buffers, and API request volumes rigorously recalculated.
-7. **Personal Data Safety:** Zero-access boundaries and verification assertions firmly established.
+3. **Transport-Level Rate Limiting:** Enforced sequentially with `TMDB_MAX_CONCURRENCY = 1` and $\ge 100$ms spacing in `TmdbHttpClient`, backed by 429 Retry-After exponential backoff.
+4. **Candidate Manifest Integrity:** `generate_candidate_manifest.py` enforces fail-closed DB query in `--execution-ready` mode, sets `is_executable=True` only when all quotas and diversity targets are satisfied, and embeds `is_executable` in the SHA-256 digest.
+5. **Execution Truthfulness & Safety:** `run_seeding_batch.py` requires `--execute` and `CINESPHERE_ALLOW_CATALOGUE_SEEDING=true`, guards against remote targets without explicit flag, tracks granular status with `ExecutionSummary`, and returns exit code 1 if any item remains unresolved.
+6. **Zero-Access Personal Data:** Sourcing and ingestion pipelines operate exclusively on public TMDB endpoints and `movies`/`tv_shows` catalogue tables. Personal library tables remain untouched and unqueried.
 
 > [!IMPORTANT]
-> **Execution Boundary:** This document completes Stage 5.0.3-A.1 / Stage 5.0.3-A.3 planning reconciliation. **No catalogue ingestion has taken place.** Execution of Stage 5.0.3-B requires separate explicit authorization.
+> **Execution Boundary:** Stage 5.0.3-B.1 and B.1.1 complete the implementation and hardening of all seeding tools. **No catalogue ingestion has taken place.** Execution of real catalogue seeding (Stage 5.0.3-B.2) requires separate explicit user authorization.

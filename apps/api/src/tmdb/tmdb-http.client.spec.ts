@@ -63,7 +63,7 @@ describe('TmdbHttpClient', () => {
 
     it('reports exported pacing constants with correct values', () => {
       expect(TMDB_MIN_DISPATCH_INTERVAL_MS).toBe(100);
-      expect(TMDB_MAX_CONCURRENCY).toBe(2);
+      expect(TMDB_MAX_CONCURRENCY).toBe(1);
     });
   });
 

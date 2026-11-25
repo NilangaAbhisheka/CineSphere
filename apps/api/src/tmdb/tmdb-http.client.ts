@@ -8,16 +8,18 @@ export interface TmdbHttpOptions {
 
 /**
  * Minimum interval (ms) enforced between successive TMDB request dispatches.
- * Keeps aggregate throughput at or below 10 req/s.
+ * Enforces an upper bound of 10 req/s. Although TMDB deprecated its legacy
+ * 40 requests per 10 seconds limit, this pacer prevents burst load and ensures
+ * polite, predictable API consumption with automatic HTTP 429 Retry-After compliance.
  */
 export const TMDB_MIN_DISPATCH_INTERVAL_MS = 100;
 
 /**
- * Maximum number of concurrent in-flight TMDB requests.
- * Prevents simultaneous burst accumulation when multiple callers
- * share the same TmdbHttpClient instance.
+ * Maximum number of concurrent in-flight TMDB requests dispatched by this client.
+ * Because all dispatches are serialized through the promise-chain pacing gate,
+ * dispatch concurrency is strictly 1 (serial dispatch).
  */
-export const TMDB_MAX_CONCURRENCY = 2;
+export const TMDB_MAX_CONCURRENCY = 1;
 
 @Injectable()
 export class TmdbHttpClient {

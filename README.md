@@ -387,17 +387,18 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
     - Shared linting, Prettier, and TypeScript configs ([`packages/config`](packages/config))
     - Dockerized PostgreSQL 16 database with `pgvector` extension enabled (`0.8.7`)
     - Prisma 6 ORM integration with tracked SQL migrations for catalogue tables, library tables, and integrity triggers
-- **Phase 5 Stage 5.0 Benchmark Preparation Tooling:**
+- **Phase 5 Stage 5.0 Benchmark Preparation & Seeding Pipeline Tooling:**
   - Authoritative candidate embedding model evaluation specification (`PHASE_5_TECHNICAL_DESIGN_PROPOSAL_V0.7.4_CORRECTION_ADDENDUM.md`, V0.7.8)
   - Predefined benchmark evaluation probes (`ml/benchmark/fixtures/probes_v1.json`): 50 probes across 5 strata (38 movies, 12 TV shows), with verified canonical TMDB IDs and PB-45 approved alias handling
   - Hardened catalogue fixture extraction pipeline (`ml/benchmark/scripts/prepare_catalogue_fixture.py`): bracketed canonical serialization, deterministic cast selection, cross-engine synthetic regex exclusions, read-only session enforcement, staged artifact publication with atomic rollback, and probe identity validation (`matches_probe_identity()`, `APPROVED_PROBE_ALIASES`, `ProbeIdentityMismatchError`)
-  - Python ML test suite: 48 automated tests passing in `ml/tests/` (including disposable PostgreSQL integration tests for metadata extraction, POSIX regex execution, and probe identity matching)
+  - Resumable TMDB seeding pipeline (`generate_candidate_manifest.py`, `run_seeding_batch.py`, `TmdbHttpClient`): transport-level 100ms pacing (`TMDB_MAX_CONCURRENCY = 1`), independent runner-boundary probe ID rejection, fail-closed `--execution-ready` database audits, atomic disk checkpointing, local target safeguards, structured `ExecutionSummary` reporting, and partial TV retry queue
+  - Python ML test suite: 128 automated tests passing in `ml/tests/` (including disposable PostgreSQL integration tests for metadata extraction, POSIX regex execution, probe identity matching, and comprehensive seeding pipeline validation)
 - **Continuous Integration (`.github/workflows/ci.yml`):**
   - Three distinct, reliable jobs: TypeScript Monorepo, Python ML Package (with minimal `ci` dependency group), and Playwright E2E (with fail-closed service readiness loops)
 
 **What is pending (Prerequisites for Benchmark Execution):**
 
-- **Catalogue Data Seeding (Stage 5.0.3-B):** Ingesting genuine TMDB catalogue records to satisfy the 1,400 movie quota, 600 TV show quota, and 50 mandatory probe identities (currently blocked; seeding is planned but not yet authorized)
+- **Catalogue Data Seeding Execution (Stage 5.0.3-B.2):** Ingesting genuine TMDB catalogue records using the hardened seeding pipeline to satisfy the 1,400 movie quota, 600 TV show quota, and 50 mandatory probe identities (currently blocked; seeding pipeline is fully implemented and hardened, but execution is not yet authorized)
 - **Candidate Embedding Model Benchmark Execution:** Evaluating candidate models (MiniLM, MPNet, Nemotron) across the 50 probes to select the production embedding model and resolve TD-08
 
 **What does not exist yet (Upcoming Stages / Phases):**

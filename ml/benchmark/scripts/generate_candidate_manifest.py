@@ -13,15 +13,17 @@ probe exclusion before writing an atomic manifest to:
   ml/benchmark/fixtures/seeding_candidate_manifest.json
 
 Usage:
-  python -m ml.benchmark.scripts.generate_candidate_manifest [--dry-run] [--pages N]
+  python -m ml.benchmark.scripts.generate_candidate_manifest
+    [--dry-run] [--mode {execution_ready,diagnostic}] [--pages N]
 
 Environment:
   TMDB_READ_ACCESS_TOKEN   TMDB v4 Read Access Token (Bearer)
-  DATABASE_URL             Optional; if set a read-only DB query excludes
-                           titles already present in the catalogue.
+  DATABASE_URL             PostgreSQL connection string. In execution_ready mode,
+                           a successful read-only catalogue audit is mandatory.
 
 Safety:
   - Never writes to PostgreSQL.
+  - Never accesses personal library tables.
   - Never modifies probes_v1.json.
   - Writes the manifest atomically via a temporary file + rename.
   - Redacts TMDB_READ_ACCESS_TOKEN from all log output, exception messages,
@@ -34,6 +36,7 @@ import argparse
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import sys
@@ -136,7 +139,22 @@ logger = logging.getLogger("manifest_generator")
 
 
 # ---------------------------------------------------------------------------
-# Data models
+# Exceptions
+# ---------------------------------------------------------------------------
+class CredentialError(Exception):
+    """Raised when TMDB_READ_ACCESS_TOKEN is missing or authentication fails."""
+
+
+class CatalogueAuditError(Exception):
+    """Raised when database catalogue audit fails in execution-ready mode."""
+
+
+class InsufficientCandidatesError(Exception):
+    """Raised when candidate collection fails to satisfy target or diversity quotas."""
+
+
+# ---------------------------------------------------------------------------
+# Data Models
 # ---------------------------------------------------------------------------
 @dataclass
 class CandidateEntry:
@@ -149,23 +167,9 @@ class CandidateEntry:
     source_endpoints: list[str] = field(default_factory=list)
 
 
-@dataclass
-class ManifestStats:
-    movie_total: int = 0
-    movie_english: int = 0
-    movie_non_english: int = 0
-    tv_total: int = 0
-    tv_english: int = 0
-    tv_non_english: int = 0
-
-
 # ---------------------------------------------------------------------------
-# TMDB HTTP helpers
+# TMDB HTTP Helpers
 # ---------------------------------------------------------------------------
-class CredentialError(Exception):
-    """Raised when TMDB_READ_ACCESS_TOKEN is missing or authentication fails."""
-
-
 def _redact_token(text: str, token: str) -> str:
     """Remove any accidental token leakage from log strings."""
     if not token:
@@ -221,7 +225,7 @@ class TmdbClient:
                     time.sleep(retry_after + 1)
                     attempt += 1
                     continue
-                if exc.code == 401 or exc.code == 403:
+                if exc.code in {401, 403}:
                     raise CredentialError(f"TMDB authentication failed (HTTP {exc.code}).") from exc
                 if exc.code == 404:
                     raise FileNotFoundError(f"TMDB resource not found: {endpoint}") from exc
@@ -245,11 +249,11 @@ class TmdbClient:
 
 
 # ---------------------------------------------------------------------------
-# Probe loading
+# Probe Loading
 # ---------------------------------------------------------------------------
 def load_probe_ids(probes_path: Path) -> dict[str, set[int]]:
     """
-    Returns a mapping of media_type → set of TMDB IDs for all 50 probes.
+    Returns a mapping of media_type -> set of TMDB IDs for all 50 probes.
     Used to exclude probes from the candidate manifest.
     """
     with probes_path.open("r", encoding="utf-8") as fh:
@@ -263,51 +267,75 @@ def load_probe_ids(probes_path: Path) -> dict[str, set[int]]:
 
 
 # ---------------------------------------------------------------------------
-# Database catalogue exclusion (optional, read-only)
+# Database Catalogue Exclusion (Fail-Closed)
 # ---------------------------------------------------------------------------
-def load_existing_catalogue_ids(database_url: str | None) -> dict[str, set[int]]:
+def load_existing_catalogue_ids(
+    database_url: str | None,
+    require_audit: bool = True,
+) -> tuple[dict[str, set[int]], str, str | None]:
     """
-    Returns movie and tv TMDB IDs already present in the catalogue.
-    Uses a strictly read-only PostgreSQL transaction; queries only catalogue tables.
-    Returns empty sets if DATABASE_URL is not configured.
+    Returns (ids_by_type, audit_status, audit_timestamp).
+    Uses a strictly read-only PostgreSQL transaction; queries only catalogue tables
+    (`movies` and `tv_shows`), never personal library tables.
+
+    If require_audit is True (execution_ready mode):
+      - Missing DATABASE_URL raises CatalogueAuditError.
+      - Missing psycopg2 raises CatalogueAuditError.
+      - Connection or query failure raises CatalogueAuditError.
+    If require_audit is False (diagnostic mode):
+      - Falls back to empty sets with warning and returns status 'diagnostic'.
     """
     if not database_url:
-        logger.info("DATABASE_URL not set — skipping catalogue exclusion.")
-        return {"movie": set(), "tv": set()}
+        if require_audit:
+            raise CatalogueAuditError(
+                "Execution-ready mode requires DATABASE_URL to verify existing catalogue records. "
+                "Set DATABASE_URL before generating an execution-ready manifest."
+            )
+        logger.info("DATABASE_URL not set — diagnostic mode skipping catalogue exclusion.")
+        return {"movie": set(), "tv": set()}, "diagnostic", None
 
     try:
         import psycopg2  # type: ignore[import]
-    except ImportError:
-        logger.warning("psycopg2 not available — skipping catalogue exclusion.")
-        return {"movie": set(), "tv": set()}
+    except ImportError as exc:
+        if require_audit:
+            raise CatalogueAuditError(
+                "psycopg2 is required for execution-ready catalogue audit. "
+                "Install psycopg2-binary or run in diagnostic mode."
+            ) from exc
+        logger.warning("psycopg2 not available — diagnostic mode skipping catalogue exclusion.")
+        return {"movie": set(), "tv": set()}, "diagnostic", None
 
     try:
         conn = psycopg2.connect(database_url)
         conn.set_session(readonly=True, autocommit=False)
-        cursor = conn.cursor()
+        with conn.cursor() as cursor:
+            cursor.execute('SELECT "tmdbId" FROM movies;')
+            movie_ids = {int(row[0]) for row in cursor.fetchall()}
 
-        cursor.execute('SELECT "tmdbId" FROM movies;')
-        movie_ids = {int(row[0]) for row in cursor.fetchall()}
+            cursor.execute('SELECT "tmdbId" FROM tv_shows;')
+            tv_ids = {int(row[0]) for row in cursor.fetchall()}
 
-        cursor.execute('SELECT "tmdbId" FROM tv_shows;')
-        tv_ids = {int(row[0]) for row in cursor.fetchall()}
-
-        cursor.close()
         conn.close()
+        timestamp = datetime.now(UTC).isoformat()
 
         logger.info(
-            "Catalogue exclusion: %d movies and %d TV shows already present.",
+            "Catalogue exclusion verified: %d movies and %d TV shows already present.",
             len(movie_ids),
             len(tv_ids),
         )
-        return {"movie": movie_ids, "tv": tv_ids}
+        return {"movie": movie_ids, "tv": tv_ids}, "verified", timestamp
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Could not query catalogue DB (skipping exclusion): %s", exc)
-        return {"movie": set(), "tv": set()}
+        if require_audit:
+            raise CatalogueAuditError(
+                f"Catalogue audit query failed: {exc}. "
+                "Execution-ready manifest cannot be generated without verified catalogue exclusion."
+            ) from exc
+        logger.warning("Could not query catalogue DB (diagnostic mode fallback): %s", exc)
+        return {"movie": set(), "tv": set()}, "failed", None
 
 
 # ---------------------------------------------------------------------------
-# Candidate validation
+# Candidate Validation
 # ---------------------------------------------------------------------------
 def is_valid_movie_candidate(item: dict[str, Any]) -> bool:
     """Return True when item passes all movie candidate filters."""
@@ -356,7 +384,7 @@ def is_valid_tv_candidate(item: dict[str, Any]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# TMDB discovery
+# TMDB Discovery
 # ---------------------------------------------------------------------------
 def _fetch_pages(
     client: TmdbClient,
@@ -406,7 +434,6 @@ def collect_movie_candidates(
                 "without_genres": "",
             },
         ),
-        # Non-English pass: sorted by popularity to surface diverse titles
         (
             "/discover/movie",
             {
@@ -479,9 +506,7 @@ def collect_movie_candidates(
             if not is_valid_movie_candidate(item):
                 continue
             tmdb_id = int(item["id"])
-            if tmdb_id in probe_ids:
-                continue
-            if tmdb_id in catalogue_ids:
+            if tmdb_id in probe_ids or tmdb_id in catalogue_ids:
                 continue
             if tmdb_id in seen:
                 if endpoint not in seen[tmdb_id].source_endpoints:
@@ -572,9 +597,7 @@ def collect_tv_candidates(
             if not is_valid_tv_candidate(item):
                 continue
             tmdb_id = int(item["id"])
-            if tmdb_id in probe_ids:
-                continue
-            if tmdb_id in catalogue_ids:
+            if tmdb_id in probe_ids or tmdb_id in catalogue_ids:
                 continue
             if tmdb_id in seen:
                 if endpoint not in seen[tmdb_id].source_endpoints:
@@ -596,7 +619,7 @@ def collect_tv_candidates(
 
 
 # ---------------------------------------------------------------------------
-# Language diversity selection
+# Language Diversity Selection
 # ---------------------------------------------------------------------------
 def select_with_diversity(
     candidates: list[CandidateEntry],
@@ -606,25 +629,14 @@ def select_with_diversity(
     """
     Select up to `target` candidates while ensuring at least
     `min_noneng_fraction` of the selection is non-English.
-
-    Selection is deterministic: candidates are sorted by (vote_count DESC,
-    tmdb_id ASC) before splitting into English and non-English pools.
-    The minimum non-English quota is filled first from the non-English pool;
-    the remainder is filled from the highest-voted candidates overall.
-
-    Returns the selected list sorted by tmdb_id for a stable manifest digest.
+    Uses math.ceil for mathematically correct rounding of quota minimums.
     """
-    min_noneng = int(target * min_noneng_fraction)
+    min_noneng = math.ceil(target * min_noneng_fraction)
 
-    # Sort each pool by vote count desc, tmdb_id asc for determinism.
     def _sort_key(c: CandidateEntry) -> tuple[int, int]:
         return (-c.vote_count, c.tmdb_id)
 
-    english = sorted(  # noqa: F841
-        [c for c in candidates if c.original_language == "en"], key=_sort_key
-    )
     non_english = sorted([c for c in candidates if c.original_language != "en"], key=_sort_key)
-
     selected_noneng = non_english[:min_noneng]
     already_selected_ids = {c.tmdb_id for c in selected_noneng}
 
@@ -635,12 +647,11 @@ def select_with_diversity(
     selected_rest = remaining[:remaining_target]
 
     combined = selected_noneng + selected_rest
-    # Stable output: sort by tmdb_id.
     return sorted(combined, key=lambda c: c.tmdb_id)
 
 
 # ---------------------------------------------------------------------------
-# Diversity reporting
+# Diversity Reporting
 # ---------------------------------------------------------------------------
 def compute_diversity_stats(candidates: list[CandidateEntry]) -> dict[str, Any]:
     total = len(candidates)
@@ -671,29 +682,31 @@ def compute_diversity_stats(candidates: list[CandidateEntry]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Manifest digest
+# Manifest Digest
 # ---------------------------------------------------------------------------
 def compute_manifest_digest(
     movie_candidates: list[CandidateEntry],
     tv_candidates: list[CandidateEntry],
     filtering_criteria: dict[str, Any],
+    is_executable: bool = True,
 ) -> str:
     """
-    Deterministic SHA-256 digest of the candidate selection, excluding the
-    generation timestamp.  Same source data + config → same digest.
+    Deterministic SHA-256 digest of the candidate selection, including execution
+    readiness state and filtering criteria. Excludes timestamps.
     """
     digest_payload = {
         "schema_version": SCHEMA_VERSION,
         "filtering_criteria": filtering_criteria,
         "movie_ids": sorted(c.tmdb_id for c in movie_candidates),
         "tv_ids": sorted(c.tmdb_id for c in tv_candidates),
+        "is_executable": is_executable,
     }
     payload_bytes = json.dumps(digest_payload, sort_keys=True).encode("utf-8")
     return hashlib.sha256(payload_bytes).hexdigest()
 
 
 # ---------------------------------------------------------------------------
-# Atomic manifest write
+# Atomic Manifest Write
 # ---------------------------------------------------------------------------
 def write_manifest_atomic(manifest: dict[str, Any], path: Path) -> None:
     """Write manifest atomically using a temporary file + rename."""
@@ -713,22 +726,25 @@ def write_manifest_atomic(manifest: dict[str, Any], path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Main Generation Logic
 # ---------------------------------------------------------------------------
 def build_manifest(
     max_pages: int = DEFAULT_MAX_PAGES,
     dry_run: bool = False,
+    mode: str = "execution_ready",
     database_url: str | None = None,
     token: str | None = None,
 ) -> dict[str, Any]:
     """
-    Core manifest generation logic.  Returns the manifest dict.
-    In dry_run mode the manifest is NOT written to disk.
+    Core manifest generation logic. Returns the manifest dict.
+    In dry_run mode the manifest is marked non-executable and NOT written to disk.
 
     Args:
         max_pages:    Maximum discovery pages per endpoint.
         dry_run:      If True, skips TMDB discovery and manifest write.
-        database_url: Optional PostgreSQL URL for catalogue exclusion.
+        mode:         'execution_ready' (requires full audit and quota satisfaction)
+                      or 'diagnostic' (diagnostic inspection allowed).
+        database_url: PostgreSQL URL for catalogue exclusion.
         token:        TMDB read access token; falls back to env var.
     """
     resolved_token = token or os.environ.get("TMDB_READ_ACCESS_TOKEN", "")
@@ -744,8 +760,11 @@ def build_manifest(
     total_probe_ids = len(probe_movie_ids) + len(probe_tv_ids)
     logger.info("Loaded %d benchmark probe IDs to exclude.", total_probe_ids)
 
-    # Optional: exclude titles already in the catalogue.
-    catalogue_ids = load_existing_catalogue_ids(database_url)
+    # Fail-closed catalogue exclusion check.
+    require_audit = mode == "execution_ready" and not dry_run
+    catalogue_ids, audit_status, audit_timestamp = load_existing_catalogue_ids(
+        database_url, require_audit=require_audit
+    )
 
     filtering_criteria: dict[str, Any] = {
         "min_overview_length": MIN_OVERVIEW_LENGTH,
@@ -755,12 +774,17 @@ def build_manifest(
         "probe_exclusion": True,
         "catalogue_exclusion": bool(database_url),
         "max_pages_per_endpoint": max_pages,
+        "generation_mode": mode,
     }
 
     if dry_run:
-        logger.info("[DRY RUN] Skipping TMDB discovery. Returning empty manifest structure.")
+        logger.info(
+            "[DRY RUN] Skipping TMDB discovery. Returning non-executable manifest structure."
+        )
         movie_candidates: list[CandidateEntry] = []
         tv_candidates: list[CandidateEntry] = []
+        is_executable = False
+        status = "dry_run"
     else:
         client = TmdbClient(resolved_token)
 
@@ -776,6 +800,42 @@ def build_manifest(
         )
         tv_candidates = select_with_diversity(raw_tv, TV_CANDIDATE_TARGET, TV_NONENG_FRACTION)
 
+        # Verification of targets & quotas
+        movie_diversity = compute_diversity_stats(movie_candidates)
+        tv_diversity = compute_diversity_stats(tv_candidates)
+
+        movies_meet_target = len(movie_candidates) >= MOVIE_CANDIDATE_TARGET
+        tv_meets_target = len(tv_candidates) >= TV_CANDIDATE_TARGET
+        movie_meets_div = movie_diversity.get("non_english_fraction", 0.0) >= MOVIE_NONENG_FRACTION
+        tv_meets_div = tv_diversity.get("non_english_fraction", 0.0) >= TV_NONENG_FRACTION
+
+        all_quotas_met = movies_meet_target and tv_meets_target and movie_meets_div and tv_meets_div
+
+        if mode == "execution_ready":
+            if not all_quotas_met or audit_status != "verified":
+                logger.error(
+                    "Execution-ready quotas not satisfied: movies=%d/%d (%.1f%% non-en), "
+                    "tv=%d/%d (%.1f%% non-en), audit=%s",
+                    len(movie_candidates),
+                    MOVIE_CANDIDATE_TARGET,
+                    movie_diversity.get("non_english_fraction", 0.0) * 100,
+                    len(tv_candidates),
+                    TV_CANDIDATE_TARGET,
+                    tv_diversity.get("non_english_fraction", 0.0) * 100,
+                    audit_status,
+                )
+                raise InsufficientCandidatesError(
+                    f"Candidate quotas or audit incomplete: "
+                    f"movies={len(movie_candidates)}/{MOVIE_CANDIDATE_TARGET}, "
+                    f"tv={len(tv_candidates)}/{TV_CANDIDATE_TARGET}, audit={audit_status}. "
+                    "Cannot generate an execution-ready manifest."
+                )
+            is_executable = True
+            status = "execution_ready"
+        else:
+            is_executable = False
+            status = "diagnostic"
+
     movie_diversity = compute_diversity_stats(movie_candidates)
     tv_diversity = compute_diversity_stats(tv_candidates)
 
@@ -788,11 +848,16 @@ def build_manifest(
         "/discover/tv (non-English language passes: ja,ko,fr,es,de)",
     ]
 
-    digest = compute_manifest_digest(movie_candidates, tv_candidates, filtering_criteria)
+    digest = compute_manifest_digest(
+        movie_candidates, tv_candidates, filtering_criteria, is_executable=is_executable
+    )
 
     manifest: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "manifest_version": MANIFEST_VERSION,
+        "is_executable": is_executable,
+        "mode": mode,
+        "status": status,
         "generation_timestamp": datetime.now(UTC).isoformat(),
         "source_endpoints": source_endpoints,
         "filtering_criteria": filtering_criteria,
@@ -812,6 +877,8 @@ def build_manifest(
         },
         "catalogue_exclusion": {
             "enabled": bool(database_url),
+            "status": audit_status,
+            "audit_timestamp": audit_timestamp,
             "movies_already_in_catalogue": len(catalogue_ids.get("movie", set())),
             "tv_shows_already_in_catalogue": len(catalogue_ids.get("tv", set())),
         },
@@ -845,30 +912,15 @@ def build_manifest(
     if not dry_run:
         write_manifest_atomic(manifest, _MANIFEST_PATH)
         logger.info(
-            "Manifest written to %s (%d movies, %d TV shows, digest=%s…)",
+            "Manifest written to %s (%d movies, %d TV shows, is_executable=%s, digest=%s…)",
             _MANIFEST_PATH,
             len(movie_candidates),
             len(tv_candidates),
+            is_executable,
             digest[:12],
         )
     else:
         logger.info("[DRY RUN] Manifest not written (dry_run=True).")
-
-    # Diversity warnings.
-    m_frac = movie_diversity.get("non_english_fraction", 0.0)
-    t_frac = tv_diversity.get("non_english_fraction", 0.0)
-    if m_frac < MOVIE_NONENG_FRACTION and movie_diversity.get("total", 0) > 0:
-        logger.warning(
-            "Movie non-English fraction %.1f%% is below required %.0f%%.",
-            m_frac * 100,
-            MOVIE_NONENG_FRACTION * 100,
-        )
-    if t_frac < TV_NONENG_FRACTION and tv_diversity.get("total", 0) > 0:
-        logger.warning(
-            "TV non-English fraction %.1f%% is below required %.0f%%.",
-            t_frac * 100,
-            TV_NONENG_FRACTION * 100,
-        )
 
     return manifest
 
@@ -884,6 +936,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Validate configuration and print stats without calling TMDB or writing files.",
     )
     parser.add_argument(
+        "--mode",
+        choices=["execution_ready", "diagnostic"],
+        default="execution_ready",
+        help="Generation mode: 'execution_ready' (requires full DB audit) or 'diagnostic'.",
+    )
+    parser.add_argument(
         "--pages",
         type=int,
         default=DEFAULT_MAX_PAGES,
@@ -897,18 +955,26 @@ def main(argv: list[str] | None = None) -> int:
         manifest = build_manifest(
             max_pages=args.pages,
             dry_run=args.dry_run,
+            mode=args.mode,
             database_url=database_url,
         )
         print(
             f"\nManifest summary: "
             f"{manifest['counts']['movie_candidates_selected']} movies, "
             f"{manifest['counts']['tv_candidates_selected']} TV shows | "
+            f"is_executable={manifest['is_executable']} | "
             f"digest={manifest['manifest_digest'][:16]}…"
         )
         return 0
     except CredentialError as exc:
         logger.error("Credential error: %s", exc)
         return 2
+    except CatalogueAuditError as exc:
+        logger.error("Catalogue audit error: %s", exc)
+        return 2
+    except InsufficientCandidatesError as exc:
+        logger.error("Candidate quota error: %s", exc)
+        return 1
     except Exception as exc:  # noqa: BLE001
         logger.error("Manifest generation failed: %s", exc)
         return 1

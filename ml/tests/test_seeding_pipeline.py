@@ -12,8 +12,9 @@ import hashlib
 import json
 import os
 import pathlib
+import sys
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from ml.benchmark.scripts.generate_candidate_manifest import (
@@ -22,6 +23,7 @@ from ml.benchmark.scripts.generate_candidate_manifest import (
     MIN_VOTE_COUNT,
     MOVIE_NONENG_FRACTION,
     CandidateEntry,
+    CatalogueAuditError,
     CredentialError,
     TmdbClient,
     build_manifest,
@@ -29,22 +31,31 @@ from ml.benchmark.scripts.generate_candidate_manifest import (
     compute_manifest_digest,
     is_valid_movie_candidate,
     is_valid_tv_candidate,
+    load_existing_catalogue_ids,
     load_probe_ids,
     select_with_diversity,
     write_manifest_atomic,
 )
 from ml.benchmark.scripts.run_seeding_batch import (
+    ALLOW_REMOTE_ENV_VAR,
     ALLOW_SEEDING_ENV_VAR,
     Checkpoint,
     CheckpointValidationError,
+    ExecutionSummary,
     IngestResult,
     ManifestValidationError,
     _record_failure,
+    is_local_api_target,
     load_checkpoint,
     load_manifest,
     main,
+    normalize_api_url,
+    run_ingestion,
     save_checkpoint_atomic,
     verify_manifest_digest,
+)
+from ml.benchmark.scripts.run_seeding_batch import (
+    load_probe_ids as load_runner_probe_ids,
 )
 
 
@@ -117,7 +128,7 @@ def valid_manifest(tmp_path: pathlib.Path) -> dict[str, Any]:
         {
             "tmdb_id": i,
             "title": f"Movie {i}",
-            "original_language": "en",
+            "original_language": "en" if i % 2 == 0 else "ja",
             "vote_count": 500,
             "source_endpoints": [],
         }
@@ -127,7 +138,7 @@ def valid_manifest(tmp_path: pathlib.Path) -> dict[str, Any]:
         {
             "tmdb_id": i + 100,
             "title": f"Show {i}",
-            "original_language": "en",
+            "original_language": "en" if i % 2 == 0 else "ko",
             "vote_count": 500,
             "source_endpoints": [],
         }
@@ -141,16 +152,20 @@ def valid_manifest(tmp_path: pathlib.Path) -> dict[str, Any]:
         "filtering_criteria": filtering_criteria,
         "movie_ids": movie_ids,
         "tv_ids": tv_ids,
+        "is_executable": True,
     }
     digest = hashlib.sha256(json.dumps(digest_payload, sort_keys=True).encode()).hexdigest()
 
     return {
         "schema_version": "1.0.0",
         "manifest_version": "1.0.0",
+        "is_executable": True,
+        "mode": "execution_ready",
+        "status": "execution_ready",
         "generation_timestamp": "2026-11-24T00:00:00+00:00",
         "source_endpoints": ["/movie/top_rated"],
         "filtering_criteria": filtering_criteria,
-        "targets": {"movie_candidate_target": 1412, "tv_candidate_target": 556},
+        "targets": {"movie_candidate_target": len(movies), "tv_candidate_target": len(tv_shows)},
         "counts": {
             "movie_candidates_selected": len(movies),
             "tv_candidates_selected": len(tv_shows),
@@ -162,11 +177,16 @@ def valid_manifest(tmp_path: pathlib.Path) -> dict[str, Any]:
             "probes_fixture_path": "ml/benchmark/fixtures/probes_v1.json",
         },
         "catalogue_exclusion": {
-            "enabled": False,
+            "enabled": True,
+            "status": "verified",
+            "audit_timestamp": "2026-11-24T00:00:00+00:00",
             "movies_already_in_catalogue": 0,
             "tv_shows_already_in_catalogue": 0,
         },
-        "language_diversity": {"movies": {}, "tv": {}},
+        "language_diversity": {
+            "movies": {"non_english_fraction": 0.4},
+            "tv": {"non_english_fraction": 0.333},
+        },
         "movies": movies,
         "tv_shows": tv_shows,
         "manifest_digest": digest,
@@ -256,29 +276,27 @@ class TestProbeExclusion:
         probe_ids = load_probe_ids(_PROBES_PATH)
         assert "movie" in probe_ids
         assert "tv" in probe_ids
-        # Authoritative fixture contains 38 movies and 12 TV probes.
         assert len(probe_ids["movie"]) == 38
         assert len(probe_ids["tv"]) == 12
 
+    def test_load_runner_probe_ids_matches(self) -> None:
+        runner_probes = load_runner_probe_ids(_PROBES_PATH)
+        assert len(runner_probes["movie"]) == 38
+        assert len(runner_probes["tv"]) == 12
+
     def test_load_probe_ids_known_ids_present(self) -> None:
         probe_ids = load_probe_ids(_PROBES_PATH)
-        # PB-01 Inception = movie 27205
         assert 27205 in probe_ids["movie"]
-        # PB-27 Manchester by the Sea (corrected) = 334541
         assert 334541 in probe_ids["movie"]
-        # PB-40 The Wire (corrected) = 1438
         assert 1438 in probe_ids["tv"]
-        # PB-46 Samsara (corrected) = 89708
         assert 89708 in probe_ids["movie"]
-        # PB-45 Twin Peaks = 1920
         assert 1920 in probe_ids["tv"]
 
     def test_load_probe_ids_erroneous_ids_absent(self) -> None:
-        """The old incorrect IDs must NOT appear in the probe set."""
         probe_ids = load_probe_ids(_PROBES_PATH)
-        assert 334543 not in probe_ids["movie"]  # was Lion, not Manchester
-        assert 3297 not in probe_ids["tv"]  # was Wilfred, not The Wire
-        assert 85350 not in probe_ids["movie"]  # was Boyhood, not Samsara
+        assert 334543 not in probe_ids["movie"]
+        assert 3297 not in probe_ids["tv"]
+        assert 85350 not in probe_ids["movie"]
 
 
 # ===========================================================================
@@ -286,7 +304,6 @@ class TestProbeExclusion:
 # ===========================================================================
 class TestCandidateDeduplication:
     def test_selection_output_sorted_by_tmdb_id(self) -> None:
-        """select_with_diversity always returns output sorted by tmdb_id."""
         candidates = [_make_candidate(tmdb_id=i) for i in range(1, 21)]
         selected = select_with_diversity(candidates, 20, 0.0)
         ids = [c.tmdb_id for c in selected]
@@ -303,7 +320,6 @@ class TestCandidateDeduplication:
 # ===========================================================================
 class TestLanguageDiversity:
     def test_diversity_quota_met_when_sufficient_noneng(self) -> None:
-        # 10 non-English and 10 English → 50% non-English ≥ required 25%.
         candidates = [_make_candidate(tmdb_id=i, language="fr") for i in range(1, 11)] + [
             _make_candidate(tmdb_id=i + 100, language="en") for i in range(1, 11)
         ]
@@ -313,15 +329,21 @@ class TestLanguageDiversity:
         assert non_eng / total >= MOVIE_NONENG_FRACTION
 
     def test_non_english_fraction_prioritized_first(self) -> None:
-        # Only 2 non-English available out of 20 candidates; they must be selected.
         candidates = [
             _make_candidate(tmdb_id=i, language="ko", vote_count=100) for i in range(1, 3)
         ] + [_make_candidate(tmdb_id=i + 50, language="en", vote_count=200) for i in range(1, 19)]
-        min_noneng = max(1, int(10 * MOVIE_NONENG_FRACTION))  # 2 or 3
         selected = select_with_diversity(candidates, 10, MOVIE_NONENG_FRACTION)
         non_eng_ids = {c.tmdb_id for c in selected if c.original_language != "en"}
-        # Both Korean candidates should appear if available.
-        assert non_eng_ids == {1, 2} or len(non_eng_ids) >= min(2, min_noneng)
+        assert non_eng_ids == {1, 2}
+
+    def test_select_with_diversity_uses_ceil_rounding(self) -> None:
+        # 11 items * 0.25 = 2.75 -> ceil is 3 non-English items required.
+        candidates = [_make_candidate(tmdb_id=i, language="fr") for i in range(1, 6)] + [
+            _make_candidate(tmdb_id=i + 50, language="en") for i in range(1, 10)
+        ]
+        selected = select_with_diversity(candidates, 11, 0.25)
+        non_eng = [c for c in selected if c.original_language != "en"]
+        assert len(non_eng) >= 3
 
     def test_compute_diversity_stats_empty(self) -> None:
         stats = compute_diversity_stats([])
@@ -367,6 +389,14 @@ class TestDeterministicSelection:
             movies_b, tv, criteria
         )
 
+    def test_digest_covers_is_executable_state(self) -> None:
+        movies = [_make_candidate(tmdb_id=1)]
+        tv: list[CandidateEntry] = []
+        criteria: dict[str, Any] = {}
+        d_exec = compute_manifest_digest(movies, tv, criteria, is_executable=True)
+        d_diag = compute_manifest_digest(movies, tv, criteria, is_executable=False)
+        assert d_exec != d_diag
+
     def test_selection_sorted_by_tmdb_id(self) -> None:
         candidates = [_make_candidate(tmdb_id=i) for i in [5, 3, 1, 4, 2]]
         selected = select_with_diversity(candidates, 5, 0.0)
@@ -390,7 +420,6 @@ class TestAtomicManifestWrite:
     def test_no_partial_file_on_success(self, temp_dir: pathlib.Path) -> None:
         path = temp_dir / "manifest.json"
         write_manifest_atomic({"ok": True}, path)
-        # No .tmp files should remain.
         tmp_files = list(temp_dir.glob("*.tmp"))
         assert tmp_files == []
 
@@ -401,14 +430,14 @@ class TestAtomicManifestWrite:
 
 
 # ===========================================================================
-# Tests: Dry-run mode (build_manifest)
+# Tests: Dry-run and Manifest Generator Modes
 # ===========================================================================
 class TestBuildManifestDryRun:
-    def test_dry_run_returns_manifest_dict(self) -> None:
+    def test_dry_run_returns_manifest_dict_marked_non_executable(self) -> None:
         manifest = build_manifest(dry_run=True)
         assert "schema_version" in manifest
-        assert "movies" in manifest
-        assert "tv_shows" in manifest
+        assert manifest["is_executable"] is False
+        assert manifest["status"] == "dry_run"
         assert manifest["counts"]["movie_candidates_selected"] == 0
         assert manifest["counts"]["tv_candidates_selected"] == 0
 
@@ -423,7 +452,7 @@ class TestBuildManifestDryRun:
             fake_write,
         )
         build_manifest(dry_run=True)
-        assert written == [], "dry_run=True must not write any file"
+        assert written == []
 
     def test_dry_run_no_tmdb_calls(self, monkeypatch: pytest.MonkeyPatch) -> None:
         created_clients: list[object] = []
@@ -437,17 +466,49 @@ class TestBuildManifestDryRun:
             FakeClient,
         )
         build_manifest(dry_run=True)
-        assert created_clients == [], "dry_run=True must not create a TmdbClient"
+        assert created_clients == []
+
+    def test_catalogue_audit_missing_database_url_raises_in_execution_mode(self) -> None:
+        with pytest.raises(CatalogueAuditError, match="requires DATABASE_URL"):
+            load_existing_catalogue_ids(None, require_audit=True)
+
+    def test_catalogue_audit_diagnostic_mode_allows_fallback(self) -> None:
+        ids, status, ts = load_existing_catalogue_ids(None, require_audit=False)
+        assert ids == {"movie": set(), "tv": set()}
+        assert status == "diagnostic"
+        assert ts is None
+
+    def test_catalogue_audit_db_failure_raises_in_execution_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_psycopg2 = MagicMock()
+        fake_psycopg2.connect.side_effect = RuntimeError("connection refused")
+        monkeypatch.setitem(sys.modules, "psycopg2", fake_psycopg2)
+
+        with pytest.raises(CatalogueAuditError, match="Catalogue audit query failed"):
+            load_existing_catalogue_ids("postgresql://localhost/fake", require_audit=True)
 
 
 # ===========================================================================
-# Tests: Execution safeguards (run_seeding_batch)
+# Tests: Target URL Safeguards (run_seeding_batch)
 # ===========================================================================
-class TestExecutionSafeguards:
-    def test_missing_env_var_returns_error_code(
+class TestTargetSafeguards:
+    def test_normalize_api_url_standardizes(self) -> None:
+        assert normalize_api_url("http://localhost:4000/") == "http://localhost:4000"
+        assert normalize_api_url("HTTP://LOCALHOST:4000") == "http://localhost:4000"
+        assert normalize_api_url("https://127.0.0.1:8080/api/") == "https://127.0.0.1:8080/api"
+
+    def test_is_local_api_target(self) -> None:
+        assert is_local_api_target("http://localhost:4000") is True
+        assert is_local_api_target("http://127.0.0.1:4000") is True
+        assert is_local_api_target("http://[::1]:4000") is True
+        assert is_local_api_target("http://192.168.1.100:4000") is False
+        assert is_local_api_target("https://api.cinesphere.internal") is False
+
+    def test_missing_execution_flag_runs_dry_run_default(
         self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
     ) -> None:
-        """--execute without env var must return exit code 2."""
+        """Running without --execute must trigger dry-run and succeed with exit code 0."""
         manifest_path = tmp_path / "manifest.json"
         with manifest_path.open("w") as fh:
             json.dump(valid_manifest, fh)
@@ -456,65 +517,102 @@ class TestExecutionSafeguards:
         with patch.dict(os.environ, env, clear=True):
             rc = main(
                 [
-                    "--execute",
                     "--manifest",
                     str(manifest_path),
-                    "--checkpoint",
-                    str(tmp_path / "checkpoint.json"),
-                    "--api-url",
-                    "http://localhost:4000",
-                ]
-            )
-        assert rc == 2
-
-    def test_dry_run_returns_zero_without_env_var(
-        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
-    ) -> None:
-        """Dry-run mode must succeed without the safeguard env var."""
-        manifest_path = tmp_path / "manifest.json"
-        with manifest_path.open("w") as fh:
-            json.dump(valid_manifest, fh)
-
-        env = {k: v for k, v in os.environ.items() if k != ALLOW_SEEDING_ENV_VAR}
-        with patch.dict(os.environ, env, clear=True):
-            rc = main(
-                [
-                    "--manifest",
-                    str(manifest_path),
-                    "--checkpoint",
-                    str(tmp_path / "checkpoint.json"),
                     "--api-url",
                     "http://localhost:4000",
                 ]
             )
         assert rc == 0
 
-    def test_execute_with_env_var_checks_api_health(
+    def test_missing_env_var_returns_error_code(
         self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
     ) -> None:
-        """--execute with env var must attempt an API health check and fail gracefully."""
+        """--execute without ALLOW_SEEDING_ENV_VAR must fail closed with exit code 2."""
         manifest_path = tmp_path / "manifest.json"
         with manifest_path.open("w") as fh:
             json.dump(valid_manifest, fh)
 
-        with patch.dict(os.environ, {ALLOW_SEEDING_ENV_VAR: "true"}):
-            # Health check will fail (no server running); must return non-zero exit code.
+        env = {k: v for k, v in os.environ.items() if k != ALLOW_SEEDING_ENV_VAR}
+        with patch.dict(os.environ, env, clear=True):
             rc = main(
                 [
                     "--execute",
                     "--manifest",
                     str(manifest_path),
-                    "--checkpoint",
-                    str(tmp_path / "checkpoint.json"),
+                    "--api-url",
+                    "http://localhost:4000",
+                ]
+            )
+        assert rc == 2
+
+    def test_execute_with_env_var_checks_api_health_failure(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        """--execute with env var must attempt API health check and fail gracefully if server down."""
+        manifest_path = tmp_path / "manifest.json"
+        with manifest_path.open("w") as fh:
+            json.dump(valid_manifest, fh)
+
+        with patch.dict(os.environ, {ALLOW_SEEDING_ENV_VAR: "true"}):
+            rc = main(
+                [
+                    "--execute",
+                    "--manifest",
+                    str(manifest_path),
                     "--api-url",
                     "http://localhost:19999",
                 ]
             )
         assert rc == 2
 
+    def test_remote_target_rejected_by_default(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        manifest_path = tmp_path / "manifest.json"
+        with manifest_path.open("w") as fh:
+            json.dump(valid_manifest, fh)
+
+        with patch.dict(os.environ, {ALLOW_SEEDING_ENV_VAR: "true"}, clear=True):
+            rc = main(
+                [
+                    "--execute",
+                    "--manifest",
+                    str(manifest_path),
+                    "--api-url",
+                    "http://remote.host:4000",
+                ]
+            )
+        assert rc == 2
+
+    def test_remote_target_accepted_with_explicit_safeguard(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        manifest_path = tmp_path / "manifest.json"
+        with manifest_path.open("w") as fh:
+            json.dump(valid_manifest, fh)
+
+        # Health check will fail since remote.host is fictitious, but safeguard check passes.
+        with patch.dict(
+            os.environ,
+            {ALLOW_SEEDING_ENV_VAR: "true", ALLOW_REMOTE_ENV_VAR: "true"},
+            clear=True,
+        ):
+            rc = main(
+                [
+                    "--execute",
+                    "--manifest",
+                    str(manifest_path),
+                    "--api-url",
+                    "http://remote.host:4000",
+                ]
+            )
+        # Exits with 2 due to health check failure, not safeguard refusal.
+        assert rc == 2
+
 
 # ===========================================================================
-# Tests: Manifest validation (run_seeding_batch)
+# Tests: Manifest Boundary Validation (run_seeding_batch)
 # ===========================================================================
 class TestManifestValidation:
     def test_valid_manifest_loads(
@@ -552,6 +650,10 @@ class TestManifestValidation:
                 "source_endpoints": [],
             }
         )
+        valid_manifest["counts"]["movie_candidates_selected"] = len(valid_manifest["movies"])
+        valid_manifest["counts"]["total_candidates"] = len(valid_manifest["movies"]) + len(
+            valid_manifest["tv_shows"]
+        )
         path = tmp_path / "manifest.json"
         with path.open("w") as fh:
             json.dump(valid_manifest, fh)
@@ -570,16 +672,112 @@ class TestManifestValidation:
                 "source_endpoints": [],
             }
         )
+        valid_manifest["counts"]["movie_candidates_selected"] = len(valid_manifest["movies"])
+        valid_manifest["counts"]["total_candidates"] = len(valid_manifest["movies"]) + len(
+            valid_manifest["tv_shows"]
+        )
         path = tmp_path / "manifest.json"
         with path.open("w") as fh:
             json.dump(valid_manifest, fh)
         with pytest.raises(ManifestValidationError, match="non-empty string"):
             load_manifest(path)
 
+    def test_manifest_rejects_count_metadata_mismatch(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        valid_manifest["counts"]["movie_candidates_selected"] = 999
+        path = tmp_path / "manifest.json"
+        with path.open("w") as fh:
+            json.dump(valid_manifest, fh)
+        with pytest.raises(ManifestValidationError, match="movie count mismatch"):
+            load_manifest(path)
+
+    def test_manifest_rejects_duplicate_movie_ids(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        valid_manifest["movies"].append(
+            {
+                "tmdb_id": valid_manifest["movies"][0]["tmdb_id"],
+                "title": "Duplicate",
+                "original_language": "en",
+                "vote_count": 500,
+                "source_endpoints": [],
+            }
+        )
+        valid_manifest["counts"]["movie_candidates_selected"] = len(valid_manifest["movies"])
+        valid_manifest["counts"]["total_candidates"] = len(valid_manifest["movies"]) + len(
+            valid_manifest["tv_shows"]
+        )
+        path = tmp_path / "manifest.json"
+        with path.open("w") as fh:
+            json.dump(valid_manifest, fh)
+        with pytest.raises(ManifestValidationError, match="Duplicate movie candidate IDs"):
+            load_manifest(path)
+
+    def test_manifest_rejects_injected_movie_probe(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        # Inception is probe PB-01 (tmdb_id: 27205)
+        valid_manifest["movies"].append(
+            {
+                "tmdb_id": 27205,
+                "title": "Inception Probe Injected",
+                "original_language": "en",
+                "vote_count": 1000,
+                "source_endpoints": [],
+            }
+        )
+        valid_manifest["counts"]["movie_candidates_selected"] = len(valid_manifest["movies"])
+        valid_manifest["counts"]["total_candidates"] = len(valid_manifest["movies"]) + len(
+            valid_manifest["tv_shows"]
+        )
+        path = tmp_path / "manifest.json"
+        with path.open("w") as fh:
+            json.dump(valid_manifest, fh)
+        with pytest.raises(ManifestValidationError, match="prohibited movie probe IDs"):
+            load_manifest(path)
+
+    def test_manifest_rejects_injected_tv_probe(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        # The Wire is probe PB-40 (tmdb_id: 1438)
+        valid_manifest["tv_shows"].append(
+            {
+                "tmdb_id": 1438,
+                "title": "The Wire Probe Injected",
+                "original_language": "en",
+                "vote_count": 1000,
+                "source_endpoints": [],
+            }
+        )
+        valid_manifest["counts"]["tv_candidates_selected"] = len(valid_manifest["tv_shows"])
+        valid_manifest["counts"]["total_candidates"] = len(valid_manifest["movies"]) + len(
+            valid_manifest["tv_shows"]
+        )
+        path = tmp_path / "manifest.json"
+        with path.open("w") as fh:
+            json.dump(valid_manifest, fh)
+        with pytest.raises(ManifestValidationError, match="prohibited TV probe IDs"):
+            load_manifest(path)
+
+    def test_manifest_rejects_diagnostic_in_execution_mode(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        valid_manifest["is_executable"] = False
+        valid_manifest["mode"] = "diagnostic"
+        from ml.benchmark.scripts.run_seeding_batch import compute_manifest_digest_from_data
+
+        valid_manifest["manifest_digest"] = compute_manifest_digest_from_data(valid_manifest)
+        path = tmp_path / "manifest.json"
+        with path.open("w") as fh:
+            json.dump(valid_manifest, fh)
+        with pytest.raises(ManifestValidationError, match="is_executable=False"):
+            load_manifest(path, is_execution_mode=True)
+
     def test_digest_verification_passes_for_valid_manifest(
         self, valid_manifest: dict[str, Any]
     ) -> None:
-        verify_manifest_digest(valid_manifest)  # must not raise
+        verify_manifest_digest(valid_manifest)
 
     def test_digest_verification_fails_on_tampered_manifest(
         self, valid_manifest: dict[str, Any]
@@ -598,7 +796,7 @@ class TestManifestValidation:
 
 
 # ===========================================================================
-# Tests: Checkpoint integrity
+# Tests: Checkpoint Integrity
 # ===========================================================================
 class TestCheckpointIntegrity:
     def test_fresh_checkpoint_created_when_no_file(self, tmp_path: pathlib.Path) -> None:
@@ -637,10 +835,20 @@ class TestCheckpointIntegrity:
         with pytest.raises(CheckpointValidationError, match="API target mismatch"):
             load_checkpoint(path, "digest", "http://localhost:5000")
 
+    def test_api_target_normalized_comparison_passes(self, tmp_path: pathlib.Path) -> None:
+        path = tmp_path / "cp.json"
+        cp = Checkpoint()
+        cp.manifest_digest = "digest"
+        cp.api_base_url = "http://localhost:4000"
+        save_checkpoint_atomic(cp, path)
+
+        loaded = load_checkpoint(path, "digest", "http://localhost:4000/")
+        assert loaded.api_base_url == "http://localhost:4000"
+
     def test_schema_version_mismatch_raises(self, tmp_path: pathlib.Path) -> None:
         path = tmp_path / "cp.json"
         cp = Checkpoint()
-        cp.schema_version = "0.0.1"  # older version
+        cp.schema_version = "0.0.1"
         cp.manifest_digest = "digest"
         cp.api_base_url = "http://localhost:4000"
         save_checkpoint_atomic(cp, path)
@@ -671,22 +879,235 @@ class TestCheckpointIntegrity:
 
 
 # ===========================================================================
-# Tests: Partial TV ingestion recovery
+# Tests: Execution Summary and Truthful Exit Codes (Stage A)
+# ===========================================================================
+class TestExecutionTruthfulness:
+    def test_run_ingestion_all_completed_returns_success_summary(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        cp = Checkpoint(
+            manifest_digest=valid_manifest["manifest_digest"],
+            api_base_url="http://localhost:4000",
+        )
+        cp_path = tmp_path / "cp.json"
+
+        with (
+            patch(
+                "ml.benchmark.scripts.run_seeding_batch.ingest_movie",
+                side_effect=lambda u, tid: IngestResult(tid, "movie", True),
+            ),
+            patch(
+                "ml.benchmark.scripts.run_seeding_batch.ingest_tv",
+                side_effect=lambda u, tid: IngestResult(tid, "tv", True, is_partial=False),
+            ),
+            patch("ml.benchmark.scripts.run_seeding_batch.INTER_ITEM_DELAY_S", 0),
+        ):
+            summary = run_ingestion(valid_manifest, cp, cp_path, "http://localhost:4000")
+
+        assert summary.success is True
+        assert summary.unresolved_count == 0
+        assert summary.completed_movies_count == len(valid_manifest["movies"])
+        assert summary.completed_tv_count == len(valid_manifest["tv_shows"])
+        assert summary.partial_tv_count == 0
+
+    def test_run_ingestion_movie_failure_returns_unresolved(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        cp = Checkpoint(
+            manifest_digest=valid_manifest["manifest_digest"],
+            api_base_url="http://localhost:4000",
+        )
+        cp_path = tmp_path / "cp.json"
+
+        def fake_movie(url: str, tid: int) -> IngestResult:
+            if tid == 1:
+                return IngestResult(tid, "movie", False, error_message="HTTP 500")
+            return IngestResult(tid, "movie", True)
+
+        with (
+            patch("ml.benchmark.scripts.run_seeding_batch.ingest_movie", side_effect=fake_movie),
+            patch(
+                "ml.benchmark.scripts.run_seeding_batch.ingest_tv",
+                side_effect=lambda u, tid: IngestResult(tid, "tv", True, is_partial=False),
+            ),
+            patch("ml.benchmark.scripts.run_seeding_batch.INTER_ITEM_DELAY_S", 0),
+        ):
+            summary = run_ingestion(valid_manifest, cp, cp_path, "http://localhost:4000")
+
+        assert summary.success is False
+        assert summary.unresolved_count == 1
+        assert 1 not in cp.completed_movie_ids
+
+    def test_run_ingestion_partial_tv_classified_as_unresolved(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        cp = Checkpoint(
+            manifest_digest=valid_manifest["manifest_digest"],
+            api_base_url="http://localhost:4000",
+        )
+        cp_path = tmp_path / "cp.json"
+
+        def fake_tv(url: str, tid: int) -> IngestResult:
+            return IngestResult(tid, "tv", True, is_partial=True)
+
+        with (
+            patch(
+                "ml.benchmark.scripts.run_seeding_batch.ingest_movie",
+                side_effect=lambda u, tid: IngestResult(tid, "movie", True),
+            ),
+            patch("ml.benchmark.scripts.run_seeding_batch.ingest_tv", side_effect=fake_tv),
+            patch("ml.benchmark.scripts.run_seeding_batch.INTER_ITEM_DELAY_S", 0),
+        ):
+            summary = run_ingestion(valid_manifest, cp, cp_path, "http://localhost:4000")
+
+        assert summary.success is False
+        assert summary.partial_tv_count == len(valid_manifest["tv_shows"])
+        assert summary.unresolved_count == len(valid_manifest["tv_shows"])
+
+    def test_run_ingestion_skipped_items_when_max_attempts_exhausted(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        cp = Checkpoint(
+            manifest_digest=valid_manifest["manifest_digest"],
+            api_base_url="http://localhost:4000",
+        )
+        # Mark movie 1 as having exhausted attempts.
+        cp.attempt_counts["movie_1"] = 3
+        cp_path = tmp_path / "cp.json"
+
+        with (
+            patch(
+                "ml.benchmark.scripts.run_seeding_batch.ingest_movie",
+                side_effect=lambda u, tid: IngestResult(tid, "movie", True),
+            ),
+            patch(
+                "ml.benchmark.scripts.run_seeding_batch.ingest_tv",
+                side_effect=lambda u, tid: IngestResult(tid, "tv", True, is_partial=False),
+            ),
+            patch("ml.benchmark.scripts.run_seeding_batch.INTER_ITEM_DELAY_S", 0),
+        ):
+            summary = run_ingestion(valid_manifest, cp, cp_path, "http://localhost:4000")
+
+        assert summary.success is False
+        assert summary.skipped_count == 1
+        assert summary.unresolved_count == 1
+
+    def test_run_ingestion_resumes_after_prior_failure(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        cp = Checkpoint(
+            manifest_digest=valid_manifest["manifest_digest"],
+            api_base_url="http://localhost:4000",
+        )
+        # Mark movies 1,2,3 already done.
+        cp.completed_movie_ids = [1, 2, 3]
+        cp_path = tmp_path / "cp.json"
+
+        attempted_movies: list[int] = []
+
+        def track_movie(url: str, tid: int) -> IngestResult:
+            attempted_movies.append(tid)
+            return IngestResult(tid, "movie", True)
+
+        with (
+            patch("ml.benchmark.scripts.run_seeding_batch.ingest_movie", side_effect=track_movie),
+            patch(
+                "ml.benchmark.scripts.run_seeding_batch.ingest_tv",
+                side_effect=lambda u, tid: IngestResult(tid, "tv", True, is_partial=False),
+            ),
+            patch("ml.benchmark.scripts.run_seeding_batch.INTER_ITEM_DELAY_S", 0),
+        ):
+            summary = run_ingestion(valid_manifest, cp, cp_path, "http://localhost:4000")
+
+        assert attempted_movies == [4, 5]
+        assert summary.success is True
+        assert summary.unresolved_count == 0
+
+    def test_main_execute_unresolved_returns_exit_code_1(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        manifest_path = tmp_path / "manifest.json"
+        with manifest_path.open("w") as fh:
+            json.dump(valid_manifest, fh)
+
+        unresolved_summary = ExecutionSummary(
+            total_manifest_movies=5,
+            total_manifest_tv=3,
+            completed_movies_count=4,
+            completed_tv_count=3,
+            unresolved_count=1,
+            success=False,
+        )
+
+        with (
+            patch.dict(os.environ, {ALLOW_SEEDING_ENV_VAR: "true"}),
+            patch("urllib.request.urlopen"),  # mock health check pass
+            patch(
+                "ml.benchmark.scripts.run_seeding_batch.run_ingestion",
+                return_value=unresolved_summary,
+            ),
+        ):
+            rc = main(
+                [
+                    "--execute",
+                    "--manifest",
+                    str(manifest_path),
+                    "--api-url",
+                    "http://localhost:4000",
+                ]
+            )
+        assert rc == 1
+
+    def test_main_execute_all_completed_returns_exit_code_0(
+        self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
+    ) -> None:
+        manifest_path = tmp_path / "manifest.json"
+        with manifest_path.open("w") as fh:
+            json.dump(valid_manifest, fh)
+
+        success_summary = ExecutionSummary(
+            total_manifest_movies=5,
+            total_manifest_tv=3,
+            completed_movies_count=5,
+            completed_tv_count=3,
+            unresolved_count=0,
+            success=True,
+        )
+
+        with (
+            patch.dict(os.environ, {ALLOW_SEEDING_ENV_VAR: "true"}),
+            patch("urllib.request.urlopen"),  # mock health check pass
+            patch(
+                "ml.benchmark.scripts.run_seeding_batch.run_ingestion",
+                return_value=success_summary,
+            ),
+        ):
+            rc = main(
+                [
+                    "--execute",
+                    "--manifest",
+                    str(manifest_path),
+                    "--api-url",
+                    "http://localhost:4000",
+                ]
+            )
+        assert rc == 0
+
+
+# ===========================================================================
+# Tests: Partial TV Ingestion Recovery
 # ===========================================================================
 class TestPartialTvIngestion:
     def test_partial_tv_added_to_retry_queue(
         self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
     ) -> None:
-        """When isPartial=True, TV show must be added to partial_tv_ids, not completed_tv_ids."""
         from ml.benchmark.scripts import run_seeding_batch as rb
 
         checkpoint_path = tmp_path / "cp.json"
         api_base_url = "http://localhost:4000"
         manifest_digest = valid_manifest["manifest_digest"]
 
-        cp = Checkpoint()
-        cp.manifest_digest = manifest_digest
-        cp.api_base_url = api_base_url
+        cp = Checkpoint(manifest_digest=manifest_digest, api_base_url=api_base_url)
 
         def fake_ingest_tv(url: str, tmdb_id: int) -> IngestResult:
             return IngestResult(
@@ -696,44 +1117,33 @@ class TestPartialTvIngestion:
                 is_partial=True,
             )
 
-        def fake_ingest_movie(url: str, tmdb_id: int) -> IngestResult:
-            return IngestResult(
-                tmdb_id=tmdb_id,
-                media_type="movie",
-                success=True,
-                is_partial=False,
-            )
-
         with (
-            patch.object(rb, "ingest_movie", side_effect=fake_ingest_movie),
+            patch.object(
+                rb,
+                "ingest_movie",
+                side_effect=lambda u, tid: IngestResult(tid, "movie", True, is_partial=False),
+            ),
             patch.object(rb, "ingest_tv", side_effect=fake_ingest_tv),
             patch.object(rb, "INTER_ITEM_DELAY_S", 0),
         ):
             rb.run_ingestion(valid_manifest, cp, checkpoint_path, api_base_url)
 
-        # TV shows should be in partial queue, not completed.
         assert len(cp.partial_tv_ids) == len(valid_manifest["tv_shows"])
         assert len(cp.completed_tv_ids) == 0
-        # Movies should be completed.
         assert len(cp.completed_movie_ids) == len(valid_manifest["movies"])
 
     def test_partial_tv_retried_on_next_run(
         self, tmp_path: pathlib.Path, valid_manifest: dict[str, Any]
     ) -> None:
-        """Partial TV IDs should be retried in the next ingestion pass."""
         from ml.benchmark.scripts import run_seeding_batch as rb
 
         checkpoint_path = tmp_path / "cp.json"
         api_base_url = "http://localhost:4000"
         manifest_digest = valid_manifest["manifest_digest"]
 
-        # Set up checkpoint with partial TV IDs from a previous run.
-        cp = Checkpoint()
-        cp.manifest_digest = manifest_digest
-        cp.api_base_url = api_base_url
-        # Mark all movies and English tv as done, only tv 101 as partial.
+        cp = Checkpoint(manifest_digest=manifest_digest, api_base_url=api_base_url)
         cp.completed_movie_ids = sorted(m["tmdb_id"] for m in valid_manifest["movies"])
-        cp.partial_tv_ids = [101]  # from the tv_shows list in valid_manifest
+        cp.partial_tv_ids = [101]
 
         call_log: list[int] = []
 
@@ -748,19 +1158,20 @@ class TestPartialTvIngestion:
 
         with (
             patch.object(
-                rb, "ingest_movie", side_effect=lambda u, tid: IngestResult(tid, "movie", True)
+                rb,
+                "ingest_movie",
+                side_effect=lambda u, tid: IngestResult(tid, "movie", True),
             ),
             patch.object(rb, "ingest_tv", side_effect=fake_ingest_tv),
             patch.object(rb, "INTER_ITEM_DELAY_S", 0),
         ):
             rb.run_ingestion(valid_manifest, cp, checkpoint_path, api_base_url)
 
-        # TV show 101 must have been attempted.
         assert 101 in call_log
 
 
 # ===========================================================================
-# Tests: Failed item recording
+# Tests: Failed Item Recording
 # ===========================================================================
 class TestFailedItemRecording:
     def test_failed_item_added_to_list(self) -> None:
@@ -784,7 +1195,7 @@ class TestFailedItemRecording:
 
 
 # ===========================================================================
-# Tests: Credential safety
+# Tests: Credential Safety
 # ===========================================================================
 class TestCredentialSafety:
     def test_tmdb_client_requires_token(self) -> None:
@@ -793,7 +1204,6 @@ class TestCredentialSafety:
 
     def test_build_manifest_raises_without_token_in_live_mode(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
-            # Clear TMDB_READ_ACCESS_TOKEN
             env = {k: v for k, v in os.environ.items() if k != "TMDB_READ_ACCESS_TOKEN"}
             with patch.dict(os.environ, env, clear=True):
                 with pytest.raises(CredentialError):

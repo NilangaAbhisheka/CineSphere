@@ -1,8 +1,8 @@
 # CineSphere — System Architecture
 
-**Status:** Active / Implemented Baseline (Phases 1–4 Complete; Phase 5 Stage 5.0 Benchmark Preparation Tooling Verified)<br>
-**Last Updated:** 2026-11-24<br>
-**Version:** 1.5
+**Status:** Active / Implemented Baseline (Phases 1–4 Complete; Phase 5 Stage 5.0 Benchmark Preparation & Hardened Seeding Pipeline Verified)<br>
+**Last Updated:** 2026-11-25<br>
+**Version:** 1.6
 
 > This document describes the CineSphere system architecture. The foundation (Phase 1), catalogue and TMDB integration (Phase 2), personal library & tracking system (Phase 3 Stages 3.0–3.8), personal statistics & data import/export (Phase 4 Stages 4.1–4.5), and candidate embedding benchmark preparation tooling (Phase 5 Stage 5.0) are fully implemented and verified with automated test suites. Production recommendation engine implementation (Stage 5.1), recommendation intelligence, and the Movie Universe visualization remain design specifications.
 

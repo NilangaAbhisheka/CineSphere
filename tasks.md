@@ -671,6 +671,14 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Stage E: Corrected candidate quota arithmetic in `STAGE_5.0.3_TMDB_CATALOGUE_SEEDING_PLAN.md` ($\lceil 1,224 \times 1.15 \rceil = 1,408$, $\lceil 482 \times 1.15 \rceil = 555$, request counts $\approx 4,023$)
   - [x] Added 57 new automated unit tests in `ml/tests/test_seeding_pipeline.py`, bringing `ml/tests` to 105/105 passing
   - [x] Full monorepo and CI green (TypeScript 280 unit + 242 web tests, Python 105 tests, E2E passing, build successful)
+- [x] Stage 5.0.3-B.1.1 — Pre-Seeding Safety Review & Fail-Closed Corrections (Completed ✅)
+  - [x] Stage A: Structured `ExecutionSummary` dataclass tracking completed, failed, skipped, and partial items; exit code 1 returned whenever unresolved items remain; exit code 0 reserved exclusively for 100% completion
+  - [x] Stage B: Manifest validation at runner boundary (independent probe loading from `probes_v1.json`, reject probe IDs, duplicate detection, count verification, target/diversity enforcement, reject diagnostic manifests in execution mode)
+  - [x] Stage C: Fail-closed candidate generation (`load_existing_catalogue_ids` fails closed in `--execution-ready` mode if DB audit fails, `is_executable=False` when quotas not met, `math.ceil` rounding for diversity minimums, `is_executable` covered by SHA-256 digest)
+  - [x] Stage D: Target safeguards (local loopback only by default, `CINESPHERE_ALLOW_REMOTE_SEEDING=true` override required for remote targets, target URL normalization with trailing slash and lowercase host stripping)
+  - [x] Stage E: Accurate rate pacing declarations (`TMDB_MAX_CONCURRENCY = 1` in `TmdbHttpClient` matching sequential promise-chain queue, updated rate-limit documentation regarding TMDB's dynamic 429 Retry-After handling)
+  - [x] Stage F: Reconciled `STAGE_5.0.3_TMDB_CATALOGUE_SEEDING_PLAN.md`, `tasks.md`, `README.md`, `ARCHITECTURE.md`, `PROJECT_PLAN.md`, and `AI_DEVELOPMENT_GUIDE.md`
+  - [x] Expanded automated test suite to 128 passing Python tests in `ml/tests` (23 new/expanded tests in `test_seeding_pipeline.py`)
 - [ ] Stage 5.0.3-B.2 — Catalogue Data Seeding Execution (PREREQUISITE for Benchmark Fixture Generation — NOT YET AUTHORIZED)
   - [ ] Ingest real TMDB catalogue records to satisfy 1,400 movie quota and 600 TV show quota
   - [ ] Ensure all 50 mandatory benchmark probes are present with matching identity in database
