@@ -14,7 +14,7 @@
 
 A comprehensive inspection of the current Git workspace was conducted prior to drafting this document:
 
-- **Current HEAD Commit:** `41beaf6ec1324abe48bd264200935e1e298d382f` (`fix(seeding): bind snapshot identity and table reads to single consistent connection (Stage 5.0.3-B.2-D)`)
+- **Current HEAD Commit:** `0aab4f5845c65443b7f5d126e68afc45af907b8a` (`fix(seeding): configure native psycopg2 REPEATABLE READ READ ONLY session and add live PostgreSQL integration tests (Stage 5.0.3-B.2-E)`)
 - **Git Branch:** `main` (synchronized with `origin/main`)
 - **Working Tree:** Clean (8 untracked legacy `docs/PHASE_5_TECHNICAL_DESIGN_PROPOSAL_*.md` drafts, intentionally untracked)
 - **Authoritative Source Files Inspected:**
