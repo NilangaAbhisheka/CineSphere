@@ -118,3 +118,16 @@ def test_tokenizer_audit_with_mock_tokenizer() -> None:
     assert res["record_count"] == 2
     assert res["exceeding_limit_count"] == 1
     assert res["exceeding_limit_pct"] == 50.0
+
+
+def test_model_revisions_are_pinned_immutable_shas() -> None:
+    import re
+
+    sha_pattern = re.compile(r"^[0-9a-f]{40}$")
+    for key, spec in MODELS.items():
+        assert spec.revision != "main", f"{key} must not use mutable 'main' revision"
+        assert sha_pattern.match(spec.revision), (
+            f"{key} revision {spec.revision!r} is not a 40-char lowercase hex commit SHA"
+        )
+    assert MODELS["model_a"].revision == "e4ce9877abf3edfe10b0d82785e83bdcb973e22e"
+    assert MODELS["model_b"].revision == "9a3225965996d404b775526de6dbfe85d3368642"

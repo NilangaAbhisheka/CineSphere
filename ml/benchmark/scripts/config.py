@@ -32,7 +32,7 @@ MODELS: dict[str, ModelSpec] = {
     "model_b": ModelSpec(
         key="model_b",
         model_id="sentence-transformers/all-mpnet-base-v2",
-        revision="9a3225965f84d4ed3029da714acd769403388881",
+        revision="9a3225965996d404b775526de6dbfe85d3368642",
         dim=768,
         max_seq_length=384,
         name="MPNet-base-v2",

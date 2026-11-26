@@ -907,7 +907,7 @@ The Stage 5.0 evaluation compares exactly two model candidates, both executed on
    - Normalization: Unit $L_2$ normalized via cosine metric.
 
 2. **Model B (Quality Baseline):** `sentence-transformers/all-mpnet-base-v2`
-   - Revision Git Commit: `9a3225965f84d4ed3029da714acd769403388881`
+   - Revision Git Commit: `9a3225965996d404b775526de6dbfe85d3368642`
    - Parameters: ~109M (MPNet 12-layer masked and permuted architecture)
    - Dimension: 768d (fixed)
    - Context Window: 384 tokens
