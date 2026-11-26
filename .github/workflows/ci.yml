@@ -102,6 +102,18 @@ jobs:
       - name: Pytest
         run: python -m pytest ml/tests -v
 
+      - name: Validate Benchmark Fixture Integrity
+        run: |
+          python -c "
+          import hashlib, json, pathlib
+          p = pathlib.Path('ml/benchmark/fixtures/catalogue_snapshot_v1.jsonl')
+          sha = hashlib.sha256(p.read_bytes()).hexdigest()
+          m = json.loads(pathlib.Path('ml/benchmark/fixtures/catalogue_snapshot_v1.manifest.json').read_text())
+          assert sha == m['sha256'], f'SHA mismatch: {sha}'
+          assert m['record_count'] == 2000
+          print(f'Fixture OK ({sha[:16]}...)')
+          "
+
   e2e:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest

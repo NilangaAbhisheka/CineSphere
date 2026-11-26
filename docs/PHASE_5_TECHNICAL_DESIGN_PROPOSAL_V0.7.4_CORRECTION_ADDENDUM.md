@@ -890,9 +890,13 @@ When a person's name is updated in `persons`, multiple movies and TV shows may b
 
 ## 8. C7 — Reproducible Scientific Benchmark & Model Evaluation Protocol
 
-### 8.1: Pinned Model Identifiers, Candidate Architecture & Asymmetric Query/Document Encoding
+### 8.1: Pinned Model Identifiers & Candidate Architecture — Two-Model Active Protocol
 
-The Stage 5.0 evaluation universe evaluates three distinct model candidates across separate, non-overlapping embedding spaces:
+> [!IMPORTANT]
+> **Stage 5.0.4 Scope Correction (2026-11-26):** Model C (
+vidia/Nemotron-3.5-Embed-1B-BF16) is **excluded by explicit project-owner decision** due to excessive resource requirements for this personal CPU-oriented benchmark. See Section 8.10 for the preserved historical feasibility analysis. All remaining sections 8.1–8.9 describe the two-model active protocol only.
+
+The Stage 5.0 evaluation compares exactly two model candidates, both executed on CPU:
 
 1. **Model A (Efficiency Baseline):** `sentence-transformers/all-MiniLM-L6-v2`
    - Revision Git Commit: `e4ce9877abf3edfe10b0d82785e83bdcb973e22e`
@@ -910,26 +914,19 @@ The Stage 5.0 evaluation universe evaluates three distinct model candidates acro
    - Encoding Paradigm: **Symmetric STS** (identical `model.encode(texts)` call).
    - Normalization: Unit $L_2$ normalized via cosine metric.
 
-3. **Model C (Frontier Open Candidate):** `nvidia/Nemotron-3.5-Embed-1B-BF16`
-   - Model Identifier: `nvidia/Nemotron-3.5-Embed-1B-BF16` (Hugging Face)
-   - Parameters: ~1.14B language model backbone (~1.55B total including vision projection modules)
-   - Dimension: 2048d (native) with supported **Matryoshka Dimensionality Reduction** (MRL) to **1024d** and **512d** via vector prefix truncation and $L_2$-renormalization.
-   - Context Window: Up to 32,768 tokens (evaluated at 512 and 1024 tokens for CineSphere metadata).
-   - Encoding Paradigm: **Asymmetric Retrieval (RAG)**. Unlike symmetric STS models, Nemotron utilizes specialized task instructions:
-     - **Evaluation Probes (Queries):** Encoded via `model.encode_query(queries)` or `model.encode(queries, prompt_name="query")`.
-     - **Catalogue Candidates (Documents):** Encoded via `model.encode_document(docs)` or `model.encode(docs, prompt_name="passage")`.
-     - _Methodological Rationale:_ In content-based item recommendation, the evaluation probe represents the user's focal interest (the query), while catalogue titles represent the corpus of available inventory (passages). Using asymmetric encoding respects the pre-trained attention biases of the dense retrieval architecture.
-   - Normalization: Mean pooling followed by strict unit $L_2$ normalization.
-   - License: **OpenMDW License Agreement v1.1 (OpenMDW-1.1)** — Permitted for commercial and non-commercial local execution.
-   - _Quantized Variant Investigation (`Nemotron-3.5-Embed-1B-NVFP4`):_ Officially released using NVIDIA NVFP4 (compressed-tensors). **Ruled out for local execution** on the project hardware (RTX 3050): NVFP4 hardware acceleration requires NVIDIA Blackwell architecture (Compute Capability 10.0+). The RTX 3050 is an Ampere GPU (Compute Capability 8.6) lacking FP4 tensor cores; emulation is unsupported or yields severe latency penalties.
+3. ~~**Model C (Excluded — nvidia/Nemotron-3.5-Embed-1B-BF16):** Excluded by explicit
+   project-owner decision due to excessive GPU resource requirements for this CPU-oriented
+   personal benchmark. Full historical feasibility analysis and hardware preflight diagnostic
+   preserved in Section 8.10.~~
 
 ### 8.2: Candidate Retrieval, Query Exclusion & Multi-Model Candidate Pooling
 
 1. **Query Exclusion:** The query item itself is strictly excluded from candidate evaluation ($c \in \mathcal{C} \setminus \{q\}$).
-2. **Multi-Model Blinded Pooling:** Top-20 nearest neighbours from Model A, Model B, and Model C are pooled:
-   $$\text{Pool}_q = \text{Top20}_A(q) \cup \text{Top20}_B(q) \cup \text{Top20}_C(q)$$
-   - Each pool contains between 20 and 60 unique candidates.
-   - Candidates are assigned randomized UUIDs and stripped of model provenance, raw similarity scores, and ranking position.
+2. **Multi-Model Blinded Pooling:** Top-20 nearest neighbours from Model A and Model B are pooled:
+   $$\text{Pool}_q = \text{Top20}_A(q) \cup \text{Top20}_B(q)$$
+   - Each pool contains between 20 and 40 unique candidates (maximum 40 when both model top-20 sets are fully disjoint).
+   - The **full union pool** is annotated, not just the top-10 of each model, ensuring each candidate receives a grade before metric computation.
+   - Candidates are assigned deterministic UUIDs (`uuid.uuid5`) and stripped of model provenance, raw similarity scores, and ranking position.
 3. **Independent Ranking per Model:** Every model evaluates the identical common candidate pool $\text{Pool}_q$. Each model ranks candidates strictly by cosine similarity within its own embedding space:
    $$s_m(q, c) = \cos(\mathbf{v}_m(q), \mathbf{v}_m(c))$$
    - A model evaluates only its top-10 ranked candidates ($\text{Top10}_{m, q}$).
@@ -943,16 +940,27 @@ The Stage 5.0 evaluation universe evaluates three distinct model candidates acro
 - **Grade 1 (Weakly Related):** Superficial overlap only with conflicting tone or narrative intent.
 - **Grade 0 (Irrelevant / Noise):** Zero meaningful narrative, thematic, or tonal connection.
 
-Consensus grade is the arithmetic mean: $g = (g_1 + g_2) / 2$. Candidates with $g \ge 1.5$ are considered relevant.
+With a single human evaluator, the grade $g(c)$ is the evaluator's direct score (no averaging required). Candidates with $g \ge 1.5$ (i.e., Grade 2 or 3) are considered relevant.
 
-### 8.4: Inter-Rater Reliability (Weighted Cohen's Kappa) & Adjudication
+> [!NOTE]
+> **Single-Evaluator Protocol:** A second independent human evaluator is unavailable for this personal project. The final TD-08 report must explicitly disclose the absence of a second rater. An LLM (e.g., Gemini) may be used as a supplementary cross-check on a random 10% sample, clearly labelled as supplementary and not as an independent human rater.
 
-- Inter-rater agreement calculated via Linear-Weighted Cohen's Kappa: $\kappa_w \ge 0.70$.
-- Any candidate with $|g_1 - g_2| \ge 2$ is reviewed in a joint adjudication session with the project owner.
+### 8.4: Single-Evaluator Protocol & Limitation Disclosure
+
+A second independent human evaluator is unavailable for this personal portfolio project. Human–human Linear-Weighted Cohen's Kappa ($\kappa_w$) is therefore **not computed or reported**.
+
+> [!CAUTION]
+> **Mandatory Limitation Disclosure:** The final TD-08 Recommendation Report must explicitly state that only a single human evaluator graded the annotation pool. This is a known limitation. Readers should interpret inter-model quality differences with appropriate caution.
+
+- **LLM Supplementary Check (Optional):** A large language model (e.g., Gemini) may review a randomly selected 10% sample of the blinded annotation pool as a supplementary cross-check. Any LLM involvement must be clearly labelled as supplementary, not independent, in the TD-08 report.
+- **Self-Adjudication:** Any candidate where the human evaluator is uncertain may be revisited after a 24-hour cooling-off period for a fresh blind re-grade.
 
 ### 8.5: Mathematical Formulations: Recall@10, Macro Pooled Recall@10, MRR@10 & ILD
 
-The evaluation uses four mathematically explicit metrics computed over the consensus relevance grades $g(c) = (g_1(c) + g_2(c)) / 2$:
+The evaluation uses three mathematically explicit metrics computed over the single-evaluator relevance grade $g(c)$:
+
+> [!NOTE]
+> **Paired Bootstrap Requirement:** Confidence intervals for each metric must use **paired, stratified resampling** — the same set of probe indices is resampled for both models in every bootstrap iteration. Report per-model estimates, per-model 95% CIs, **and** the paired model-difference estimate with its own 95% CI.
 
 #### 1. Recall@10 and Macro Pooled Recall@10
 
@@ -965,7 +973,7 @@ where $\text{PooledRelevant}_q = \{ c \in \text{Pool}_q \mid g(c) \ge 1.5 \}$. I
 
 Because retrieval candidate evaluation is truncated to the top-10 ranked results, the metric is formally designated as **MRR@10** (not unqualified MRR):
 
-- **Relevance Threshold & Consensus Mechanics:** A candidate $c$ is defined as relevant if and only if its consensus grade meets the established threshold: $g(c) \ge 1.5$. Note that because the consensus grade is the arithmetic mean $g(c) = (g_1(c) + g_2(c)) / 2$, a score of $1.5$ does **not** imply that both evaluators assigned Grade 2 or Grade 3; it also naturally results when one evaluator assigns Grade 1 (Weakly Related) and the other assigns Grade 2 (Substantively Relevant), or when grades are 0 and 3. Any candidate satisfying $g(c) \ge 1.5$ qualifies as relevant.
+- **Relevance Threshold (Single Evaluator):** A candidate $c$ is defined as relevant if and only if its single-evaluator grade meets the threshold: $g(c) \ge 1.5$ (Grade 2 or 3). Grade 1 (Weakly Related) does not meet the threshold.
 - **First Relevant Rank ($\operatorname{rank}\_q$):** Let $(c_1, c_2, \dots, c_{10})$ be the model's top-10 candidates ordered by descending cosine similarity. The rank of the first relevant candidate within the top-10 is:
   $$\operatorname{rank}_q = \min \big( \{ k \in \{1, 2, \dots, 10\} \mid g(c_k) \ge 1.5 \} \cup \{ \infty \} \big)$$
 - **Reciprocal Rank ($RR@10(q)$):**
@@ -991,32 +999,32 @@ Bootstrap resampling is **stratified**:
 
 ### 8.7: Hardware Profiling Methodology: Warmup, Latency & Thread Pinning
 
-- **Warmup:** 5 warmup batches of 32 items (or single items for Model C).
+- **Warmup:** 5 warmup batches of 32 items.
 - **Repetitions:** 10 independent iterations over the 50 probes.
 - **Latency:** Monotonic timer `time.perf_counter_ns()` reporting p50, p95, p99 per query in ms.
-- **Throughput:** Items/sec across 1,000 items with batch size $B=32$ (Models A & B) and $B=1$ (Model C).
+- **Throughput:** Items/sec across 1,000 items with batch size $B=32$ (CPU; Models A & B).
 - **Thread Pinning:** Single-socket CPU execution with `torch.set_num_threads(4)` for baseline models.
-- **Memory Consumption:** Peak Resident Set Size (RSS in MB) via `psutil` for CPU; peak allocated and reserved VRAM via `torch.cuda.max_memory_allocated()` for GPU.
+- **Memory Consumption:** Peak Resident Set Size (RSS in MB) via `psutil`. GPU VRAM monitoring is not applicable (CPU-only benchmark).
 
 #### 8.7.1: Device-Specific Performance Reporting & Cross-Hardware Boundaries
 
 To maintain rigorous scientific validity, the evaluation methodology enforces strict separation between quality and performance comparisons:
 
 1. **Retrieval Quality Metrics (Recall@10, MRR@10, ILD):** Directly comparable across all candidate models because all models evaluate against the **identical common candidate pool** $\text{Pool}_q$ using adjudicated human consensus relevance labels.
-2. **Computational Performance Metrics (Throughput & Latency):** **Never directly comparable across different hardware devices.** Models A and B execute on host CPU (Intel Core i5-13420H), whereas Model C executes on host GPU (NVIDIA RTX 3050 6 GB). Performance reports must present throughput, latency, and resource utilization in separate, device-specific tables explicitly documenting:
-   - Device type (`CPU` vs `CUDA:0`)
-   - Execution precision (`FP32` vs `BF16`)
-   - Batch size ($B=32$ vs $B=1$)
+2. **Computational Performance Metrics (Throughput & Latency):** Both models execute on the same CPU device (Intel Core i5-13420H), so relative throughput and latency comparisons are valid within this benchmark. Reports must document:
+   - Device type (`CPU`)
+   - Execution precision (`FP32`)
+   - Batch size ($B=32$)
    - Context length ($L$)
-   - Execution environment (`.venv-baseline` vs `.venv-nemotron`)
-3. **No Cross-Device Speed Claims:** Under no circumstances may Model C on GPU be claimed as "faster" than Model A or B on CPU as an algorithmic advantage, nor may CPU execution of lightweight models be cited to disparage GPU throughput.
+   - Execution environment (`.venv-baseline` or `[benchmark]` optional group)
+3. **Intra-CPU Comparisons Only:** Performance comparison is restricted to Model A vs. Model B on the same CPU. No GPU comparisons are made in this benchmark.
 
 ### 8.8: Three Tiers of Reproducibility & Environment Manifest
 
 To maintain scientific rigor without claiming unattainable bit-for-bit exactness across heterogeneous hardware:
 
 1. **Tier 1 (Computational Reproducibility):** Pinned dependencies, seeds, and model revisions guarantee statistically indistinguishable embeddings across identical CPU architectures (subject to minor sub-threshold BLAS/AVX floating-point rounding differences).
-2. **Tier 2 (Human Evaluation Reproducibility):** Blinded candidate pooling, explicit 4-point rubric, certified inter-rater reliability ($\kappa_w \ge 0.70$), and recorded adjudication logs guarantee consistent evaluation ground truth.
+2. **Tier 2 (Human Evaluation Reproducibility):** Blinded candidate pooling, explicit 4-point rubric, single-evaluator grading with explicit limitation disclosure in the TD-08 report. See Section 8.4 for the single-evaluator protocol.
 3. **Tier 3 (Cross-Hardware Comparability):** Relative ranking between Model A and Model B, MRR, and Pooled Recall@10 trends are robust across CPU architectures even if absolute inference latencies vary.
 
 **Isolated Environment Manifests:**
@@ -1035,15 +1043,7 @@ To ensure complete reproducibility without dependency conflicts, Models A and B 
    - Random Seed: `42` (`torch.manual_seed(42)`, `numpy.random.seed(42)`)
    - Deterministic Flags: `torch.use_deterministic_algorithms(True)`
 
-2. **Environment Tier 2 (Frontier Candidate Model C — GPU/CUDA Pinned):**
-   - Path: `ml/benchmark/.venv-nemotron`
-   - Python: `3.11+` (or 3.12)
-   - PyTorch: `2.4.1+cu121` (CUDA 12.1 runtime)
-   - Sentence Transformers: `3.1.1` (required for native `encode_query` / `encode_document` support)
-   - Transformers: `4.45.2` (required for Nemotron architecture and config parsing)
-   - Accelerate: `0.34.2`
-   - NumPy: `1.26.4`
-   - FlashAttention: `flash-attn>=2.6.3` (WSL2/Linux only; on Windows native, falls back to PyTorch SDPA `scaled_dot_product_attention`)
+~~2. **Environment Tier 2 (Frontier Candidate Model C — GPU/CUDA Pinned):** Removed. Model C is excluded from the benchmark. See Section 8.10 for the preserved historical environment specification.~~
 
 ### 8.9: Enumerated 50-Probe Stratified Evaluation Universe (PB-01 to PB-50)
 
@@ -1311,11 +1311,11 @@ The evaluation package generates three coordinated artifacts under `ml/benchmark
 Stage 5.0 is an **isolated scientific evaluation phase** scoped exclusively to `ml/benchmark/`.
 
 - **Authorized Activities upon Owner Approval:**
-  1. Initialize isolated Python virtual environments in `ml/benchmark/.venv-baseline` (for Models A and B) and `ml/benchmark/.venv-nemotron` (for Model C).
+  1. Install the `[benchmark]` optional dependency group (`pip install -e ".[benchmark]"`) or use an isolated venv `ml/benchmark/.venv-baseline` for Models A and B.
   2. Install pinned dependencies from Section 8.8.
   3. Load pinned fixtures: `catalogue_snapshot_v1.jsonl` and 50 probes.
-  4. Execute benchmark runs for Model A, Model B, and Model C (upon successful preflight).
-  5. Facilitate blinded dual-evaluator grading and compute $\kappa_w$.
+  4. Execute benchmark runs for Model A and Model B.
+  5. Facilitate single-evaluator blinded grading per the protocol in Section 8.4 (with explicit limitation disclosure in the TD-08 report).
   6. Measure CPU latency, throughput, and peak RSS.
   7. Compute Macro Pooled Recall@10, MRR, and ILD with 95% bootstrap confidence intervals.
   8. Deliver the comprehensive TD-08 Recommendation Report.

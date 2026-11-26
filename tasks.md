@@ -15,6 +15,37 @@
 | Current Milestone | Stage 5.0.3-B.2-G Complete ✅ (Controlled Live Catalogue Seeding & Stage 5.0 Benchmark Fixture Generation) — Ingested `50/50` mandatory probes (`run_probe_ingestion.py`) + `1,408/1,408` candidate movies & `545/555` candidate TV shows (`run_seeding_batch.py`; 10 long-running TV shows hit Prisma 5s transaction timeout); post-seeding DB audit verified `1,584` eligible movies ($\ge 1,400$), `663` eligible TV shows ($\ge 600$), `50/50` probes; pre/post personal-data SHA-256 fingerprints unchanged across all 6 tables (`users=1098`, `user_library_entries=765`, `viewing_events=38`, `episode_progress=205`, `season_ratings=138`, `system_configs=0`); generated `catalogue_snapshot_v1.jsonl` (`2,000` records: `1,400` movies + `600` TV including `50` probes, SHA-256 `042dccd50ee4f01f9d63f56f3a161aa5c3de9d2ea7ed2a9b6cc6162a0d6d6fe9`). Next: Stage 5.0 Embedding Model Benchmark Execution |
 | Last Updated      | 2026-11-25                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
+
+### 5.0.4 Embedding Model Benchmark Execution (Stage 5.0.4)
+
+**Decision:** Model C (Nemotron) excluded by explicit owner decision. Two models remain:
+- **Model A:** `sentence-transformers/all-MiniLM-L6-v2` (384d, efficiency baseline)
+- **Model B:** `sentence-transformers/all-mpnet-base-v2` (768d, quality baseline)
+
+**Headline Metrics:** MacroPooledRecall@10, MRR@10, ILD per spec Section 8.5
+
+- [x] Stage 5.0.4-A: Benchmark readiness audit completed
+- [x] Stage 5.0.4-A: Spec corrected in-place for two-model protocol
+- [ ] Stage 5.0.4-B: Benchmark foundation implemented and smoke-tested
+  - [ ] `config.py` — model config & path constants
+  - [ ] `validate_fixture.py` — fixture integrity + schema validation
+  - [ ] `tokenizer_audit.py` — token-count audit for both models
+  - [ ] `embed_catalogue.py` — embedding generation + cache with manifest
+  - [ ] `retrieve_candidates.py` — top-20 retrieval + union pool
+  - [ ] `generate_annotation_sheet.py` — blinded annotation artifacts
+  - [ ] `compute_metrics.py` — MacroPooledRecall@10, MRR@10, ILD + paired bootstrap CI
+  - [ ] `hardware_profile.py` — warmup, latency, throughput, RSS
+  - [ ] `run_benchmark.py` — orchestrator CLI
+  - [ ] `test_benchmark_foundation.py` — fixture + config + cache tests
+  - [ ] `test_benchmark_runner.py` — retrieval + metrics + bootstrap tests
+- [ ] Stage 5.0.4-C: Tokenizer audit completed
+- [ ] Stage 5.0.4-D: Embedding generation + cache completed
+- [ ] Stage 5.0.4-E: Retrieval + union pool completed
+- [ ] Stage 5.0.4-F: Blinded annotation artifacts generated
+- [ ] Stage 5.0.4-G: **Human annotation: PENDING** (manual grading by project owner)
+- [ ] Stage 5.0.4-H: Metric computation + bootstrap CI
+- [ ] Stage 5.0.4-I: TD-08 Decision Record — **PENDING annotation completion**
+
 ---
 
 ## Overall Progress
@@ -36,10 +67,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ## Blocked Tasks
 
-1. **Benchmark Fixture Generation (`catalogue_snapshot_v1.jsonl`):**
-   - **Status:** **BLOCKED** by catalogue data deficit in the local PostgreSQL database.
-   - **Prerequisites Needed:** 1,400 movies with non-empty overview (deficit: 1,262), 600 TV shows with non-empty overview (deficit: 494), and all 50 mandatory benchmark probes present with verified identity.
-   - **Resolution Path:** Stage 5.0.3-B catalogue seeding execution (pending separate explicit authorization).
+1. ~~**Benchmark Fixture Generation (`catalogue_snapshot_v1.jsonl`):** RESOLVED — Stage 5.0.3-B.2-G seeding and fixture generation completed. Fixture committed at HEAD `55caa62`.~~
 2. **Production Recommendation Engine (Stage 5.1):**
    - **Status:** **BLOCKED** pending completion of Stage 5.0 scientific benchmark evaluation and formal selection of embedding model (TD-08).
 
@@ -719,7 +747,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [ ] Benchmark Model B (`sentence-transformers/all-mpnet-base-v2`, 768-d)
   - [ ] Benchmark Model C (`nvidia/Nemotron-3.5-Embed-1B-BF16`, 2048-d)
   - [ ] Multi-faceted relevance grading across 50 probes
-  - [ ] Compute retrieval quality metrics (MRR@10, NDCG@10, MAP@10) and hardware profiling
+  - [ ] Compute retrieval quality metrics (MacroPooledRecall@10, MRR@10, ILD per spec Section 8.5) and hardware profiling
   - [ ] Produce Recommendation Decision Record (RDR) to resolve TD-08
 - [ ] Recommendation Engine Implementation (Stage 5.1 — Pending TD-08 Resolution)
 

@@ -1,0 +1,28 @@
+{
+  "fixture_sha256": "042dccd50ee4f01f9d63f56f3a161aa5c3de9d2ea7ed2a9b6cc6162a0d6d6fe9",
+  "record_count": 2000,
+  "seed": 42,
+  "cpu_threads": 4,
+  "generated_at": null,
+  "status": "pending_execution",
+  "models": {
+    "model_a": {
+      "model_id": "sentence-transformers/all-MiniLM-L6-v2",
+      "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+      "dim": 384,
+      "max_seq_length": 256,
+      "batch_size": 32,
+      "normalized": true,
+      "file": "embeddings_model_a.npy"
+    },
+    "model_b": {
+      "model_id": "sentence-transformers/all-mpnet-base-v2",
+      "revision": "9a3225965f84d4ed3029da714acd769403388881",
+      "dim": 768,
+      "max_seq_length": 384,
+      "batch_size": 32,
+      "normalized": true,
+      "file": "embeddings_model_b.npy"
+    }
+  }
+}

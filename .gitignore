@@ -160,3 +160,12 @@ ehthumbs_vista.db
 *.tmp
 *.temp
 *~
+
+# Benchmark generated artifacts (reproducible from source; do not commit)
+ml/benchmark/.venv-baseline/
+ml/benchmark/embeddings/*.npy
+ml/benchmark/embeddings/*.npz
+ml/benchmark/annotation/
+ml/benchmark/results/
+# Allow embedding cache manifest (small JSON committed for reference)
+!ml/benchmark/embeddings/embedding_cache_manifest.json
