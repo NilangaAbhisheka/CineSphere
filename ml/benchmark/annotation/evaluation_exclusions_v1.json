@@ -1,0 +1,408 @@
+{
+  "schema_version": "1.0.0",
+  "stage": "5.0.4-H",
+  "description": "Owner-approved exclusion manifest for Stage 5.0.4-H evaluation. Excludes all 42 synthetic placeholder records from the evaluation dataset. Policy: Option A \u2014 exclude all synthetic placeholder records regardless of assigned grade. These records originate from synthetic test fixture data seeded during Stage 5.0.3-B.2 with overview='Test show overview', empty genres, and year=2024.",
+  "owner_decision": "option_a_exclude_all_42",
+  "owner_decision_statement": "Exclude all 42 synthetic placeholder records from evaluation, including the PB-40 record with blinded ID 005f1807-2fb3-5e9f-925b-edee776404c3, which has grade=3. No placeholder is retained merely because it has a completed human grade.",
+  "exclusion_reason": "Synthetic fixture data: overview='Test show overview', genres=[], year=2024. Not real TMDB titles. Embedding-based retrieval of these records is a retrieval artifact, not evidence of semantic relevance. Grading was based on title recognition, not content.",
+  "source_fixture": "catalogue_snapshot_v1.jsonl",
+  "fixture_sha256": "042dccd50ee4f01f9d63f56f3a161aa5c3de9d2ea7ed2a9b6cc6162a0d6d6fe9",
+  "annotation_worksheet": "annotation_worksheet_v1.json",
+  "exclusion_count": 42,
+  "probe_distribution": {
+    "PB-32": 6,
+    "PB-36": 6,
+    "PB-37": 6,
+    "PB-38": 6,
+    "PB-40": 12,
+    "PB-45": 6
+  },
+  "pb40_grade3_exclusion": {
+    "blinded_id": "005f1807-2fb3-5e9f-925b-edee776404c3",
+    "probe_id": "PB-40",
+    "original_grade": 3,
+    "note": "This record was graded before the owner flagged PB-40 placeholders as INVALID. Per owner Option A decision, it is excluded despite having grade=3."
+  },
+  "generated_at": "2026-11-26T13:36:32.199296+00:00",
+  "generated_by": "Stage 5.0.4-H exclusion manifest generator",
+  "exclusions": [
+    {
+      "blinded_id": "0f6f42d8-438a-518d-9bc9-2bd46b422150",
+      "probe_id": "PB-32",
+      "source_pool": "pool_PB-32.json",
+      "reason": "synthetic_placeholder",
+      "title": "Succession",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "1d13c41d-e5b7-5a5a-98d9-4d65e9cad1f8",
+      "probe_id": "PB-32",
+      "source_pool": "pool_PB-32.json",
+      "reason": "synthetic_placeholder",
+      "title": "Succession",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "3e41d6e5-2d99-5ca1-9e02-c2e5b2900444",
+      "probe_id": "PB-32",
+      "source_pool": "pool_PB-32.json",
+      "reason": "synthetic_placeholder",
+      "title": "Succession",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "8050aef9-ff1d-5be1-8321-23ddc6ed1811",
+      "probe_id": "PB-32",
+      "source_pool": "pool_PB-32.json",
+      "reason": "synthetic_placeholder",
+      "title": "Succession",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "b407eb89-198a-522d-b999-c9c5d4ce0bf5",
+      "probe_id": "PB-32",
+      "source_pool": "pool_PB-32.json",
+      "reason": "synthetic_placeholder",
+      "title": "Succession",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "e3d03aa7-67db-5d7a-9f00-55d96044c087",
+      "probe_id": "PB-32",
+      "source_pool": "pool_PB-32.json",
+      "reason": "synthetic_placeholder",
+      "title": "Succession",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "02312e4b-07e0-5db2-9ac8-cfc058dc949f",
+      "probe_id": "PB-36",
+      "source_pool": "pool_PB-36.json",
+      "reason": "synthetic_placeholder",
+      "title": "Severance",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "0cdf5c2a-fb39-5575-804c-4e7a92e5d1f2",
+      "probe_id": "PB-36",
+      "source_pool": "pool_PB-36.json",
+      "reason": "synthetic_placeholder",
+      "title": "Severance",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "5affd15a-1448-5b1b-8994-e9bf9f327d60",
+      "probe_id": "PB-36",
+      "source_pool": "pool_PB-36.json",
+      "reason": "synthetic_placeholder",
+      "title": "Severance",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "90a5bd8b-d54b-50aa-ae02-7c67e08080d6",
+      "probe_id": "PB-36",
+      "source_pool": "pool_PB-36.json",
+      "reason": "synthetic_placeholder",
+      "title": "Severance",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "9d8ac21a-4e78-518e-a0b0-5e935f79188e",
+      "probe_id": "PB-36",
+      "source_pool": "pool_PB-36.json",
+      "reason": "synthetic_placeholder",
+      "title": "Severance",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "ab21a8a8-0697-57f7-80e1-e3aa3c4f4925",
+      "probe_id": "PB-36",
+      "source_pool": "pool_PB-36.json",
+      "reason": "synthetic_placeholder",
+      "title": "Severance",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "5f164102-e778-5301-95c6-586b74ffa2c1",
+      "probe_id": "PB-37",
+      "source_pool": "pool_PB-37.json",
+      "reason": "synthetic_placeholder",
+      "title": "Chernobyl",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "73cc066d-087c-5b0c-b913-0ad229b52a4a",
+      "probe_id": "PB-37",
+      "source_pool": "pool_PB-37.json",
+      "reason": "synthetic_placeholder",
+      "title": "Chernobyl",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "8724ac6f-ed92-57e6-b26e-a8bcf594e01b",
+      "probe_id": "PB-37",
+      "source_pool": "pool_PB-37.json",
+      "reason": "synthetic_placeholder",
+      "title": "Chernobyl",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "cc6bcaf4-ba01-5fd7-8b85-529cf71fb45a",
+      "probe_id": "PB-37",
+      "source_pool": "pool_PB-37.json",
+      "reason": "synthetic_placeholder",
+      "title": "Chernobyl",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "d31b96d9-0c2c-5aab-9b4b-8e6916bbba43",
+      "probe_id": "PB-37",
+      "source_pool": "pool_PB-37.json",
+      "reason": "synthetic_placeholder",
+      "title": "Chernobyl",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "e46efe5c-c872-5f14-8e22-04644f7d76ab",
+      "probe_id": "PB-37",
+      "source_pool": "pool_PB-37.json",
+      "reason": "synthetic_placeholder",
+      "title": "Chernobyl",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "1210feeb-1f73-5c11-9c61-65b134509140",
+      "probe_id": "PB-38",
+      "source_pool": "pool_PB-38.json",
+      "reason": "synthetic_placeholder",
+      "title": "Fargo",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "24d246a1-3f67-5504-b0a5-6ace0797b0e9",
+      "probe_id": "PB-38",
+      "source_pool": "pool_PB-38.json",
+      "reason": "synthetic_placeholder",
+      "title": "Fargo",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "7ea4042c-1565-5c92-b257-c2662d9efcd1",
+      "probe_id": "PB-38",
+      "source_pool": "pool_PB-38.json",
+      "reason": "synthetic_placeholder",
+      "title": "Fargo",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "b1de102b-77f5-5027-a593-e61a2354a4f5",
+      "probe_id": "PB-38",
+      "source_pool": "pool_PB-38.json",
+      "reason": "synthetic_placeholder",
+      "title": "Fargo",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "b7456386-c247-5f52-92fd-82c02143b127",
+      "probe_id": "PB-38",
+      "source_pool": "pool_PB-38.json",
+      "reason": "synthetic_placeholder",
+      "title": "Fargo",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "d04e3788-bf1c-5195-8f74-91f92ff4145b",
+      "probe_id": "PB-38",
+      "source_pool": "pool_PB-38.json",
+      "reason": "synthetic_placeholder",
+      "title": "Fargo",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "005f1807-2fb3-5e9f-925b-edee776404c3",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "The Wire",
+      "original_grade": 3,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "12df8b4b-3fdb-50b8-8108-1749a6ac5062",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "The Wire",
+      "original_grade": null,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "2810aeab-1856-5582-a367-0b4de2eef131",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": null,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "2f3a2bc0-5b27-52a5-9ca1-d279be58f63f",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "The Wire",
+      "original_grade": null,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "3c9c0699-7cee-5a79-a695-760d11c6fe4d",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": null,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "4154e286-14ed-59b3-8121-edba797cc306",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "The Wire",
+      "original_grade": null,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "4f61ecbd-7be3-5815-b1f5-f08e9c0a068e",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "The Wire",
+      "original_grade": null,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "7e9653ec-cb7f-50cc-acbd-d6f9335698de",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": null,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "8296dc52-a551-5686-aae3-a58ea15fa4b2",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": null,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "a22b5ae8-75fa-5cd7-aa7b-9239e49f804f",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": null,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "c105422d-e529-51a8-8341-8ac1ca1af24c",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": null,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "c10e7c8d-1cf1-58d4-a73e-a6a3a776f744",
+      "probe_id": "PB-40",
+      "source_pool": "pool_PB-40.json",
+      "reason": "synthetic_placeholder",
+      "title": "The Wire",
+      "original_grade": null,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "282634c7-3338-5a50-bbd0-c36c0a756842",
+      "probe_id": "PB-45",
+      "source_pool": "pool_PB-45.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": 0,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "506c618e-4654-5f46-8269-6df52ba5bc5a",
+      "probe_id": "PB-45",
+      "source_pool": "pool_PB-45.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": 0,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "7769fddd-1c97-584f-a7de-af0da11bc960",
+      "probe_id": "PB-45",
+      "source_pool": "pool_PB-45.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": 0,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "b9c0a03a-76ea-5e6b-8f5e-bab775b87ee1",
+      "probe_id": "PB-45",
+      "source_pool": "pool_PB-45.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": 0,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "c2a441d4-c8ed-50ed-8549-aa7836a679c2",
+      "probe_id": "PB-45",
+      "source_pool": "pool_PB-45.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": 0,
+      "owner_decision": "exclude_option_a"
+    },
+    {
+      "blinded_id": "e5de9cf5-0f95-5ece-8828-d16ba77e3ab8",
+      "probe_id": "PB-45",
+      "source_pool": "pool_PB-45.json",
+      "reason": "synthetic_placeholder",
+      "title": "True Detective",
+      "original_grade": 0,
+      "owner_decision": "exclude_option_a"
+    }
+  ]
+}

@@ -10,6 +10,10 @@ from pathlib import Path
 from ml.benchmark.scripts.compute_metrics import evaluate_benchmark
 from ml.benchmark.scripts.config import RESULTS_DIR
 from ml.benchmark.scripts.embed_catalogue import embed_all_models
+from ml.benchmark.scripts.evaluate_benchmark_h import (
+    evaluate_benchmark_h,
+    generate_report_h,
+)
 from ml.benchmark.scripts.generate_annotation_sheet import generate_annotation_sheets
 from ml.benchmark.scripts.hardware_profile import run_hardware_profile
 from ml.benchmark.scripts.retrieve_candidates import run_retrieval_pooling
@@ -104,7 +108,11 @@ def build_parser() -> argparse.ArgumentParser:
     embed_p.add_argument("--force", action="store_true", help="Ignore existing cache")
     sub.add_parser("pool", help="Run top-20 retrieval and blinded union pooling")
     sub.add_parser("annotate", help="Generate blinded annotation worksheets")
-    sub.add_parser("metrics", help="Compute evaluation metrics and bootstrap CIs")
+    sub.add_parser("metrics", help="Compute evaluation metrics and bootstrap CIs (Stage 5.0.4-B)")
+    sub.add_parser(
+        "metrics-h", help="Stage 5.0.4-H: exclusion-aware metrics with 42-record exclusion manifest"
+    )
+    sub.add_parser("report-h", help="Generate Stage 5.0.4-H Markdown benchmark report")
     sub.add_parser("profile", help="Run CPU hardware profiling")
     sub.add_parser("report", help="Generate Markdown benchmark summary report")
     return parser
@@ -126,6 +134,11 @@ def main(argv: list[str] | None = None) -> int:
         result = generate_annotation_sheets()
     elif args.command == "metrics":
         result = evaluate_benchmark()
+    elif args.command == "metrics-h":
+        result = evaluate_benchmark_h()
+    elif args.command == "report-h":
+        out = generate_report_h()
+        result = {"report_path": str(out)}
     elif args.command == "profile":
         result = run_hardware_profile()
     elif args.command == "report":

@@ -1252,11 +1252,11 @@ Prisma does not natively support the `vector` type. The adopted and verified arc
 
 2. **Encapsulated Vector Repository:** A dedicated `VectorRepository` (`apps/api/src/database/vector.repository.ts`) encapsulates all vector distance and similarity operations using parameterized `$queryRaw` statements. Raw SQL is strictly banned from controllers and business services.
 
-3. **Model Management:** Standard relational tables are managed via Prisma models. In Phase 5, `MediaEmbedding` will map the vector column via `Unsupported("vector(N)")` once TD-08 resolves dimension `N`.
+3. **Model Management:** Standard relational tables are managed via Prisma models. In Phase 5, `MediaEmbedding` will map the vector column via `Unsupported("vector(768)")` per TD-08 (`all-mpnet-base-v2`).
 
 4. **Injection Safety:** All vector inputs and thresholds are passed as parameterized arguments to `$queryRaw`.
 
-### 5.2 Embedding Dimension (TD-08 Open)
+### 5.2 Embedding Dimension (TD-08 Accepted — N = 768)
 
 The embedding dimension `N` depends on the chosen Sentence Transformers model (TD-08):
 
@@ -1300,7 +1300,7 @@ For typical catalogue sizes (< 50,000 items), exact nearest neighbour search via
 
 | TD-04 | Prisma + pgvector interaction pattern | **Resolved** | Resolved via `VectorRepository` and parameterized `$queryRaw`. |
 
-| TD-08 | Sentence Transformers model (embedding dimension) | **Open** | Must be decided before Phase 5 migrations. Changes later require re-embedding. |
+| TD-08 | Sentence Transformers model (embedding dimension) | **Accepted** | `sentence-transformers/all-mpnet-base-v2` (`9a3225965996d404b775526de6dbfe85d3368642`), `N = 768`, `max_seq_length = 384`. |
 
 | Rating scale | 1–10 integer vs. 1–10 with 0.5 increments | **Open** | Affects `PersonalRating.rating` type and UI |
 

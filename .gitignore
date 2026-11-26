@@ -166,7 +166,10 @@ ehthumbs_vista.db
 ml/benchmark/.venv-baseline/
 ml/benchmark/embeddings/*.npy
 ml/benchmark/embeddings/*.npz
-ml/benchmark/annotation/
-ml/benchmark/results/
+ml/benchmark/annotation/*
+!ml/benchmark/annotation/evaluation_exclusions_v1.json
+ml/benchmark/results/*
+!ml/benchmark/results/stage_j_gpu_results_v1.json
+!ml/benchmark/results/stage_j_gpu_report_v1.md
 # Allow embedding cache manifest (small JSON committed for reference)
 !ml/benchmark/embeddings/embedding_cache_manifest.json

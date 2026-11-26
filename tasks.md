@@ -42,9 +42,14 @@
 - [x] Stage 5.0.4-D: Embedding generation + cache completed
 - [x] Stage 5.0.4-E: Retrieval + union pool completed
 - [x] Stage 5.0.4-F: Blinded annotation artifacts generated
-- [ ] Stage 5.0.4-G: **Human annotation: PENDING** (manual grading by project owner)
-- [ ] Stage 5.0.4-H: Metric computation + bootstrap CI
-- [ ] Stage 5.0.4-I: TD-08 Decision Record — **PENDING annotation completion**
+- [x] Stage 5.0.4-G: Human annotation & integrity audit completed (1,623 candidates across 50 probes; 1,612 graded, 11 null placeholders in PB-40; audit verdict: READY WITH DOCUMENTED EXCLUSIONS)
+- [x] Stage 5.0.4-H: Metric computation + bootstrap CI completed
+  - [x] `evaluation_exclusions_v1.json` — explicit 42-record Option A exclusion manifest (including PB-40 grade-3 `005f1807-2fb3-5e9f-925b-edee776404c3`), leaving original worksheet & pools untouched
+  - [x] `evaluate_benchmark_h.py` — exclusion-aware evaluation (1,581 valid candidates across 50 probes, 679 relevant / 902 non-relevant, PB-40 retained=27), MacroPooledRecall@10 (`min(10, |PooledRelevant_q|)` denominator), MRR@10, ILD@10, and 10,000-iter stratified paired bootstrap (`seed=42`)
+  - [x] `benchmark_metrics_h_v1.json`, `benchmark_report_h_v1.md`, `reproducibility_manifest_h_v1.json` generated and verified reproducible
+  - [x] `test_stage_5_0_4_h.py` — 55 tests covering manifest integrity, filtered annotations, Recall/MRR/ILD, bootstrap, and determinism
+- [x] Stage 5.0.4-I: TD-08 Decision Record — **ACCEPTED** by project owner (`sentence-transformers/all-mpnet-base-v2`, revision `9a3225965996d404b775526de6dbfe85d3368642`, 768d, `max_seq_length=384`, right-side truncation, L2 normalized; `all-MiniLM-L6-v2` rejected; evidence: Stage 5.0.4-H/I)
+- [x] Stage 5.0.4-J: CUDA / GPU Embedding Performance Evaluation completed (`NVIDIA GeForce RTX 3050 6GB Laptop GPU`, `torch 2.14.1+cu126`, isolated `.venv-gpu`; FP32 `batch_size=32` achieved `86.41 rec/s` / `56.09×` speedup vs CPU with `1.0` Top-10 overlap)
 
 ---
 
@@ -55,7 +60,7 @@ Phase 1  — Project Foundation                  ██████████�
 Phase 2  — Catalogue and TMDB Integration      ████████████████  100% (Phase 2A schema, Phase 2B ingestion, Phase 2C discovery, Phase 2.5 Discover UI)
 Phase 3  — Personal Library and Tracking       ████████████████  100% (Stages 3.0–3.8: DB foundation, integrity, REST API, Frontend Library, Dashboard, Statistics Foundation, E2E hardening — COMPLETE)
 Phase 4  — Statistics and Data Import/Export   ████████████████  100% (Stages 4.1, 4.2, 4.3, 4.4, 4.5 complete — Phase 4 COMPLETE)
-Phase 5  — Recommendation Engine Foundation    ████░░░░░░░░░░░░  Stage 5.0 Seeding & Benchmark Fixture Complete (2,000-record `catalogue_snapshot_v1.jsonl` generated; Model Benchmark Execution next, Prod 0%, TD-08 Open)
+Phase 5  — Recommendation Engine Foundation    ████░░░░░░░░░░░░  Stage 5.0.4 Complete (2,000-record `catalogue_snapshot_v1.jsonl`; TD-08 Accepted: `all-mpnet-base-v2`, 768d; Prod 0%)
 Phase 6  — Recommendation Intelligence         ░░░░░░░░░░░░░░░░  0%
 Phase 7  — Local LLM Integration               ░░░░░░░░░░░░░░░░  0%
 Phase 8  — Movie Universe                      ░░░░░░░░░░░░░░░░  0%
@@ -69,7 +74,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 1. ~~**Benchmark Fixture Generation (`catalogue_snapshot_v1.jsonl`):** RESOLVED — Stage 5.0.3-B.2-G seeding and fixture generation completed. Fixture committed at HEAD `55caa62`.~~
 2. **Production Recommendation Engine (Stage 5.1):**
-   - **Status:** **BLOCKED** pending completion of Stage 5.0 scientific benchmark evaluation and formal selection of embedding model (TD-08).
+   - **Status:** **READY TO PLAN** — TD-08 (`all-mpnet-base-v2`, 768d) accepted by project owner; Stage 5.1 not yet started.
 
 ---
 
@@ -84,7 +89,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 | TD-05 | Frontend state management               | Determine whether Zustand, Jotai, or React Context is sufficient for client state before significant UI work begins.                                       | **Open**     |
 | TD-06 | Recommendation weight tuning strategy   | Initial scoring weights (S=0.35, P=0.25, M=0.20, Q=0.10, N=0.10) are unvalidated. Document evaluation methodology and when weights should be revised.      | **Open**     |
 | TD-07 | TMDB data seeding scope                 | Decide which TMDB datasets to pre-fetch at startup versus on-demand. Avoids processing entire catalogue.                                                   | **Open**     |
-| TD-08 | Embedding model selection               | Select the specific Sentence Transformers model (e.g., `all-MiniLM-L6-v2`, `all-mpnet-base-v2`). Consider embedding dimensionality and quality tradeoffs.  | **Open**     |
+| TD-08 | Embedding model selection               | **ACCEPTED (2026-11-26):** `sentence-transformers/all-mpnet-base-v2` (`9a3225965996d404b775526de6dbfe85d3368642`), 768d, `max_seq_length=384`, right-side truncation, L2 normalized. Rejected: `all-MiniLM-L6-v2`. Evidence: Stage 5.0.4-H/I/J. | **Accepted** |
 | TD-09 | Public portfolio anonymization strategy | Determine exactly which data to include/exclude in the hosted demo. Decide whether to ship a precomputed fixture dataset or redact from the live database. | **Open**     |
 | TD-10 | Authentication approach                 | Single-user local app may use a simple password or no auth. Hosted demo needs at minimum a read-only public view with optional owner login.                | **Open**     |
 
@@ -743,19 +748,19 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [x] Pre/post personal-data snapshot comparison (`verify_personal_data_snapshot.py`): `passed=True`, row counts and SHA-256 content fingerprints unchanged across all 6 personal/config tables (`users=1098`, `user_library_entries=765`, `viewing_events=38`, `episode_progress=205`, `season_ratings=138`, `system_configs=0`)
 - [ ] Candidate Embedding Model Benchmark Execution (Stage 5.0 Scientific Benchmark)
   - [x] Generate 2,000-item fixture (`catalogue_snapshot_v1.jsonl`, `.sha256`, `.manifest.json`; `1,400` movies + `600` TV shows including `50` probes = `2,000` records, SHA-256 `042dccd50ee4f01f9d63f56f3a161aa5c3de9d2ea7ed2a9b6cc6162a0d6d6fe9`)
-  - [ ] Benchmark Model A (`sentence-transformers/all-MiniLM-L6-v2`, 384-d)
-  - [ ] Benchmark Model B (`sentence-transformers/all-mpnet-base-v2`, 768-d)
-  - [ ] Benchmark Model C (`nvidia/Nemotron-3.5-Embed-1B-BF16`, 2048-d)
-  - [ ] Multi-faceted relevance grading across 50 probes
-  - [ ] Compute retrieval quality metrics (MacroPooledRecall@10, MRR@10, ILD per spec Section 8.5) and hardware profiling
-  - [ ] Produce Recommendation Decision Record (RDR) to resolve TD-08
-- [ ] Recommendation Engine Implementation (Stage 5.1 — Pending TD-08 Resolution)
+  - [x] Benchmark Model A (`sentence-transformers/all-MiniLM-L6-v2`, 384-d)
+  - [x] Benchmark Model B (`sentence-transformers/all-mpnet-base-v2`, 768-d)
+  - [-] ~~Benchmark Model C (`nvidia/Nemotron-3.5-Embed-1B-BF16`, 2048-d)~~ — Excluded by owner decision (Stage 5.0.4-A)
+  - [x] Multi-faceted relevance grading across 50 probes (Stage 5.0.4-G; 42 placeholders excluded in Stage 5.0.4-H)
+  - [x] Compute retrieval quality metrics (MacroPooledRecall@10, MRR@10, ILD) and hardware profiling (Stage 5.0.4-H/I/J)
+  - [x] Produce Recommendation Decision Record (RDR) to resolve TD-08 (**ACCEPTED 2026-11-26**: `all-mpnet-base-v2`, 768d)
+- [ ] Recommendation Engine Implementation (Stage 5.1 — Ready to plan; TD-08 Accepted)
 
 ### 5.1 ML Environment Setup
 
 - [ ] Set up Python virtual environment and `pyproject.toml`
 - [ ] Install Sentence Transformers, scikit-learn, numpy, pandas
-- [ ] Choose embedding model (see TD-08)
+- [x] Choose embedding model (TD-08 Accepted: `sentence-transformers/all-mpnet-base-v2`, 768d)
 - [ ] Confirm embedding generation runs on a small test set
 
 ### 5.2 Embedding Generation

@@ -1,0 +1,415 @@
+{
+  "stage": "5.0.4-J",
+  "fixture_sha256": "042dccd50ee4f01f9d63f56f3a161aa5c3de9d2ea7ed2a9b6cc6162a0d6d6fe9",
+  "record_count": 2000,
+  "model_id": "sentence-transformers/all-mpnet-base-v2",
+  "revision": "9a3225965996d404b775526de6dbfe85d3368642",
+  "max_seq_length": 384,
+  "dim": 768,
+  "environment": {
+    "torch_version": "2.14.1+cu126",
+    "cuda_version": "12.6",
+    "cudnn_version": 91002,
+    "device_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+    "device_props": {
+      "total_memory_mb": 6143.5,
+      "major": 8,
+      "minor": 6,
+      "multi_processor_count": 20
+    },
+    "sentence_transformers_version": "6.3.0",
+    "transformers_version": "5.24.1",
+    "nvidia_smi_before": {
+      "name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+      "driver_version": "616.92",
+      "vram_total_mb": 6144,
+      "vram_used_mb": 0,
+      "vram_free_mb": 6001,
+      "gpu_util_pct": 0,
+      "temp_c": 52
+    }
+  },
+  "configs": {
+    "fp32_b16": {
+      "batch_size": 16,
+      "precision": "float32",
+      "model_load_s": 1.5681,
+      "warmup_s": 4.0426,
+      "runs": [
+        {
+          "run": 1,
+          "wall_elapsed_s": 24.6772,
+          "cuda_event_elapsed_s": 24.6745,
+          "records_per_sec": 81.05,
+          "ms_per_record": 12.339
+        },
+        {
+          "run": 2,
+          "wall_elapsed_s": 24.7567,
+          "cuda_event_elapsed_s": 24.7563,
+          "records_per_sec": 80.79,
+          "ms_per_record": 12.378
+        },
+        {
+          "run": 3,
+          "wall_elapsed_s": 24.4202,
+          "cuda_event_elapsed_s": 24.4199,
+          "records_per_sec": 81.9,
+          "ms_per_record": 12.21
+        }
+      ],
+      "summary": {
+        "mean_elapsed_s": 24.618,
+        "median_elapsed_s": 24.6772,
+        "stdev_elapsed_s": 0.1759,
+        "mean_records_per_sec": 81.25,
+        "median_records_per_sec": 81.05
+      },
+      "vram": {
+        "peak_allocated_mb": 885.94,
+        "peak_reserved_mb": 1154.0
+      },
+      "system_ram": {
+        "rss_before_mb": 799.55,
+        "rss_after_mb": 1380.8,
+        "peak_wset_mb": 1381.26
+      },
+      "nvidia_smi_after": {
+        "name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+        "driver_version": "616.92",
+        "vram_total_mb": 6144,
+        "vram_used_mb": 1249,
+        "vram_free_mb": 4753,
+        "gpu_util_pct": 85,
+        "temp_c": 79
+      },
+      "stability": {
+        "shape": [
+          2000,
+          768
+        ],
+        "dtype": "float32",
+        "all_finite": true,
+        "norm_min": 0.9999999403953552,
+        "norm_max": 1.0000001192092896,
+        "norm_mean": 1.0,
+        "normalized_ok": true,
+        "oom_errors": 0,
+        "cuda_errors": 0
+      }
+    },
+    "fp32_b32": {
+      "batch_size": 32,
+      "precision": "float32",
+      "model_load_s": 1.6827,
+      "warmup_s": 2.1256,
+      "runs": [
+        {
+          "run": 1,
+          "wall_elapsed_s": 23.0998,
+          "cuda_event_elapsed_s": 23.0996,
+          "records_per_sec": 86.58,
+          "ms_per_record": 11.55
+        },
+        {
+          "run": 2,
+          "wall_elapsed_s": 23.1031,
+          "cuda_event_elapsed_s": 23.1028,
+          "records_per_sec": 86.57,
+          "ms_per_record": 11.552
+        },
+        {
+          "run": 3,
+          "wall_elapsed_s": 23.2319,
+          "cuda_event_elapsed_s": 23.2317,
+          "records_per_sec": 86.09,
+          "ms_per_record": 11.616
+        }
+      ],
+      "summary": {
+        "mean_elapsed_s": 23.1449,
+        "median_elapsed_s": 23.1031,
+        "stdev_elapsed_s": 0.0753,
+        "mean_records_per_sec": 86.41,
+        "median_records_per_sec": 86.57
+      },
+      "vram": {
+        "peak_allocated_mb": 1763.76,
+        "peak_reserved_mb": 2308.0
+      },
+      "system_ram": {
+        "rss_before_mb": 1369.43,
+        "rss_after_mb": 1402.67,
+        "peak_wset_mb": 1799.22
+      },
+      "nvidia_smi_after": {
+        "name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+        "driver_version": "616.92",
+        "vram_total_mb": 6144,
+        "vram_used_mb": 2403,
+        "vram_free_mb": 3599,
+        "gpu_util_pct": 100,
+        "temp_c": 82
+      },
+      "stability": {
+        "shape": [
+          2000,
+          768
+        ],
+        "dtype": "float32",
+        "all_finite": true,
+        "norm_min": 0.9999999403953552,
+        "norm_max": 1.0000001192092896,
+        "norm_mean": 1.0,
+        "normalized_ok": true,
+        "oom_errors": 0,
+        "cuda_errors": 0
+      }
+    },
+    "fp32_b64": {
+      "batch_size": 64,
+      "precision": "float32",
+      "model_load_s": 1.3872,
+      "warmup_s": 2.6943,
+      "runs": [
+        {
+          "run": 1,
+          "wall_elapsed_s": 26.2824,
+          "cuda_event_elapsed_s": 26.2821,
+          "records_per_sec": 76.1,
+          "ms_per_record": 13.141
+        },
+        {
+          "run": 2,
+          "wall_elapsed_s": 25.9988,
+          "cuda_event_elapsed_s": 25.9983,
+          "records_per_sec": 76.93,
+          "ms_per_record": 12.999
+        },
+        {
+          "run": 3,
+          "wall_elapsed_s": 26.0423,
+          "cuda_event_elapsed_s": 26.042,
+          "records_per_sec": 76.8,
+          "ms_per_record": 13.021
+        }
+      ],
+      "summary": {
+        "mean_elapsed_s": 26.1078,
+        "median_elapsed_s": 26.0423,
+        "stdev_elapsed_s": 0.1527,
+        "mean_records_per_sec": 76.61,
+        "median_records_per_sec": 76.8
+      },
+      "vram": {
+        "peak_allocated_mb": 3100.67,
+        "peak_reserved_mb": 4140.0
+      },
+      "system_ram": {
+        "rss_before_mb": 1388.61,
+        "rss_after_mb": 1413.78,
+        "peak_wset_mb": 1818.24
+      },
+      "nvidia_smi_after": {
+        "name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+        "driver_version": "616.92",
+        "vram_total_mb": 6144,
+        "vram_used_mb": 4235,
+        "vram_free_mb": 1767,
+        "gpu_util_pct": 100,
+        "temp_c": 82
+      },
+      "stability": {
+        "shape": [
+          2000,
+          768
+        ],
+        "dtype": "float32",
+        "all_finite": true,
+        "norm_min": 0.9999999403953552,
+        "norm_max": 1.0000001192092896,
+        "norm_mean": 1.0,
+        "normalized_ok": true,
+        "oom_errors": 0,
+        "cuda_errors": 0
+      }
+    },
+    "fp32_b128": {
+      "batch_size": 128,
+      "precision": "float32",
+      "model_load_s": 1.6492,
+      "warmup_s": 3.5306,
+      "runs": [
+        {
+          "run": 1,
+          "wall_elapsed_s": 42.2462,
+          "cuda_event_elapsed_s": 42.2455,
+          "records_per_sec": 47.34,
+          "ms_per_record": 21.123
+        },
+        {
+          "run": 2,
+          "wall_elapsed_s": 42.2465,
+          "cuda_event_elapsed_s": 42.2461,
+          "records_per_sec": 47.34,
+          "ms_per_record": 21.123
+        },
+        {
+          "run": 3,
+          "wall_elapsed_s": 39.819,
+          "cuda_event_elapsed_s": 39.8188,
+          "records_per_sec": 50.23,
+          "ms_per_record": 19.91
+        }
+      ],
+      "summary": {
+        "mean_elapsed_s": 41.4372,
+        "median_elapsed_s": 42.2462,
+        "stdev_elapsed_s": 1.4014,
+        "mean_records_per_sec": 48.3,
+        "median_records_per_sec": 47.34
+      },
+      "vram": {
+        "peak_allocated_mb": 4099.7,
+        "peak_reserved_mb": 6762.0
+      },
+      "system_ram": {
+        "rss_before_mb": 1401.41,
+        "rss_after_mb": 2299.89,
+        "peak_wset_mb": 2299.89
+      },
+      "nvidia_smi_after": {
+        "name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+        "driver_version": "616.92",
+        "vram_total_mb": 6144,
+        "vram_used_mb": 5961,
+        "vram_free_mb": 41,
+        "gpu_util_pct": 100,
+        "temp_c": 80
+      },
+      "stability": {
+        "shape": [
+          2000,
+          768
+        ],
+        "dtype": "float32",
+        "all_finite": true,
+        "norm_min": 0.9999998807907104,
+        "norm_max": 1.0000001192092896,
+        "norm_mean": 1.0,
+        "normalized_ok": true,
+        "oom_errors": 0,
+        "cuda_errors": 0
+      }
+    },
+    "fp16_b32": {
+      "batch_size": 32,
+      "precision": "fp16_autocast",
+      "model_load_s": 2.2804,
+      "warmup_s": 1.6808,
+      "runs": [
+        {
+          "run": 1,
+          "wall_elapsed_s": 10.5861,
+          "cuda_event_elapsed_s": 10.5859,
+          "records_per_sec": 188.93,
+          "ms_per_record": 5.293
+        },
+        {
+          "run": 2,
+          "wall_elapsed_s": 10.9585,
+          "cuda_event_elapsed_s": 10.9582,
+          "records_per_sec": 182.51,
+          "ms_per_record": 5.479
+        },
+        {
+          "run": 3,
+          "wall_elapsed_s": 10.8337,
+          "cuda_event_elapsed_s": 10.8335,
+          "records_per_sec": 184.61,
+          "ms_per_record": 5.417
+        }
+      ],
+      "summary": {
+        "mean_elapsed_s": 10.7928,
+        "median_elapsed_s": 10.8337,
+        "stdev_elapsed_s": 0.1895,
+        "mean_records_per_sec": 185.35,
+        "median_records_per_sec": 184.61
+      },
+      "vram": {
+        "peak_allocated_mb": 1781.86,
+        "peak_reserved_mb": 2340.0
+      },
+      "system_ram": {
+        "rss_before_mb": 1685.52,
+        "rss_after_mb": 1784.12,
+        "peak_wset_mb": 2305.76
+      },
+      "nvidia_smi_after": {
+        "name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+        "driver_version": "616.92",
+        "vram_total_mb": 6144,
+        "vram_used_mb": 2441,
+        "vram_free_mb": 3561,
+        "gpu_util_pct": 68,
+        "temp_c": 79
+      },
+      "stability": {
+        "shape": [
+          2000,
+          768
+        ],
+        "dtype": "float32",
+        "all_finite": true,
+        "norm_min": 0.9999999403953552,
+        "norm_max": 1.0000001192092896,
+        "norm_mean": 1.0,
+        "normalized_ok": true,
+        "oom_errors": 0,
+        "cuda_errors": 0
+      }
+    }
+  },
+  "correctness_comparisons": {
+    "cpu_vs_gpu_fp32_b32": {
+      "shape_match": true,
+      "max_abs_diff": 2.9578804969787598e-06,
+      "mean_abs_diff": 4.851405677186449e-08,
+      "cosine_sim_min": 0.9999998807907104,
+      "cosine_sim_p05": 0.9999999403953552,
+      "cosine_sim_mean": 1.0,
+      "cosine_sim_max": 1.000000238418579,
+      "probe_count": 50,
+      "top1_exact_match_rate": 1.0,
+      "top10_mean_overlap": 1.0,
+      "top10_min_overlap": 1.0
+    },
+    "gpu_fp32_vs_gpu_fp16_b32": {
+      "shape_match": true,
+      "max_abs_diff": 0.0013330020010471344,
+      "mean_abs_diff": 2.0800194761250168e-05,
+      "cosine_sim_min": 0.9999516010284424,
+      "cosine_sim_p05": 0.9999996423721313,
+      "cosine_sim_mean": 0.9999998807907104,
+      "cosine_sim_max": 1.0,
+      "probe_count": 50,
+      "top1_exact_match_rate": 1.0,
+      "top10_mean_overlap": 1.0,
+      "top10_min_overlap": 1.0
+    },
+    "cpu_vs_gpu_fp16_b32": {
+      "shape_match": true,
+      "max_abs_diff": 0.001332700252532959,
+      "mean_abs_diff": 2.0800465790671296e-05,
+      "cosine_sim_min": 0.9999515414237976,
+      "cosine_sim_p05": 0.9999996423721313,
+      "cosine_sim_mean": 0.9999998807907104,
+      "cosine_sim_max": 1.0,
+      "probe_count": 50,
+      "top1_exact_match_rate": 1.0,
+      "top10_mean_overlap": 1.0,
+      "top10_min_overlap": 1.0
+    }
+  }
+}
