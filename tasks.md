@@ -26,22 +26,22 @@
 
 - [x] Stage 5.0.4-A: Benchmark readiness audit completed
 - [x] Stage 5.0.4-A: Spec corrected in-place for two-model protocol
-- [ ] Stage 5.0.4-B: Benchmark foundation implemented and smoke-tested
-  - [ ] `config.py` — model config & path constants
-  - [ ] `validate_fixture.py` — fixture integrity + schema validation
-  - [ ] `tokenizer_audit.py` — token-count audit for both models
-  - [ ] `embed_catalogue.py` — embedding generation + cache with manifest
-  - [ ] `retrieve_candidates.py` — top-20 retrieval + union pool
-  - [ ] `generate_annotation_sheet.py` — blinded annotation artifacts
-  - [ ] `compute_metrics.py` — MacroPooledRecall@10, MRR@10, ILD + paired bootstrap CI
-  - [ ] `hardware_profile.py` — warmup, latency, throughput, RSS
-  - [ ] `run_benchmark.py` — orchestrator CLI
-  - [ ] `test_benchmark_foundation.py` — fixture + config + cache tests
-  - [ ] `test_benchmark_runner.py` — retrieval + metrics + bootstrap tests
-- [ ] Stage 5.0.4-C: Tokenizer audit completed
-- [ ] Stage 5.0.4-D: Embedding generation + cache completed
-- [ ] Stage 5.0.4-E: Retrieval + union pool completed
-- [ ] Stage 5.0.4-F: Blinded annotation artifacts generated
+- [x] Stage 5.0.4-B: Benchmark foundation implemented and verified
+  - [x] `config.py` — model config & path constants
+  - [x] `validate_fixture.py` — fixture integrity + schema validation
+  - [x] `tokenizer_audit.py` — token-count audit for both models
+  - [x] `embed_catalogue.py` — embedding generation + cache with manifest
+  - [x] `retrieve_candidates.py` — top-20 retrieval + union pool
+  - [x] `generate_annotation_sheet.py` — blinded annotation artifacts
+  - [x] `compute_metrics.py` — MacroPooledRecall@10, MRR@10, ILD + paired bootstrap CI
+  - [x] `hardware_profile.py` — warmup, latency, throughput, RSS
+  - [x] `run_benchmark.py` — orchestrator CLI
+  - [x] `test_benchmark_foundation.py` — fixture + config + cache tests
+  - [x] `test_benchmark_runner.py` — retrieval + metrics + bootstrap tests
+- [x] Stage 5.0.4-C: Tokenizer audit completed
+- [x] Stage 5.0.4-D: Embedding generation + cache completed
+- [x] Stage 5.0.4-E: Retrieval + union pool completed
+- [x] Stage 5.0.4-F: Blinded annotation artifacts generated
 - [ ] Stage 5.0.4-G: **Human annotation: PENDING** (manual grading by project owner)
 - [ ] Stage 5.0.4-H: Metric computation + bootstrap CI
 - [ ] Stage 5.0.4-I: TD-08 Decision Record — **PENDING annotation completion**

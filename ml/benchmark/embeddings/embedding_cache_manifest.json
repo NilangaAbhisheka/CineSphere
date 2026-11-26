@@ -3,8 +3,9 @@
   "record_count": 2000,
   "seed": 42,
   "cpu_threads": 4,
-  "generated_at": null,
-  "status": "pending_execution",
+  "generated_at": "2026-11-26T07:07:34.868423+00:00",
+  "torch_version": "2.15.0+cpu",
+  "sentence_transformers_version": "6.3.0",
   "models": {
     "model_a": {
       "model_id": "sentence-transformers/all-MiniLM-L6-v2",
@@ -12,17 +13,29 @@
       "dim": 384,
       "max_seq_length": 256,
       "batch_size": 32,
+      "dtype": "float32",
+      "shape": [
+        2000,
+        384
+      ],
       "normalized": true,
-      "file": "embeddings_model_a.npy"
+      "file": "embeddings_model_a.npy",
+      "cache_hit": false
     },
     "model_b": {
       "model_id": "sentence-transformers/all-mpnet-base-v2",
-      "revision": "9a3225965f84d4ed3029da714acd769403388881",
+      "revision": "9a3225965996d404b775526de6dbfe85d3368642",
       "dim": 768,
       "max_seq_length": 384,
       "batch_size": 32,
+      "dtype": "float32",
+      "shape": [
+        2000,
+        768
+      ],
       "normalized": true,
-      "file": "embeddings_model_b.npy"
+      "file": "embeddings_model_b.npy",
+      "cache_hit": false
     }
   }
 }

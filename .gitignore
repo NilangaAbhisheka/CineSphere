@@ -52,6 +52,7 @@ __pycache__/
 *$py.class
 *.so
 .Python
+.venv-baseline/
 
 # Distribution / packaging
 develop-eggs/
