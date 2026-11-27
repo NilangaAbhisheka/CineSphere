@@ -35,9 +35,11 @@ export default async function globalSetup(): Promise<void> {
   try {
     // ── 1. Upsert test movie ───────────────────────────────────────────────
     await client.query(
-      `INSERT INTO movies ("tmdbId", "title", "overview", "voteAverage", "popularity", "releaseDate")
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT ("tmdbId") DO UPDATE SET "title" = EXCLUDED."title"`,
+      `INSERT INTO movies ("tmdbId", "title", "overview", "voteAverage", "popularity", "releaseDate", "provenance")
+       VALUES ($1, $2, $3, $4, $5, $6, 'SYNTHETIC'::"CatalogueProvenance")
+       ON CONFLICT ("tmdbId") DO UPDATE SET
+         "title" = EXCLUDED."title",
+         "provenance" = 'SYNTHETIC'::"CatalogueProvenance"`,
       [
         E2E_MOVIE_TMDB_ID,
         E2E_MOVIE_TITLE,
@@ -50,9 +52,11 @@ export default async function globalSetup(): Promise<void> {
 
     // ── 2. Upsert test TV show ─────────────────────────────────────────────
     const tvResult = await client.query(
-      `INSERT INTO tv_shows ("tmdbId", "name", "overview", "numberOfSeasons", "numberOfEpisodes", "voteAverage", "popularity")
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT ("tmdbId") DO UPDATE SET "name" = EXCLUDED."name"
+      `INSERT INTO tv_shows ("tmdbId", "name", "overview", "numberOfSeasons", "numberOfEpisodes", "voteAverage", "popularity", "provenance")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'SYNTHETIC'::"CatalogueProvenance")
+       ON CONFLICT ("tmdbId") DO UPDATE SET
+         "name" = EXCLUDED."name",
+         "provenance" = 'SYNTHETIC'::"CatalogueProvenance"
        RETURNING id`,
       [
         E2E_TV_TMDB_ID,

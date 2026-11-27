@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { CatalogueProvenance } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import { CatalogueRepository } from '../tmdb/catalogue.repository.js';
 import { CatalogueService } from './catalogue.service.js';
@@ -71,6 +72,7 @@ describe('Catalogue Discovery Integration Tests', () => {
           popularity: 95.0,
           voteAverage: 8.8,
           voteCount: 15000,
+          provenance: CatalogueProvenance.SYNTHETIC,
           genres: { connect: [{ tmdbId: genreActionId }] },
         },
       });
@@ -89,6 +91,7 @@ describe('Catalogue Discovery Integration Tests', () => {
           popularity: 40.0,
           voteAverage: 6.5,
           voteCount: 800,
+          provenance: CatalogueProvenance.SYNTHETIC,
           genres: { connect: [{ tmdbId: genreComedyId }] },
         },
       });
@@ -107,6 +110,7 @@ describe('Catalogue Discovery Integration Tests', () => {
           popularity: 85.0,
           voteAverage: 8.6,
           voteCount: 12000,
+          provenance: CatalogueProvenance.SYNTHETIC,
           genres: { connect: [{ tmdbId: genreActionId }] },
         },
       });
@@ -235,6 +239,7 @@ describe('Catalogue Discovery Integration Tests', () => {
           title: 'Inception Null Popularity',
           popularity: null,
           voteAverage: null,
+          provenance: CatalogueProvenance.SYNTHETIC,
           genres: { connect: [{ tmdbId: genreActionId }] },
         },
       });
@@ -297,6 +302,7 @@ describe('Catalogue Discovery Integration Tests', () => {
           status: 'Ended',
           numberOfSeasons: 5,
           numberOfEpisodes: 62,
+          provenance: CatalogueProvenance.SYNTHETIC,
           genres: { connect: [{ tmdbId: genreDramaId }] },
         },
       });
@@ -318,6 +324,7 @@ describe('Catalogue Discovery Integration Tests', () => {
           status: 'Returning Series',
           numberOfSeasons: 6,
           numberOfEpisodes: 63,
+          provenance: CatalogueProvenance.SYNTHETIC,
           genres: { connect: [{ tmdbId: genreDramaId }] },
         },
       });
@@ -387,6 +394,7 @@ describe('Catalogue Discovery Integration Tests', () => {
           title: `Detailed Movie ${tmdbId}`,
           overview: 'Deep details',
           releaseDate: new Date('2021-06-15T00:00:00.000Z'),
+          provenance: CatalogueProvenance.SYNTHETIC,
           genres: { connect: [{ tmdbId: genreId }] },
           keywords: { connect: [{ tmdbId: kwId }] },
           personCredits: {
@@ -429,6 +437,7 @@ describe('Catalogue Discovery Integration Tests', () => {
         data: {
           tmdbId,
           name: `TV Hierarchy ${tmdbId}`,
+          provenance: CatalogueProvenance.SYNTHETIC,
           personCredits: {
             create: {
               personId: person.id,

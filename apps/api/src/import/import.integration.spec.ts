@@ -7,7 +7,12 @@
 // ==============================================================================
 
 import { ConfigService } from '@nestjs/config';
-import { PipelineRunStatus, PipelineTriggerType, Prisma } from '@prisma/client';
+import {
+  CatalogueProvenance,
+  PipelineRunStatus,
+  PipelineTriggerType,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import { SingleUserBootstrap } from '../database/single-user-bootstrap.js';
 import { PIPELINE_ERROR_CODES, PIPELINE_NAMES } from '../observability/observability.constants.js';
@@ -94,6 +99,7 @@ describe('Import Integration Tests', () => {
         overview: 'Integration test movie',
         releaseDate: new Date('2024-01-01'),
         voteAverage: 8.0,
+        provenance: CatalogueProvenance.SYNTHETIC,
       },
     });
     return { id: movie.id, tmdbId };
@@ -121,6 +127,7 @@ describe('Import Integration Tests', () => {
         overview: 'Integration test TV show',
         numberOfSeasons: 1,
         numberOfEpisodes: 2,
+        provenance: CatalogueProvenance.SYNTHETIC,
       },
     });
 

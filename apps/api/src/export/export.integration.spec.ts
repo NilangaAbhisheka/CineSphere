@@ -13,7 +13,7 @@
 // ==============================================================================
 
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
+import { CatalogueProvenance, Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import { SingleUserBootstrap } from '../database/single-user-bootstrap.js';
 import { TmdbService } from '../tmdb/tmdb.service.js';
@@ -187,6 +187,7 @@ describe('Export PostgreSQL Integration Tests', () => {
         overview: 'Integration test movie for export',
         releaseDate: new Date('2024-01-01'),
         voteAverage: 8.0,
+        provenance: CatalogueProvenance.SYNTHETIC,
       },
     });
     createdMovieIds.push(movie.id);
@@ -215,6 +216,7 @@ describe('Export PostgreSQL Integration Tests', () => {
         overview: 'Integration test TV show for export',
         firstAirDate: new Date('2024-01-01'),
         voteAverage: 8.5,
+        provenance: CatalogueProvenance.SYNTHETIC,
         seasons: {
           create: [
             {

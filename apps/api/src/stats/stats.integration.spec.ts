@@ -9,6 +9,7 @@
 
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException } from '@nestjs/common';
+import { CatalogueProvenance } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import { SingleUserBootstrap } from '../database/single-user-bootstrap.js';
 import { StatsService } from './stats.service.js';
@@ -125,6 +126,7 @@ describe('Stats API PostgreSQL Integration Tests', () => {
         title,
         overview: 'Stats test movie',
         releaseDate: new Date('2024-01-01'),
+        provenance: CatalogueProvenance.SYNTHETIC,
         genres: {
           connectOrCreate: genreTmdbIds.map((id) => ({
             where: { tmdbId: id },
@@ -151,6 +153,7 @@ describe('Stats API PostgreSQL Integration Tests', () => {
         name,
         overview: 'Stats test TV show',
         firstAirDate: new Date('2024-01-01'),
+        provenance: CatalogueProvenance.SYNTHETIC,
         genres: {
           connectOrCreate: genreTmdbIds.map((id) => ({
             where: { tmdbId: id },

@@ -543,7 +543,7 @@ To prevent race conditions, orphan child records, and invalid cross-show episode
 
 ---
 
-### 3.16 MediaEmbedding, EmbeddingCoordination & JobLeases [Planned — Stage 5.1]
+### 3.16 MediaEmbedding, EmbeddingCoordination & JobLeases [M1-A Implemented — Stage 5.1]
 
 **Purpose:** Stores 768-dimensional semantic embedding vectors (`sentence-transformers/all-mpnet-base-v2`, rev `9a3225965996d404b775526de6dbfe85d3368642`) separately from `movies` and `tv_shows` so Prisma manages standard relational tables while `VectorRepository` executes parameterized `pgvector` SQL (`V0.7.8` + `V0.7.9`).
 

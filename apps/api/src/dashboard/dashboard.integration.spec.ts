@@ -6,6 +6,7 @@
  */
 
 import { ConfigService } from '@nestjs/config';
+import { CatalogueProvenance } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import { SingleUserBootstrap } from '../database/single-user-bootstrap.js';
 import { DashboardService } from './dashboard.service.js';
@@ -57,6 +58,7 @@ describe('Dashboard API Integration Tests', () => {
         releaseDate: new Date('2023-06-15'),
         voteAverage: 7.5,
         popularity: 100,
+        provenance: CatalogueProvenance.SYNTHETIC,
       },
     });
     return { id: movie.id, tmdbId };
@@ -77,6 +79,7 @@ describe('Dashboard API Integration Tests', () => {
         firstAirDate: new Date('2022-01-01'),
         voteAverage: 8.0,
         popularity: 200,
+        provenance: CatalogueProvenance.SYNTHETIC,
       },
     });
     const season = await prisma.season.create({

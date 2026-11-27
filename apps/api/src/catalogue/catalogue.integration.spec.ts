@@ -16,7 +16,7 @@
  *   pnpm exec dotenv -e ../../.env -- jest --testPathPattern=catalogue.integration
  */
 
-import { PrismaClient } from '@prisma/client';
+import { CatalogueProvenance, PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient({
   datasources: { db: { url: process.env.DATABASE_URL } },
@@ -56,6 +56,7 @@ async function createMovie(overrides?: Partial<Parameters<typeof prisma.movie.cr
     data: {
       tmdbId,
       title: `Test Movie ${tmdbId}`,
+      provenance: CatalogueProvenance.SYNTHETIC,
       ...overrides,
     },
   });
@@ -69,6 +70,7 @@ async function createTvShow(
     data: {
       tmdbId,
       name: `Test Show ${tmdbId}`,
+      provenance: CatalogueProvenance.SYNTHETIC,
       ...overrides,
     },
   });

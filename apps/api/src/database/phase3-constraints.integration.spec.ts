@@ -6,7 +6,13 @@
  * triggers, and foreign-key delete behaviors.
  */
 
-import { PrismaClient, Prisma, MediaType, LibraryStatus } from '@prisma/client';
+import {
+  CatalogueProvenance,
+  PrismaClient,
+  Prisma,
+  MediaType,
+  LibraryStatus,
+} from '@prisma/client';
 
 const prisma = new PrismaClient({
   datasources: { db: { url: process.env.DATABASE_URL } },
@@ -30,6 +36,7 @@ async function createTestMovie(): Promise<{ id: string }> {
     data: {
       tmdbId: uniqueTmdbId(),
       title: `Test Movie ${uniqueTmdbId()}`,
+      provenance: CatalogueProvenance.SYNTHETIC,
     },
   });
 }
@@ -43,6 +50,7 @@ async function createTestTvHierarchy(): Promise<{
     data: {
       tmdbId: uniqueTmdbId(),
       name: `Test Show ${uniqueTmdbId()}`,
+      provenance: CatalogueProvenance.SYNTHETIC,
     },
   });
 

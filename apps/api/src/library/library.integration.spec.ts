@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LibraryStatus, MediaType } from '@prisma/client';
+import { CatalogueProvenance, LibraryStatus, MediaType } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import { SingleUserBootstrap } from '../database/single-user-bootstrap.js';
 import { TmdbService } from '../tmdb/tmdb.service.js';
@@ -61,6 +61,7 @@ describe('Library API Integration Tests', () => {
         overview: 'Test movie overview',
         releaseDate: new Date('2024-01-01'),
         voteAverage: 8.0,
+        provenance: CatalogueProvenance.SYNTHETIC,
       },
     });
     return { id: movie.id, tmdbId };
@@ -83,6 +84,7 @@ describe('Library API Integration Tests', () => {
         firstAirDate: new Date('2024-01-01'),
         numberOfSeasons: 1,
         numberOfEpisodes: 3,
+        provenance: CatalogueProvenance.SYNTHETIC,
       },
     });
 

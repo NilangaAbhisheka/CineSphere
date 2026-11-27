@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { CatalogueProvenance, Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import {
   MappedGenre,
@@ -139,6 +139,7 @@ export class CatalogueRepository {
             posterPath: data.posterPath,
             backdropPath: data.backdropPath,
             adult: data.adult,
+            provenance: CatalogueProvenance.TMDB,
             syncedAt: now,
             genres: {
               connect: data.genres.map((g) => ({ tmdbId: g.tmdbId })),
@@ -148,6 +149,12 @@ export class CatalogueRepository {
             },
           },
           select: { id: true, syncedAt: true },
+        });
+
+        // Upgrade legacy UNKNOWN records to TMDB without overwriting SYNTHETIC fixtures
+        await tx.movie.updateMany({
+          where: { id: movie.id, provenance: CatalogueProvenance.UNKNOWN },
+          data: { provenance: CatalogueProvenance.TMDB },
         });
 
         // 3. Upsert persons and sync person credits
@@ -257,6 +264,7 @@ export class CatalogueRepository {
             status: data.status,
             numberOfSeasons: data.numberOfSeasons,
             numberOfEpisodes: data.numberOfEpisodes,
+            provenance: CatalogueProvenance.TMDB,
             syncedAt: now,
             genres: {
               connect: data.genres.map((g) => ({ tmdbId: g.tmdbId })),
@@ -266,6 +274,12 @@ export class CatalogueRepository {
             },
           },
           select: { id: true, syncedAt: true },
+        });
+
+        // Upgrade legacy UNKNOWN records to TMDB without overwriting SYNTHETIC fixtures
+        await tx.tvShow.updateMany({
+          where: { id: show.id, provenance: CatalogueProvenance.UNKNOWN },
+          data: { provenance: CatalogueProvenance.TMDB },
         });
 
         // 3. Upsert cast & sync TV credits

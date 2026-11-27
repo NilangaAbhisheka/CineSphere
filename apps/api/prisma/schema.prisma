@@ -70,66 +70,83 @@ model Keyword {
   @@map("keywords")
 }
 
+// ── Catalogue: Provenance ─────────────────────────────────────────────────────
+
+enum CatalogueProvenance {
+  TMDB
+  SYNTHETIC
+  UNKNOWN
+}
+
 // ── Catalogue: Movie ──────────────────────────────────────────────────────────
 
 model Movie {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tmdbId        Int       @unique
-  title         String    @db.VarChar(500)
-  originalTitle String?   @db.VarChar(500)
-  overview      String?   @db.Text
-  releaseDate   DateTime? @db.Date
-  runtime       Int? // minutes
-  originalLanguage String? @db.VarChar(10)
-  popularity    Float?
-  voteAverage   Float?
-  voteCount     Int?
-  posterPath    String?   @db.VarChar(255)
-  backdropPath  String?   @db.VarChar(255)
-  adult         Boolean   @default(false)
-  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
-  syncedAt      DateTime? @db.Timestamptz(6)
+  id               String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tmdbId           Int                 @unique
+  title            String              @db.VarChar(500)
+  originalTitle    String?             @db.VarChar(500)
+  overview         String?             @db.Text
+  tagline          String?             @db.Text
+  status           String?             @db.VarChar(50)
+  releaseDate      DateTime?           @db.Date
+  runtime          Int? // minutes
+  originalLanguage String?             @db.VarChar(10)
+  popularity       Float?
+  voteAverage      Float?
+  voteCount        Int?
+  posterPath       String?             @db.VarChar(255)
+  backdropPath     String?             @db.VarChar(255)
+  adult            Boolean             @default(false)
+  provenance       CatalogueProvenance @default(UNKNOWN)
+  metadataRevision Int                 @default(0) @map("metadata_revision")
+  createdAt        DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
+  syncedAt         DateTime?           @db.Timestamptz(6)
 
-  genres        Genre[]
-  keywords      Keyword[]
-  personCredits PersonCredit[]
+  genres         Genre[]
+  keywords       Keyword[]
+  personCredits  PersonCredit[]
   libraryEntries UserLibraryEntry[]
 
   @@index([popularity])
+  @@index([provenance], map: "idx_movies_provenance")
   @@map("movies")
 }
 
 // ── Catalogue: TV Show ────────────────────────────────────────────────────────
 
 model TvShow {
-  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tmdbId           Int       @unique
-  name             String    @db.VarChar(500)
-  originalName     String?   @db.VarChar(500)
-  overview         String?   @db.Text
-  firstAirDate     DateTime? @db.Date
-  lastAirDate      DateTime? @db.Date
-  originalLanguage String?   @db.VarChar(10)
+  id               String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tmdbId           Int                 @unique
+  name             String              @db.VarChar(500)
+  originalName     String?             @db.VarChar(500)
+  overview         String?             @db.Text
+  tagline          String?             @db.Text
+  firstAirDate     DateTime?           @db.Date
+  lastAirDate      DateTime?           @db.Date
+  originalLanguage String?             @db.VarChar(10)
   popularity       Float?
   voteAverage      Float?
   voteCount        Int?
-  posterPath       String?   @db.VarChar(255)
-  backdropPath     String?   @db.VarChar(255)
-  status           String?   @db.VarChar(50)
+  posterPath       String?             @db.VarChar(255)
+  backdropPath     String?             @db.VarChar(255)
+  status           String?             @db.VarChar(50)
   numberOfSeasons  Int?
   numberOfEpisodes Int?
-  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
-  syncedAt         DateTime? @db.Timestamptz(6)
+  provenance       CatalogueProvenance @default(UNKNOWN)
+  metadataRevision Int                 @default(0) @map("metadata_revision")
+  createdAt        DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
+  syncedAt         DateTime?           @db.Timestamptz(6)
 
-  genres        Genre[]
-  keywords      Keyword[]
-  seasons       Season[]
-  personCredits PersonCredit[]
+  genres         Genre[]
+  keywords       Keyword[]
+  seasons        Season[]
+  personCredits  PersonCredit[]
   libraryEntries UserLibraryEntry[]
 
   @@index([popularity])
+  @@index([provenance], map: "idx_tv_shows_provenance")
   @@map("tv_shows")
 }
 
@@ -352,5 +369,56 @@ model PipelineRun {
   @@index([pipelineName, startedAt(sort: Desc)], map: "idx_pipeline_runs_name_started")
   @@index([status, startedAt(sort: Desc)], map: "idx_pipeline_runs_status_started")
   @@map("pipeline_runs")
+}
+
+// ── Stage 5.1 M1-A: Embedding Coordination, Leases & Vector Storage ─────────
+
+model EmbeddingCoordination {
+  id                  Int       @id @default(1)
+  activeModelName     String    @map("active_model_name") @db.VarChar(100)
+  activeModelVersion  String    @map("active_model_version") @db.VarChar(100)
+  activeDimensions    Int       @map("active_dimensions")
+  pendingModelName    String?   @map("pending_model_name") @db.VarChar(100)
+  pendingModelVersion String?   @map("pending_model_version") @db.VarChar(100)
+  pendingDimensions   Int?      @map("pending_dimensions")
+  cutoverInProgress   Boolean   @default(false) @map("cutover_in_progress")
+  cutoverStartedAt    DateTime? @map("cutover_started_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("embedding_coordination")
+}
+
+model JobLease {
+  leaseName    String    @id @map("lease_name") @db.VarChar(50)
+  status       String    @default("AVAILABLE") @db.VarChar(20)
+  fencingToken BigInt    @default(0) @map("fencing_token")
+  ownerJobId   String?   @map("owner_job_id") @db.Uuid
+  heartbeatAt  DateTime? @map("heartbeat_at") @db.Timestamptz(6)
+  expiresAt    DateTime? @map("expires_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("job_leases")
+}
+
+model MediaEmbedding {
+  id               String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  movieId          String?                      @map("movie_id") @db.Uuid
+  tvShowId         String?                      @map("tv_show_id") @db.Uuid
+  embedding        Unsupported("vector(768)")?
+  modelName        String                       @map("model_name") @db.VarChar(100)
+  modelVersion     String                       @map("model_version") @db.VarChar(100)
+  dimensions       Int
+  contentHash      String                       @map("content_hash") @db.Char(64)
+  metadataRevision Int                          @default(0) @map("metadata_revision")
+  lifecycleStage   String                       @default("STAGED") @map("lifecycle_stage") @db.VarChar(20)
+  embeddingStale   Boolean                      @default(false) @map("embedding_stale")
+  status           String                       @default("PENDING") @db.VarChar(20)
+  errorMessage     String?                      @map("error_message") @db.Text
+  generatedAt      DateTime?                    @map("generated_at") @db.Timestamptz(6)
+  promotedAt       DateTime?                    @map("promoted_at") @db.Timestamptz(6)
+  archivedAt       DateTime?                    @map("archived_at") @db.Timestamptz(6)
+  updatedAt        DateTime                     @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("media_embeddings")
 }
 
