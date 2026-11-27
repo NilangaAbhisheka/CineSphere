@@ -543,7 +543,15 @@ To prevent race conditions, orphan child records, and invalid cross-show episode
 
 ---
 
-### 3.16 MediaEmbedding, EmbeddingCoordination & JobLeases [Planned — Stage 5.1]
+### 3.16 Catalogue Provenance & MediaEmbedding, EmbeddingCoordination, JobLeases [Planned — Stage 5.1]
+
+**Catalogue provenance (planned M1):**
+
+- Add a constrained `catalogue_origin` field to both `movies` and `tv_shows`: `TMDB`, `SYNTHETIC`, or `UNKNOWN`.
+- Migration default for all existing rows is `UNKNOWN`; new catalogue writers must explicitly assign `TMDB` for approved TMDB ingestion and `SYNTHETIC` for fixture/benchmark/test records. Unknown origin is never treated as TMDB.
+- Existing-row backfill is evidence-based and exact-identity keyed (media type + TMDB ID) against authoritative fixtures, manifests, checkpoints, or ingestion evidence. TMDB ID thresholds and metadata heuristics are not classification evidence.
+- Only `TMDB` rows meeting canonical-content and other existing eligibility rules may be embedded. `SYNTHETIC` and `UNKNOWN` are excluded from initial generation, stale refresh, retries, and coverage/cutover denominators. Seasons and episodes inherit their parent TV show's eligibility.
+- The audit must preserve unresolved records as `UNKNOWN`, produce pre/post counts and traceable evidence, and leave all personal-library tables untouched.
 
 **Purpose:** Stores 768-dimensional semantic embedding vectors (`sentence-transformers/all-mpnet-base-v2`, rev `9a3225965996d404b775526de6dbfe85d3368642`) separately from `movies` and `tv_shows` so Prisma manages standard relational tables while `VectorRepository` executes parameterized `pgvector` SQL (`V0.7.8` + `V0.7.9`).
 
