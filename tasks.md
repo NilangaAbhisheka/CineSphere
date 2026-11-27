@@ -770,7 +770,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [ ] **Workstream 4 Release 2 (Deferred):** `database_metric_snapshots`, static dataset lineage metadata, and Power BI Dashboards 4–5 (Deferred)
 
 - [ ] **Stage 5.1 — Production Embedding Infrastructure (V0.7.9 + Option A Provenance Aligned — Not Started; Ready for M1 Implementation Authorization):**
-  - [ ] **M1:** Schema, provenance & migrations (`CatalogueProvenance` enum `TMDB`/`SYNTHETIC`/`UNKNOWN` with `DEFAULT 'UNKNOWN'` on `movies` & `tv_shows`, controlled provenance audit & backfill, `movies`/`tv_shows` `metadata_revision` + `tagline` + `movies.status`, `embedding_coordination` 768d TD-08 seed, `job_leases` 3 `AVAILABLE` rows, `media_embeddings` `vector(768)` + HNSW, revision triggers, provenance-gated `execute_model_cutover`)
+  - [ ] **M1:** Schema, provenance & migrations (`CatalogueProvenance` enum `TMDB`/`SYNTHETIC`/`UNKNOWN` with `DEFAULT 'UNKNOWN'` on `movies` & `tv_shows`, controlled manifest/checkpoint provenance audit & backfill, `movies`/`tv_shows` `metadata_revision` + `tagline` + `movies.status`, `embedding_coordination` 768d TD-08 seed, `job_leases` 3 `AVAILABLE` rows, `media_embeddings` `vector(768)` + HNSW, revision triggers, `TMDB AND hasUsableTitle AND hasUsableOverview` gated `execute_model_cutover`)
   - [ ] **M2:** Deterministic TS/Python canonical text serializer (`CanonicalTextService`) & SHA-256 `contentHash` parity
   - [ ] **M3:** Stateless Python JSONL inference CLI (`ml/scripts/generate_embeddings.py`, `all-mpnet-base-v2` rev `9a3225965996d404b775526de6dbfe85d3368642`, 768d, max_seq_len 384, L2-normalized)
   - [ ] **M4:** `VectorRepository` Option A lease fencing, 17-point promotion validation, and `execute_model_cutover` wrapper
