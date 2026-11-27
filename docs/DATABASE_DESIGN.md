@@ -107,7 +107,7 @@ The catalogue database uses a direct, maintainable relational structure without 
 
 | `tmdbId` | `INTEGER` UNIQUE | TMDB movie ID |
 
-| `catalogueOrigin` | `ENUM('TMDB', 'SYNTHETIC', 'UNKNOWN')` | Planned M1 field; defaults to `UNKNOWN` for legacy/unclassified rows; approved writers must explicitly classify provenance |
+| `catalogueOrigin` (`catalogue_origin`) | `ENUM('TMDB', 'SYNTHETIC', 'UNKNOWN')` | Planned M1 Prisma field mapped to the `catalogue_origin` column; defaults to `UNKNOWN` for legacy/unclassified rows; approved writers must explicitly classify provenance |
 
 | `title` | `VARCHAR(500)` | Display title |
 
@@ -158,7 +158,7 @@ The catalogue database uses a direct, maintainable relational structure without 
 
 | `tmdbId` | `INTEGER` UNIQUE | TMDB TV show ID |
 
-| `catalogueOrigin` | `ENUM('TMDB', 'SYNTHETIC', 'UNKNOWN')` | Planned M1 field; defaults to `UNKNOWN` for legacy/unclassified rows; approved writers must explicitly classify provenance |
+| `catalogueOrigin` (`catalogue_origin`) | `ENUM('TMDB', 'SYNTHETIC', 'UNKNOWN')` | Planned M1 Prisma field mapped to the `catalogue_origin` column; defaults to `UNKNOWN` for legacy/unclassified rows; approved writers must explicitly classify provenance |
 
 | `name` | `VARCHAR(500)` | Show name |
 
