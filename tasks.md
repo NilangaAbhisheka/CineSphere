@@ -757,7 +757,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ### 5.0.5 Observability Foundation (Option C — Pre-Stage 5.1 Complete ✅)
 
-**Accepted Strategy (Option C):** Establish minimal `pipeline_runs` operational tracking before Stage 5.1, integrate Stage 5.1 embedding generation and Stage 5.2 daily TMDB catalogue sync (TD-07 Option D), add DQ checks in Stages 5.3–5.4, and build the 3 Power BI dashboards once real operational history exists.
+**Accepted Strategy (Option C):** Establish minimal `pipeline_runs` operational tracking before Stage 5.1, integrate Stage 5.1 embedding generation and Stage 5.2 daily TMDB catalogue sync (TD-07 Option D), add DQ checks in Stages 5.3–5.4, and build the 5 Power BI dashboards incrementally (Release 1: Dashboards 1–3; Release 2: Dashboards 4–5) once real operational history exists.
 
 - [x] **OBS-1:** Add `PipelineRunStatus`, `PipelineTriggerType`, and `PipelineRun` (`pipeline_runs`) to `schema.prisma` + tracked migrations (`20261127055711_observability_pipeline_runs`, `20261127055800_observability_pipeline_runs_integrity` with non-negative, temporal, and lifecycle CHECK constraints + `idx_pipeline_runs_active_heartbeat` partial index)
 - [x] **OBS-2:** Implement `ObservabilityModule` and `PipelineTrackingService` (`startRun`, `completeRun`, `failRun`, `heartbeat`, `HeartbeatThrottler`, `reconcileStaleRuns` using PostgreSQL `clock_timestamp()`, metadata allowlist, safe error summaries, `OnModuleInit` non-fatal reconciliation) + unit & PostgreSQL integration tests
@@ -769,8 +769,8 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [ ] **Workstream 4 Release 1 (Post-Stage 5.4):** Power BI Dashboards 1–3 (Pipeline Operations, Data Quality & Reliability, Ingestion & Catalogue Health) (Planned)
   - [ ] **Workstream 4 Release 2 (Deferred):** `database_metric_snapshots`, static dataset lineage metadata, and Power BI Dashboards 4–5 (Deferred)
 
-- [ ] **Stage 5.1 — Production Embedding Infrastructure (V0.7.9 Aligned — Not Started; Blocked on Owner Approval of M1–M6 + Synthetic Provenance Decision):**
-  - [ ] **M1:** Schema & migrations (`movies`/`tv_shows` `metadata_revision` + `tagline` + `movies.status`, `embedding_coordination` 768d TD-08 seed, `job_leases` 3 `AVAILABLE` rows, `media_embeddings` `vector(768)` + HNSW, revision triggers, `execute_model_cutover`)
+- [ ] **Stage 5.1 — Production Embedding Infrastructure (V0.7.9 + Option A Provenance Aligned — Not Started; Ready for M1 Implementation Authorization):**
+  - [ ] **M1:** Schema, provenance & migrations (`CatalogueProvenance` enum `TMDB`/`SYNTHETIC`/`UNKNOWN` with `DEFAULT 'UNKNOWN'` on `movies` & `tv_shows`, controlled provenance audit & backfill, `movies`/`tv_shows` `metadata_revision` + `tagline` + `movies.status`, `embedding_coordination` 768d TD-08 seed, `job_leases` 3 `AVAILABLE` rows, `media_embeddings` `vector(768)` + HNSW, revision triggers, provenance-gated `execute_model_cutover`)
   - [ ] **M2:** Deterministic TS/Python canonical text serializer (`CanonicalTextService`) & SHA-256 `contentHash` parity
   - [ ] **M3:** Stateless Python JSONL inference CLI (`ml/scripts/generate_embeddings.py`, `all-mpnet-base-v2` rev `9a3225965996d404b775526de6dbfe85d3368642`, 768d, max_seq_len 384, L2-normalized)
   - [ ] **M4:** `VectorRepository` Option A lease fencing, 17-point promotion validation, and `execute_model_cutover` wrapper

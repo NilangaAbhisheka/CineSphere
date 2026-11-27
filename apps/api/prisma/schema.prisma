@@ -6,8 +6,9 @@
 //           Person, PersonCredit)
 //
 // ARCHITECTURE NOTES:
-//   - Vector operations are isolated in VectorRepository using raw SQL.
-//     No vector columns are defined here (pending TD-08: embedding model selection).
+//   - Vector operations are isolated in VectorRepository using parameterized raw SQL.
+//     TD-08 is resolved (sentence-transformers/all-mpnet-base-v2, 768 dimensions);
+//     Stage 5.1 vector storage (media_embeddings) will use PostgreSQL pgvector.
 //   - PersonCredit uses a nullable movieId / tvShowId pair.
 //     The database enforces exactly-one-of via a CHECK constraint in the migration.
 //     Prisma cannot express this constraint natively; it is documented and preserved

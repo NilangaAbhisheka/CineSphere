@@ -55,7 +55,7 @@ Before creating a new file:
 | Python ML (`ml/`)      | Stateless JSONL embedding inference, offline clustering/UMAP scripts | Runtime PostgreSQL leases/persistence, HTTP serving |
 | Database               | Data persistence, vector storage, read-only `reporting` views        | Business logic, application state                   |
 
-**Do not blur these boundaries.** For Stage 5.1+ production embedding generation, NestJS owns all runtime PostgreSQL operations, lease fencing, and `PipelineTrackingService` telemetry, invoking Python as a stateless JSONL CLI (`NestJS → JSONL → Python → JSONL → NestJS → PostgreSQL`). Operational telemetry (`pipeline_runs`, proposed `data_quality_results` / `database_metric_snapshots`) and future Power BI `reporting` views must remain strictly isolated from personal library tables, ratings, and watch history.
+**Do not blur these boundaries.** For Stage 5.1+ production embedding generation, NestJS owns all runtime PostgreSQL operations, lease fencing, and `PipelineTrackingService` telemetry, invoking Python as a stateless JSONL CLI (`NestJS → JSONL → Python → JSONL → NestJS → PostgreSQL`). Operational telemetry (`pipeline_runs`, proposed `data_quality_results` / `database_metric_snapshots`) and future Power BI `reporting` views must remain strictly isolated from personal library tables, ratings, and watch history. Once Stage 5.1 M1 introduces `CatalogueProvenance` (`TMDB`, `SYNTHETIC`, `UNKNOWN`), synthetic/test fixtures must be marked `SYNTHETIC` explicitly rather than inferred from TMDB ID ranges or title patterns.
 
 ### 3.2 Database Access
 

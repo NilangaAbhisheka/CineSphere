@@ -46,7 +46,7 @@ Following completion of Stage 5.0.4 (TD-08 acceptance) and the pre-Stage 5.1 Obs
     ) ON CONFLICT ("id") DO NOTHING;
     ```
   - `media_embeddings` must enforce `vector(768)` (or `vector` with `CHECK ("embedding" IS NULL OR vector_dims("embedding") = 768)`), and all staged/active `model_name`, `model_version`, and `dimensions` values must match `embedding_coordination` so V0.7.8 post-cutover assertions #4–#6 pass cleanly.
-  - **Deferred `.env.example` Update:** When Stage 5.1 implementation begins, update `EMBEDDING_MODEL_ID` in `.env.example` from `all-MiniLM-L6-v2` to `sentence-transformers/all-mpnet-base-v2`.
+  - **`.env.example` Alignment (Completed in Baseline Stabilization `bbbb5bb`):** `EMBEDDING_MODEL_ID` in `.env.example` has already been updated from `all-MiniLM-L6-v2` to `sentence-transformers/all-mpnet-base-v2`.
 
 ---
 
@@ -106,3 +106,33 @@ For Stage 5.1 production embedding generation, runtime database access is consol
 
 - **Non-zero Python exit code or `SIGTERM`/`SIGINT` cancellation:** NestJS aborts promotion/cutover, releases `job_leases`, marks the `pipeline_runs` row `FAILED` (or `PARTIAL_SUCCESS` only if validated completed chunks were intentionally persisted), and removes `.tmp/` files in `finally`.
 - **Per-item inference errors in output JSONL:** Failed records are counted in `recordsRejected` and remain `PENDING`/`FAILED` without overwriting existing `ACTIVE` embeddings.
+
+---
+
+## 6. Catalogue Provenance, Audit & Backfill, and Embedding Eligibility (Option A)
+
+To prevent development/test/benchmark fixtures in `movies` and `tv_shows` from polluting production embeddings or blocking `execute_model_cutover` coverage assertions, Stage 5.1 M1 adopts **Option A (Explicit Provenance Marker + Controlled Audit & Backfill)**.
+
+### 6.1 Provenance Representation (`CatalogueProvenance`)
+
+- **Enum & Column:** Add PostgreSQL enum `CatalogueProvenance` (`'TMDB'`, `'SYNTHETIC'`, `'UNKNOWN'`) and column `"provenance" "CatalogueProvenance" NOT NULL DEFAULT 'UNKNOWN'` to both `movies` and `tv_shows` (never to personal library tables).
+- **Safe Default Invariant:** Existing unclassified rows must default to `'UNKNOWN'`, **never** `'TMDB'`.
+- **Indexes:** Partial or btree indexes on `movies("provenance")` and `tv_shows("provenance")` to support fast eligibility filtering.
+- **Write-Path & Lifecycle Rules:**
+  1. `CatalogueRepository.saveMovie()` and `saveTvShowHeader()` explicitly set `provenance = 'TMDB'` on create and preserve/upgrade `'UNKNOWN' -> 'TMDB'` on genuine TMDB re-ingestion (never downgrading `'TMDB'` or silently overwriting `'SYNTHETIC'`).
+  2. Integration/E2E test helpers (`apps/web/e2e/global-setup.ts`, API test fixtures) and synthetic seeders explicitly set `provenance = 'SYNTHETIC'`.
+  3. Provenance is immutable during normal user/library operations; `'UNKNOWN'` transitions only via verified TMDB re-ingestion or the controlled backfill/manual-review process.
+  4. `OLD.provenance IS DISTINCT FROM NEW.provenance` is included in the `movies` and `tv_shows` `BEFORE UPDATE` scalar revision triggers so provenance changes bump `metadata_revision` and mark prior embeddings stale when needed, while `'UNKNOWN' -> 'TMDB'` allows newly verified records to be picked up by the next resumable embedding run.
+
+### 6.2 Staged M1 Migration & Controlled Backfill Sequence
+
+1. **M1-A (Schema & Trigger Migration):** Add `CatalogueProvenance`, `provenance` (`DEFAULT 'UNKNOWN'`), `metadata_revision`, `tagline`, `movies.status`, `embedding_coordination` (768d TD-08 seed), `job_leases` (3 `'AVAILABLE'` rows), `media_embeddings` (`vector(768)` + HNSW), triggers, and `execute_model_cutover` (updated for provenance-aware `v_total_elig`). Existing rows safely receive `'UNKNOWN'`.
+2. **M1-B (Read-Only Provenance Audit — Dry-Run Default):** Correlate multiple evidence sources—never relying on `tmdbId >= 9,000,000`, title, popularity, overview, or creation date _alone_:
+   - **Verified `TMDB`:** `syncedAt IS NOT NULL` corroborated by `CatalogueRepository` ingestion metadata / `ml/benchmark/fixtures/` (`seeding_checkpoint.json`, `probe_ingestion_checkpoint.json`, `catalogue_snapshot_v1.jsonl`).
+   - **Verified `SYNTHETIC`:** Corroborated test/fixture evidence (`SYNTHETIC_MOVIE_EXCLUSION_PATTERN` / `SYNTHETIC_TV_EXCLUSION_PATTERN` combined with `syncedAt IS NULL` and Phase 3/4/E2E test-fixture markers).
+   - **Ambiguous (`UNKNOWN`):** Any record lacking unambiguous corroboration remains `'UNKNOWN'` and is emitted for manual review.
+   - **Audit Report Output (Movies & TV separately):** Total records, verified `TMDB`, verified `SYNTHETIC`, `UNKNOWN`/unresolved, excluded from embedding eligibility, classification rule/evidence category, and manual-review list.
+3. **M1-C (Controlled Backfill Execution):** Idempotent, chunked/transactional update of confidently classified rows only (`WHERE provenance = 'UNKNOWN'`); never deletes catalogue rows and never alters personal library tables; produces a post-backfill verification report.
+4. **M1-D (Eligibility Enforcement):** Both `EmbeddingBatchService` and `execute_model_cutover` (`v_total_elig`) enforce:
+   $$\text{Eligible} = (\text{provenance} = \text{'TMDB'}) \land \big((\text{title/name non-empty}) \lor (\text{overview non-empty})\big) \land (\text{lifecycle conditions})$$
+   Both `'SYNTHETIC'` and `'UNKNOWN'` records are strictly excluded until resolved.

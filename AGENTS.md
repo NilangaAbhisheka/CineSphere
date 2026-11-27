@@ -117,7 +117,7 @@ cinesphere/
 
 - **High-Dimensional Ground Truth:** All similarity calculations, nearest-neighbour queries, and HDBSCAN clustering must run on the original high-dimensional embeddings (e.g., 384 or 768 dimensions).
 - **UMAP is Visualization-Only:** 2D UMAP coordinates (`umapX`, `umapY`) are generated strictly for PixiJS canvas layout. **Never** use 2D coordinates for similarity queries or ranking.
-- **Progressive Catalogue Growth:** Do not attempt to embed the entire TMDB catalogue. Fetch and embed titles incrementally as discovered or tracked.
+- **Progressive Catalogue Growth & Provenance (Option A):** Do not attempt to embed the entire TMDB catalogue upfront. Fetch and embed titles incrementally as discovered or tracked. Under Stage 5.1 M1 Option A, `movies` and `tv_shows` carry explicit `CatalogueProvenance` (`TMDB`, `SYNTHETIC`, `UNKNOWN`, defaulting to `UNKNOWN`); synthetic/test fixtures must be marked `SYNTHETIC` explicitly (never inferred from `tmdbId` thresholds), and only verified `TMDB` records are eligible for embedding.
 
 ### 3.4 Optional Local LLM (Ollama)
 
