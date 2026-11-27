@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "audit:provenance": "nest build && node dist/scripts/run-provenance-audit.js",
     "dev": "nest start --watch",
     "start": "nest start",
     "start:prod": "node dist/main",

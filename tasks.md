@@ -769,9 +769,11 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [ ] **Workstream 4 Release 1 (Post-Stage 5.4):** Power BI Dashboards 1–3 (Pipeline Operations, Data Quality & Reliability, Ingestion & Catalogue Health) (Planned)
   - [ ] **Workstream 4 Release 2 (Deferred):** `database_metric_snapshots`, static dataset lineage metadata, and Power BI Dashboards 4–5 (Deferred)
 
-- [ ] **Stage 5.1 — Production Embedding Infrastructure (V0.7.9 + Option A Provenance — M1-A Complete; M1-B–M6 Pending):**
+- [ ] **Stage 5.1 — Production Embedding Infrastructure (V0.7.9 + Option A Provenance — M1-A & M1-B Complete; M1-C–M6 Pending):**
   - [x] **M1-A:** Schema, provenance & migrations (`CatalogueProvenance` enum `TMDB`/`SYNTHETIC`/`UNKNOWN` with `DEFAULT 'UNKNOWN'` on `movies` & `tv_shows`, `CatalogueRepository` provenance-safe upsert, synthetic test fixtures marked `SYNTHETIC`, `movies`/`tv_shows` `metadata_revision` + `tagline` + `movies.status`, `embedding_coordination` 768d TD-08 seed, `job_leases` 3 `AVAILABLE` rows, `media_embeddings` `vector(768)` + HNSW, coordination/revision/stale triggers, `TMDB AND hasUsableTitle AND hasUsableOverview` gated `execute_model_cutover`)
-  - [ ] **M1-B / M1-C / M1-D:** Controlled manifest/checkpoint provenance audit, chunked backfill, and eligibility verification (Pending)
+  - [x] **M1-B:** Read-only catalogue provenance audit (`ProvenanceAuditService`, `audit:provenance` CLI, strict `REPEATABLE READ` + `READ ONLY` execution, SHA-256 manifest/checkpoint & probe digest verification, zero DB mutations)
+  - [ ] **M1-C:** Controlled chunked provenance backfill (`UNKNOWN` → `TMDB` / `SYNTHETIC` based on verified M1-B audit)
+  - [ ] **M1-D:** Eligibility verification against `TMDB AND hasUsableTitle AND hasUsableOverview` (Pending)
   - [ ] **M2:** Deterministic TS/Python canonical text serializer (`CanonicalTextService`) & SHA-256 `contentHash` parity
   - [ ] **M3:** Stateless Python JSONL inference CLI (`ml/scripts/generate_embeddings.py`, `all-mpnet-base-v2` rev `9a3225965996d404b775526de6dbfe85d3368642`, 768d, max_seq_len 384, L2-normalized)
   - [ ] **M4:** `VectorRepository` Option A lease fencing, 17-point promotion validation, and `execute_model_cutover` wrapper
