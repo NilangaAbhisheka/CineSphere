@@ -74,7 +74,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 1. ~~**Benchmark Fixture Generation (`catalogue_snapshot_v1.jsonl`):** RESOLVED — Stage 5.0.3-B.2-G seeding and fixture generation completed. Fixture committed at HEAD `55caa62`.~~
 2. **Production Recommendation Engine (Stage 5.1):**
-   - **Status:** **READY TO PLAN** — TD-08 (`all-mpnet-base-v2`, 768d) accepted by project owner; Stage 5.1 not yet started.
+   - **Status:** **READY FOR M1 SPECIFICATION REVIEW** — TD-08 (`all-mpnet-base-v2`, 768d) and Option A explicit catalogue provenance are accepted design decisions; Stage 5.1 implementation is not authorized.
 
 ---
 
@@ -757,7 +757,7 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 
 ### 5.0.5 Observability Foundation (Option C — Pre-Stage 5.1 Complete ✅)
 
-**Accepted Strategy (Option C):** Establish minimal `pipeline_runs` operational tracking before Stage 5.1, integrate Stage 5.1 embedding generation and Stage 5.2 daily TMDB catalogue sync (TD-07 Option D), add DQ checks in Stages 5.3–5.4, and build the 3 Power BI dashboards once real operational history exists.
+**Accepted Strategy (Option C):** Establish minimal `pipeline_runs` operational tracking before Stage 5.1, integrate Stage 5.1 embedding generation and Stage 5.2 daily TMDB catalogue sync (TD-07 Option D), add DQ checks in Stages 5.3–5.4, and deliver five Power BI dashboards incrementally: Dashboards 1–3 in Release 1 and Dashboards 4–5 in Release 2.
 
 - [x] **OBS-1:** Add `PipelineRunStatus`, `PipelineTriggerType`, and `PipelineRun` (`pipeline_runs`) to `schema.prisma` + tracked migrations (`20261127055711_observability_pipeline_runs`, `20261127055800_observability_pipeline_runs_integrity` with non-negative, temporal, and lifecycle CHECK constraints + `idx_pipeline_runs_active_heartbeat` partial index)
 - [x] **OBS-2:** Implement `ObservabilityModule` and `PipelineTrackingService` (`startRun`, `completeRun`, `failRun`, `heartbeat`, `HeartbeatThrottler`, `reconcileStaleRuns` using PostgreSQL `clock_timestamp()`, metadata allowlist, safe error summaries, `OnModuleInit` non-fatal reconciliation) + unit & PostgreSQL integration tests
@@ -769,13 +769,14 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
   - [ ] **Workstream 4 Release 1 (Post-Stage 5.4):** Power BI Dashboards 1–3 (Pipeline Operations, Data Quality & Reliability, Ingestion & Catalogue Health) (Planned)
   - [ ] **Workstream 4 Release 2 (Deferred):** `database_metric_snapshots`, static dataset lineage metadata, and Power BI Dashboards 4–5 (Deferred)
 
-- [ ] **Stage 5.1 — Production Embedding Infrastructure (V0.7.9 Aligned — Not Started; Blocked on Owner Approval of M1–M6 + Synthetic Provenance Decision):**
-  - [ ] **M1:** Schema & migrations (`movies`/`tv_shows` `metadata_revision` + `tagline` + `movies.status`, `embedding_coordination` 768d TD-08 seed, `job_leases` 3 `AVAILABLE` rows, `media_embeddings` `vector(768)` + HNSW, revision triggers, `execute_model_cutover`)
+- [ ] **Stage 5.1 — Production Embedding Infrastructure (V0.7.9 Aligned — Not Started; M1–M6 implementation authorization pending):**
+  - [ ] **M1:** Schema, provenance, migrations & audit (movie/TV `catalogue_origin` = `TMDB` / `SYNTHETIC` / `UNKNOWN`; evidence-backed audit and idempotent backfill; explicit origin assignment in every catalogue writer; exclude SYNTHETIC/UNKNOWN from eligibility; plus `metadata_revision`, `tagline`, `movies.status`, 768d coordination seed, three AVAILABLE leases, `media_embeddings` `vector(768)` + HNSW, revision triggers, and `execute_model_cutover`)
   - [ ] **M2:** Deterministic TS/Python canonical text serializer (`CanonicalTextService`) & SHA-256 `contentHash` parity
   - [ ] **M3:** Stateless Python JSONL inference CLI (`ml/scripts/generate_embeddings.py`, `all-mpnet-base-v2` rev `9a3225965996d404b775526de6dbfe85d3368642`, 768d, max_seq_len 384, L2-normalized)
   - [ ] **M4:** `VectorRepository` Option A lease fencing, 17-point promotion validation, and `execute_model_cutover` wrapper
   - [ ] **M5:** `EmbeddingBatchService` orchestration (`child_process.spawn`, bounded resumable batches, `ml_embedding_generation` via `PipelineTrackingService`, `.tmp/` cleanup)
   - [ ] **M6:** Full Stage 5.1 verification & documentation sync
+  - [ ] **M1 provenance acceptance gate:** Pre/post audit reconciled; every classified row has traceable evidence; unresolved rows remain UNKNOWN; no ID-threshold inference; no personal-table mutation.
 - [ ] **Stage 5.2 — Daily TMDB Discovery & `CatalogueSyncService`:** Deferred out of Stage 5.1 (`V0.7.9` Section 3)
 
 ### 5.1 ML Environment Setup
