@@ -7,9 +7,11 @@
 // ==============================================================================
 
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
+import { PipelineRunStatus, PipelineTriggerType, Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import { SingleUserBootstrap } from '../database/single-user-bootstrap.js';
+import { PIPELINE_ERROR_CODES, PIPELINE_NAMES } from '../observability/observability.constants.js';
+import { PipelineTrackingService } from '../observability/pipeline-tracking.service.js';
 import { TmdbService } from '../tmdb/tmdb.service.js';
 import { ImportService } from './import.service.js';
 
@@ -30,8 +32,10 @@ function makeCsvBuffer(csv: string): Buffer {
 describe('Import Integration Tests', () => {
   let prisma: PrismaService;
   let userBootstrap: SingleUserBootstrap;
+  let pipelineTracking: PipelineTrackingService;
   let importService: ImportService;
   let mockTmdbService: jest.Mocked<TmdbService>;
+  let suiteStartedAt: Date;
 
   let _counter = 850_000_000 + Math.floor(Math.random() * 10_000_000);
   function uniqueTmdbId(): number {
@@ -39,6 +43,7 @@ describe('Import Integration Tests', () => {
   }
 
   beforeAll(async () => {
+    suiteStartedAt = new Date();
     prisma = new PrismaService();
     await prisma.$connect();
 
@@ -57,12 +62,19 @@ describe('Import Integration Tests', () => {
       ingestTvShow: jest.fn(),
     } as unknown as jest.Mocked<TmdbService>;
 
-    importService = new ImportService(prisma, userBootstrap, mockTmdbService);
+    pipelineTracking = new PipelineTrackingService(prisma);
+    importService = new ImportService(prisma, userBootstrap, mockTmdbService, pipelineTracking);
   });
 
   afterAll(async () => {
-    // Clean up all entries created during this suite
+    // Clean up all entries and pipeline runs created during this suite
     await prisma.userLibraryEntry.deleteMany({ where: { userId: SINGLE_USER_ID } });
+    await prisma.pipelineRun.deleteMany({
+      where: {
+        pipelineName: { in: [PIPELINE_NAMES.IMPORT_JSON, PIPELINE_NAMES.IMPORT_CSV] },
+        startedAt: { gte: suiteStartedAt },
+      },
+    });
     await prisma.$disconnect();
   });
 
@@ -802,6 +814,88 @@ describe('Import Integration Tests', () => {
 
       const ule = await prisma.userLibraryEntry.findFirst({ where: { movieId: movie.id } });
       expect(ule?.createdAt.toISOString()).toContain('2023-05-10');
+    });
+  });
+
+  describe('Pipeline Tracking Telemetry Integration', () => {
+    it('records SUCCEEDED, FAILED, and privacy-safe pipeline_runs rows across real imports', async () => {
+      const movie = await createMovie('Telemetry Movie');
+      const testStart = new Date();
+
+      // 1. Successful JSON import with personal note & rating (must NOT leak to telemetry)
+      const jsonOk = await importService.importJson(
+        makeJsonBuffer({
+          version: '1.0',
+          entries: [
+            {
+              tmdbId: movie.tmdbId,
+              mediaType: 'MOVIE',
+              status: 'COMPLETED',
+              personalRating: 9.0,
+              notes: 'Sensitive personal review note',
+            },
+          ],
+        }),
+      );
+      expect(jsonOk.success).toBe(true);
+
+      // 2. All-skipped CSV import for the same title
+      const csvSkip = await importService.importCsv(
+        makeCsvBuffer(`tmdb_id,media_type,status\n${movie.tmdbId},MOVIE,COMPLETED`),
+      );
+      expect(csvSkip.success).toBe(true);
+      expect(csvSkip.skipped).toBe(1);
+
+      // 3. Schema validation failure in CSV
+      const csvInvalid = await importService.importCsv(
+        makeCsvBuffer(`tmdb_id,media_type,status\n-1,MOVIE,BAD_STATUS`),
+      );
+      expect(csvInvalid.success).toBe(false);
+
+      const runs = await prisma.pipelineRun.findMany({
+        where: { startedAt: { gte: testStart } },
+        orderBy: { startedAt: 'asc' },
+      });
+
+      expect(runs).toHaveLength(3);
+
+      expect(runs[0]).toMatchObject({
+        pipelineName: PIPELINE_NAMES.IMPORT_JSON,
+        triggerType: PipelineTriggerType.MANUAL,
+        status: PipelineRunStatus.SUCCEEDED,
+        recordsRead: 1,
+        recordsInserted: 1,
+        recordsSkipped: 0,
+        recordsRejected: 0,
+        errorCode: null,
+      });
+
+      expect(runs[1]).toMatchObject({
+        pipelineName: PIPELINE_NAMES.IMPORT_CSV,
+        triggerType: PipelineTriggerType.MANUAL,
+        status: PipelineRunStatus.SUCCEEDED,
+        recordsRead: 1,
+        recordsInserted: 0,
+        recordsSkipped: 1,
+        recordsRejected: 0,
+        errorCode: null,
+      });
+
+      expect(runs[2]).toMatchObject({
+        pipelineName: PIPELINE_NAMES.IMPORT_CSV,
+        triggerType: PipelineTriggerType.MANUAL,
+        status: PipelineRunStatus.FAILED,
+        recordsRead: 1,
+        recordsInserted: 0,
+        recordsSkipped: 0,
+        recordsRejected: 1,
+        errorCode: PIPELINE_ERROR_CODES.VALIDATION_FAILED,
+      });
+
+      const serializedRuns = JSON.stringify(runs);
+      expect(serializedRuns).not.toContain('Sensitive personal review note');
+      expect(serializedRuns).not.toContain(SINGLE_USER_ID);
+      expect(serializedRuns).not.toContain(String(movie.tmdbId));
     });
   });
 });

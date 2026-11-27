@@ -1,8 +1,8 @@
 # CineSphere — Project Plan
 
-**Status:** Phase 4 Complete; Phase 5 Stage 5.0 Benchmark Preparation & Hardened Seeding Pipeline Verified (B.2-D/B.2-E Snapshot Connection & Transaction Semantics Verified; Catalogue Seeding Execution Pending Authorization)<br>
-**Last Updated:** 2026-11-25<br>
-**Version:** 2.1
+**Status:** Phase 4 Complete; Stage 5.0.4 Benchmark & TD-08 (`all-mpnet-base-v2`, 768d) Complete; Pre-Stage 5.1 Observability Foundation (`OBS-1`–`OBS-4`) Implemented; Stage 5.1 Production Recommendation Engine Not Started<br>
+**Last Updated:** 2026-11-27<br>
+**Version:** 2.2
 
 ---
 
@@ -275,7 +275,9 @@ The following are explicitly outside the scope of this project and should not be
 | 2     | Catalogue and TMDB Integration   | TMDB client, catalogue schema, search and discover API and UI                                            | **Complete** |
 | 3     | Personal Library and Tracking    | Library schema, CRUD API, frontend My Library & detail modal, Dashboard (/ route), Statistics Foundation | **Complete** |
 | 4     | Statistics and Import/Export     | Statistics API and live UI (4.1–4.3 ✓), JSON/CSV data import (4.4 ✓), JSON/CSV data export (4.5 ✓)       | **Complete** |
-| 5     | Recommendation Engine Foundation | Benchmark evaluation (5.0 tooling complete; seeding pending); baseline scoring, recommendation storage   | Planned      |
+| 5.0   | Stage 5.0 Benchmark & TD-08      | Live seeding (5.0.3), two-model benchmark (5.0.4), TD-08 accepted (`all-mpnet-base-v2`, 768d)            | **Complete** |
+| 5.0.5 | Observability Foundation (Opt C) | `pipeline_runs` schema/migration, `ObservabilityModule`, `ImportService` tracking, V0.7.9 amendment      | **Complete** |
+| 5     | Recommendation Engine Foundation | Stage 5.1 embeddings (tracked), Stage 5.2 daily TMDB sync (deferred), similarity & scoring               | Planned      |
 | 6     | Recommendation Intelligence      | Diversity modes, feedback, evaluation, Taste Profile, Taste Evolution                                    | Planned      |
 | 7     | Local LLM Integration            | Ollama client, conversational discovery, LLM-enhanced taste profile                                      | Planned      |
 | 8     | Movie Universe                   | HDBSCAN clustering, UMAP coordinates, PixiJS visualization                                               | Planned      |
@@ -312,8 +314,9 @@ Phase 10 (Deployment) ← depends on Phase 9
 | M3        | TMDB search and catalogue browsing working              | 2     | **Complete** |
 | M4        | Library tracking working for movies and TV              | 3     | **Complete** |
 | M4.5      | Personal viewing statistics and data import/export live | 4     | **Complete** |
-| M5.0      | Candidate embedding model benchmark pipeline & tooling  | 5     | **Complete** |
-| M5.1      | First recommendation results generated                  | 5     | Planned      |
+| M5.0      | Candidate embedding model benchmark pipeline & TD-08    | 5     | **Complete** |
+| M5.0.5    | Observability Foundation (Option C, OBS-1–OBS-4)        | 5     | **Complete** |
+| M5.1      | First recommendation results generated (not started)    | 5     | Planned      |
 | M6        | Movie Universe renders with real embedding data         | 8     | Planned      |
 | M7        | Full test suite passing                                 | 9     | In Progress  |
 | M8        | Hosted portfolio deployment live                        | 10    | Planned      |

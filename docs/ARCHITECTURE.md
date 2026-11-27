@@ -1,8 +1,8 @@
 # CineSphere — System Architecture
 
-**Status:** Active / Implemented Baseline (Phases 1–4 Complete; Phase 5 Stage 5.0 Benchmark Preparation & Hardened Seeding Pipeline Verified — B.2-D/B.2-E Snapshot Connection & Transaction Semantics Verified)<br>
-**Last Updated:** 2026-11-25<br>
-**Version:** 2.1
+**Status:** Active / Implemented Baseline (Phases 1–4 Complete; Stage 5.0.4 Benchmark & TD-08 Complete; Pre-Stage 5.1 Observability Foundation Implemented)<br>
+**Last Updated:** 2026-11-27<br>
+**Version:** 2.2
 
 > This document describes the CineSphere system architecture. The foundation (Phase 1), catalogue and TMDB integration (Phase 2), personal library & tracking system (Phase 3 Stages 3.0–3.8), personal statistics & data import/export (Phase 4 Stages 4.1–4.5), and candidate embedding benchmark preparation tooling (Phase 5 Stage 5.0) are fully implemented and verified with automated test suites. Production recommendation engine implementation (Stage 5.1), recommendation intelligence, and the Movie Universe visualization remain design specifications.
 
@@ -119,14 +119,16 @@ flowchart TD
 **Implemented Modules & Services:**
 
 - `DatabaseModule`: Global database access via `PrismaService`, `VectorRepository` (pgvector raw SQL operations), `SingleUserBootstrap` (validates and seeds deterministic user anchor), and `DatabaseErrorMapper` (maps Prisma/Postgres/trigger errors to HTTP exceptions).
+- `ObservabilityModule`: Operational pipeline execution tracking via `PipelineTrackingService` (`startRun`, `completeRun`, `failRun`, `heartbeat`, `reconcileStaleRuns`) and `HeartbeatThrottler`, backed by `pipeline_runs` using PostgreSQL `clock_timestamp()`, strict metadata allowlists, authored safe error summaries, non-blocking error handling, and `OnModuleInit` stale-run reconciliation. Kept strictly separate from personal viewing analytics (`StatsModule`, `DashboardModule`).
 - `HealthModule`: System health checks and pgvector status diagnostics (`GET /api/health`).
-- `TmdbModule`: TMDB integration with `TmdbHttpClient` (Bearer token auth, transport-level pacing with $\ge$100ms serialized promise chain, exponential retry, rate limiting), `TmdbMapper`, `CatalogueRepository`, `TmdbService`, `DiscoverController`, and `TmdbController`.
+- `TmdbModule`: TMDB integration with `TmdbHttpClient` (Bearer token auth, transport-level pacing with $\ge$100ms serialized promise chain, exponential retry, rate limiting), `TmdbMapper`, `CatalogueRepository`, `TmdbService`, `DiscoverController`, and `TmdbController`. (Interactive single-title ingestion endpoints remain uninstrumented in `pipeline_runs`.)
 - `CatalogueModule`: Local database catalogue browsing, filtering, search, and details endpoints (`GET /api/catalogue/movies`, `/tv`, `/movies/:id`, `/tv/:id`).
 - `LibraryModule`: Personal library management (`POST/GET/PATCH/DELETE /api/library`, viewing events, episode progress, mark-all-watched, season ratings).
 - `DashboardModule`: Consolidated dashboard data aggregation (`GET /api/dashboard/overview`, `/stats`, `/continue-watching`, `/recent-activity`, `/quick-picks`).
 - `StatsModule`: Live viewing statistics calculations and metrics (`GET /api/stats/overview`, `/genres`, `/activity`, `/ratings`).
-- `ImportModule`: Personal tracking data import with RFC 4180 CSV parsing, strict ISO 8601 validation, TMDB catalogue resolution, and atomic `READ COMMITTED` transactions (`POST /api/import/json`, `/api/import/csv`).
+- `ImportModule`: Personal tracking data import with RFC 4180 CSV parsing, strict ISO 8601 validation, TMDB catalogue resolution, atomic `READ COMMITTED` transactions, and `PipelineTrackingService` instrumentation (`import_json`, `import_csv`) recording non-PII counters and outcomes (`POST /api/import/json`, `/api/import/csv`).
 - `ExportModule`: Personal tracking data export providing full-fidelity JSON backups (symmetric with v1.0 import) and flat RFC 4180 CSV exports with `REPEATABLE READ` snapshot isolation, zero silent data loss enforcement, and `no-store` cache headers (`GET /api/export/json`, `/api/export/csv`).
+- **Planned Stage 5.1–5.2 Integration (Not Yet Implemented):** Future Stage 5.1 embedding generation (`ml_embedding_generation`) and Stage 5.2 daily TMDB catalogue synchronization (`CatalogueSyncService`) will emit run history to `PipelineTrackingService` from NestJS, while Python remains a stateless JSONL compute CLI.
 - Swagger / OpenAPI documentation automatically generated and served at `/api/docs`.
 
 **Does not:**

@@ -19,6 +19,8 @@ import { SingleUserBootstrap } from '../database/single-user-bootstrap.js';
 import { TmdbService } from '../tmdb/tmdb.service.js';
 import { ImportService } from '../import/import.service.js';
 import { validateJsonImport, validateCsvImport } from '../import/import.validator.js';
+import { PIPELINE_NAMES } from '../observability/observability.constants.js';
+import { PipelineTrackingService } from '../observability/pipeline-tracking.service.js';
 import { ExportService } from './export.service.js';
 
 // ── Database Safety Guard ─────────────────────────────────────────────────────
@@ -39,7 +41,9 @@ describe('Export PostgreSQL Integration Tests', () => {
   let userBootstrap: SingleUserBootstrap;
   let exportService: ExportService;
   let importService: ImportService;
+  let pipelineTracking: PipelineTrackingService;
   let mockTmdbService: jest.Mocked<TmdbService>;
+  let suiteStartedAt: Date;
 
   // Dedicated synthetic test user IDs (strictly scoped)
   const EXPORT_TEST_USER_ID = 'e3eebc99-9c0b-4ef8-bb6d-6bb9bd380e33';
@@ -54,6 +58,7 @@ describe('Export PostgreSQL Integration Tests', () => {
   }
 
   beforeAll(async () => {
+    suiteStartedAt = new Date();
     process.env.DATABASE_URL = TEST_DB_URL;
     prisma = new PrismaService();
     await prisma.$connect();
@@ -86,7 +91,8 @@ describe('Export PostgreSQL Integration Tests', () => {
     } as unknown as jest.Mocked<TmdbService>;
 
     exportService = new ExportService(prisma, userBootstrap);
-    importService = new ImportService(prisma, userBootstrap, mockTmdbService);
+    pipelineTracking = new PipelineTrackingService(prisma);
+    importService = new ImportService(prisma, userBootstrap, mockTmdbService, pipelineTracking);
 
     // Initial scoped cleanup
     await prisma.userLibraryEntry.deleteMany({
@@ -106,6 +112,17 @@ describe('Export PostgreSQL Integration Tests', () => {
       try {
         await prisma.userLibraryEntry.deleteMany({
           where: { userId: { in: [EXPORT_TEST_USER_ID, OTHER_TEST_USER_ID] } },
+        });
+      } catch (err) {
+        cleanupErrors.push(err);
+      }
+
+      try {
+        await prisma.pipelineRun.deleteMany({
+          where: {
+            pipelineName: { in: [PIPELINE_NAMES.IMPORT_JSON, PIPELINE_NAMES.IMPORT_CSV] },
+            startedAt: { gte: suiteStartedAt },
+          },
         });
       } catch (err) {
         cleanupErrors.push(err);

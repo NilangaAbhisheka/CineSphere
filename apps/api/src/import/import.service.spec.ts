@@ -4,9 +4,12 @@
 // ==============================================================================
 
 import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
+import { PipelineRunStatus, PipelineTriggerType } from '@prisma/client';
 import { ImportService } from './import.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { SingleUserBootstrap } from '../database/single-user-bootstrap.js';
+import { PIPELINE_ERROR_CODES, PIPELINE_NAMES } from '../observability/observability.constants.js';
+import { PipelineTrackingService } from '../observability/pipeline-tracking.service.js';
 import { TmdbService } from '../tmdb/tmdb.service.js';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -44,6 +47,7 @@ describe('ImportService', () => {
   let service: ImportService;
   let mockUserBootstrap: jest.Mocked<SingleUserBootstrap>;
   let mockTmdbService: jest.Mocked<TmdbService>;
+  let mockPipelineTracking: jest.Mocked<PipelineTrackingService>;
   let mockPrismaMovie: { findUnique: jest.Mock; findFirst: jest.Mock };
   let mockPrismatvShow: { findUnique: jest.Mock; findFirst: jest.Mock };
   let mockPrismaULE: { count: jest.Mock; create: jest.Mock };
@@ -63,6 +67,14 @@ describe('ImportService', () => {
       ingestMovie: jest.fn(),
       ingestTvShow: jest.fn(),
     } as unknown as jest.Mocked<TmdbService>;
+
+    mockPipelineTracking = {
+      startRun: jest.fn().mockResolvedValue('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+      completeRun: jest.fn().mockResolvedValue(undefined),
+      failRun: jest.fn().mockResolvedValue(undefined),
+      heartbeat: jest.fn().mockResolvedValue(true),
+      reconcileStaleRuns: jest.fn().mockResolvedValue(0),
+    } as unknown as jest.Mocked<PipelineTrackingService>;
 
     mockPrismaMovie = { findUnique: jest.fn(), findFirst: jest.fn() };
     mockPrismatvShow = { findUnique: jest.fn(), findFirst: jest.fn() };
@@ -85,7 +97,12 @@ describe('ImportService', () => {
       $transaction: jest.fn(),
     } as unknown as jest.Mocked<PrismaService>;
 
-    service = new ImportService(mockPrismaService, mockUserBootstrap, mockTmdbService);
+    service = new ImportService(
+      mockPrismaService,
+      mockUserBootstrap,
+      mockTmdbService,
+      mockPipelineTracking,
+    );
   });
 
   // ── JSON Import ─────────────────────────────────────────────────────────────
@@ -303,6 +320,217 @@ describe('ImportService', () => {
       const csv = `tmdb_id,media_type,status\n550,MOVIE,COMPLETED`;
       const result = await service.importCsv(makeCsvBuffer(csv));
       expect(result.summary).toContain('1');
+    });
+  });
+
+  // ── Pipeline Tracking Instrumentation ──────────────────────────────────────
+
+  describe('pipeline tracking instrumentation', () => {
+    it('records one SUCCEEDED run for JSON import and preserves counters', async () => {
+      mockPrismaMovie.findUnique.mockResolvedValue({ id: 'movie-uuid' });
+      mockPrismaULE.count.mockResolvedValue(0);
+      (mockPrismaService.$transaction as jest.Mock).mockImplementation(
+        async (fn: (tx: unknown) => Promise<number>) =>
+          fn({ userLibraryEntry: { create: jest.fn().mockResolvedValue({ id: 'ule-uuid' }) } }),
+      );
+
+      const buf = makeJsonBuffer(
+        makeValidJsonDoc({ notes: 'Super secret note', personalRating: 9.5 }),
+      );
+      const result = await service.importJson(buf);
+
+      expect(result.success).toBe(true);
+      expect(mockPipelineTracking.startRun).toHaveBeenCalledTimes(1);
+      expect(mockPipelineTracking.startRun).toHaveBeenCalledWith({
+        pipelineName: PIPELINE_NAMES.IMPORT_JSON,
+        triggerType: PipelineTriggerType.MANUAL,
+        metadata: { format: 'json', fileSizeBytes: buf.byteLength },
+      });
+      expect(mockPipelineTracking.completeRun).toHaveBeenCalledTimes(1);
+      expect(mockPipelineTracking.completeRun).toHaveBeenCalledWith(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        {
+          status: PipelineRunStatus.SUCCEEDED,
+          recordsRead: 1,
+          recordsInserted: 1,
+          recordsUpdated: 0,
+          recordsSkipped: 0,
+          recordsRejected: 0,
+        },
+      );
+      expect(mockPipelineTracking.failRun).not.toHaveBeenCalled();
+
+      const serializedCalls =
+        JSON.stringify(mockPipelineTracking.startRun.mock.calls) +
+        JSON.stringify(mockPipelineTracking.completeRun.mock.calls);
+      expect(serializedCalls).not.toContain('Super secret note');
+      expect(serializedCalls).not.toContain(MOCK_USER_ID);
+    });
+
+    it('records FAILED with distinct rejected count when one entry has multiple validation errors', async () => {
+      const buf = makeJsonBuffer({
+        version: '1.0',
+        entries: [{ tmdbId: -5, mediaType: 'INVALID', status: 'BAD' }],
+      });
+
+      const result = await service.importJson(buf);
+      expect(result.success).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(1);
+
+      expect(mockPipelineTracking.failRun).toHaveBeenCalledTimes(1);
+      expect(mockPipelineTracking.failRun).toHaveBeenCalledWith(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        expect.objectContaining({
+          errorCode: PIPELINE_ERROR_CODES.VALIDATION_FAILED,
+          recordsRead: 1,
+          recordsInserted: 0,
+          recordsRejected: 1,
+          metadata: expect.objectContaining({
+            format: 'json',
+            failurePhase: 'schema_validation',
+            validationErrorCount: result.errors.length,
+          }),
+        }),
+      );
+      expect(mockPipelineTracking.completeRun).not.toHaveBeenCalled();
+    });
+
+    it('records FAILED with REFERENCE_VALIDATION_FAILED on invalid TV episode reference', async () => {
+      mockPrismatvShow.findUnique.mockResolvedValue({ id: 'tv-uuid' });
+      mockPrismaEpisode.findFirst.mockResolvedValue(null);
+
+      const buf = makeJsonBuffer({
+        version: '1.0',
+        entries: [
+          {
+            tmdbId: 1399,
+            mediaType: 'TV',
+            status: 'WATCHING',
+            episodeProgress: [{ episodeTmdbId: 999999, watchedAt: null }],
+          },
+        ],
+      });
+
+      const result = await service.importJson(buf);
+      expect(result.success).toBe(false);
+      expect(mockPipelineTracking.failRun).toHaveBeenCalledWith(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        expect.objectContaining({
+          errorCode: PIPELINE_ERROR_CODES.REFERENCE_VALIDATION_FAILED,
+          recordsRead: 1,
+          recordsRejected: 1,
+        }),
+      );
+    });
+
+    it('records FAILED with PAYLOAD_TOO_LARGE and MALFORMED_JSON and rethrows original error', async () => {
+      const big = Buffer.alloc(6 * 1024 * 1024, 'x');
+      await expect(service.importJson(big)).rejects.toThrow(PayloadTooLargeException);
+      expect(mockPipelineTracking.failRun).toHaveBeenLastCalledWith(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        expect.objectContaining({
+          errorCode: PIPELINE_ERROR_CODES.PAYLOAD_TOO_LARGE,
+          recordsRead: 0,
+          recordsRejected: 0,
+        }),
+      );
+
+      const badJson = Buffer.from('{bad', 'utf-8');
+      await expect(service.importJson(badJson)).rejects.toThrow(BadRequestException);
+      expect(mockPipelineTracking.failRun).toHaveBeenLastCalledWith(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        expect.objectContaining({
+          errorCode: PIPELINE_ERROR_CODES.MALFORMED_JSON,
+          recordsRead: 0,
+          recordsRejected: 0,
+        }),
+      );
+    });
+
+    it('sets recordsRejected to 0 and errorCode PERSISTENCE_ERROR when transaction rolls back', async () => {
+      mockPrismaMovie.findUnique.mockResolvedValue({ id: 'movie-uuid' });
+      mockPrismaULE.count.mockResolvedValue(0);
+      (mockPrismaService.$transaction as jest.Mock).mockRejectedValue(
+        new Error('Deadlock detected'),
+      );
+
+      await expect(service.importJson(makeJsonBuffer(makeValidJsonDoc()))).rejects.toThrow(
+        'Deadlock detected',
+      );
+
+      expect(mockPipelineTracking.failRun).toHaveBeenCalledTimes(1);
+      expect(mockPipelineTracking.failRun).toHaveBeenCalledWith(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        expect.objectContaining({
+          errorCode: PIPELINE_ERROR_CODES.PERSISTENCE_ERROR,
+          recordsRead: 1,
+          recordsInserted: 0,
+          recordsRejected: 0,
+        }),
+      );
+    });
+
+    it('records UNEXPECTED_ERROR when an unexpected runtime failure occurs before persistence', async () => {
+      mockPrismaMovie.findUnique.mockResolvedValue({ id: 'movie-uuid' });
+      mockPrismaULE.count.mockRejectedValue(new Error('Unexpected connection drop'));
+
+      await expect(service.importJson(makeJsonBuffer(makeValidJsonDoc()))).rejects.toThrow(
+        'Unexpected connection drop',
+      );
+
+      expect(mockPipelineTracking.failRun).toHaveBeenCalledTimes(1);
+      expect(mockPipelineTracking.failRun).toHaveBeenCalledWith(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        expect.objectContaining({
+          errorCode: PIPELINE_ERROR_CODES.UNEXPECTED_ERROR,
+          recordsRead: 1,
+          recordsRejected: 0,
+        }),
+      );
+    });
+
+    it('does not fail import when startRun returns null (telemetry unavailable)', async () => {
+      mockPipelineTracking.startRun.mockResolvedValue(null);
+      mockPrismaMovie.findUnique.mockResolvedValue({ id: 'movie-uuid' });
+      mockPrismaULE.count.mockResolvedValue(1);
+
+      const result = await service.importJson(makeJsonBuffer(makeValidJsonDoc()));
+      expect(result.success).toBe(true);
+      expect(result.skipped).toBe(1);
+      expect(mockPipelineTracking.completeRun).toHaveBeenCalledWith(null, expect.any(Object));
+    });
+
+    it('throttles heartbeats during sequential TMDB resolution using fake timers', async () => {
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(new Date('2026-11-27T00:00:00Z'));
+
+        mockPrismaMovie.findUnique.mockImplementation(async () => {
+          jest.advanceTimersByTime(35_000);
+          return { id: 'movie-uuid' };
+        });
+        mockPrismaULE.count.mockResolvedValue(0);
+        (mockPrismaService.$transaction as jest.Mock).mockImplementation(
+          async (fn: (tx: unknown) => Promise<number>) =>
+            fn({ userLibraryEntry: { create: jest.fn().mockResolvedValue({ id: 'ule-uuid' }) } }),
+        );
+
+        const doc = {
+          version: '1.0',
+          entries: [
+            { tmdbId: 1, mediaType: 'MOVIE', status: 'COMPLETED' },
+            { tmdbId: 2, mediaType: 'MOVIE', status: 'COMPLETED' },
+            { tmdbId: 3, mediaType: 'MOVIE', status: 'COMPLETED' },
+          ],
+        };
+
+        const result = await service.importJson(makeJsonBuffer(doc));
+        expect(result.success).toBe(true);
+        // Boundary 1 (0ms -> skip), Boundary 2 (35s -> skip), Boundary 3 (70s -> send 1 beat)
+        expect(mockPipelineTracking.heartbeat).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 });

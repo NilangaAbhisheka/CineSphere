@@ -1,10 +1,10 @@
 # CineSphere — Database Design
 
-**Status:** Phase 1, Phase 2, Phase 3 (Stages 3.0–3.8), and Phase 4 Implemented & Verified
+**Status:** Phase 1, Phase 2, Phase 3 (Stages 3.0–3.8), Phase 4, and Pre-Stage 5.1 Observability Foundation (`pipeline_runs`) Implemented & Verified
 
-**Last Updated:** 2026-11-24
+**Last Updated:** 2026-11-27
 
-**Version:** 1.4
+**Version:** 1.5
 
 > This document defines the CineSphere database architecture. Phase 1 foundation tables, Phase 2 catalogue tables, Phase 3 personal library tables and integrity triggers, and Phase 4 nullable episode progress watched_at migration are fully implemented and verified with PostgreSQL/Prisma migrations. Higher-phase tables remain design specifications.
 
@@ -43,6 +43,7 @@
 | `ViewingEvent`             | Append-only watch history: watchedAt timestamp, rating, notes.                                  | Implemented (Phase 3)   |
 | `EpisodeProgress`          | Composite PK (libraryEntryId, episodeId): existence denotes watched status; nullable watchedAt. | Implemented (Phase 3/4) |
 | `SeasonRating`             | Per-season rating: unique (libraryEntryId, seasonId), rating (1.0–10.0 half-step).              | Implemented (Phase 3)   |
+| `PipelineRun`              | Operational execution history for batch pipelines & imports (`pipeline_runs`).                  | Implemented (Pre-5.1)   |
 | `MediaEmbedding`           | Semantic embedding vector for a media item (pgvector).                                          | Planned (Phase 5)       |
 | `MediaSimilarity`          | Precomputed cosine similarity neighbours.                                                       | Planned (Phase 5)       |
 | `ClusterAssignment`        | HDBSCAN cluster assignment and UMAP 2D coordinates.                                             | Planned (Phase 8)       |
@@ -503,6 +504,42 @@ To prevent race conditions, orphan child records, and invalid cross-show episode
    - `trg_protect_episode_season_id`: Prevents updating `seasonId` on an episode if episode progress exists.
    - `trg_protect_season_tv_show_id`: Prevents updating `tvShowId` on a season if season ratings or episode progress exist.
    - All trigger functions are declared `VOLATILE` so `SELECT EXISTS` evaluates against fresh committed data.
+
+---
+
+### 3.15b PipelineRun (`pipeline_runs`) [Implemented — Pre-Stage 5.1]
+
+**Purpose:** Durable operational execution history for batch pipelines, imports, and future Stage 5 ML/sync workflows. Intentionally decoupled from personal library and catalogue tables (zero foreign keys).
+
+| Field              | Type                                                                     | Notes                                                               |
+| ------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| `id`               | `UUID` PK                                                                | `gen_random_uuid()`                                                 |
+| `pipeline_name`    | `VARCHAR(80)` NOT NULL                                                   | e.g., `import_json`, `import_csv`, future `ml_embedding_generation` |
+| `trigger_type`     | `ENUM('MANUAL', 'SCHEDULED', 'SYSTEM', 'CLI')`                           | Invocation source                                                   |
+| `status`           | `ENUM('RUNNING', 'SUCCEEDED', 'PARTIAL_SUCCESS', 'FAILED', 'TIMED_OUT')` | Current/terminal lifecycle status                                   |
+| `started_at`       | `TIMESTAMPTZ(6)` NOT NULL                                                | Assigned via PostgreSQL `clock_timestamp()`                         |
+| `completed_at`     | `TIMESTAMPTZ(6)` (nullable)                                              | Assigned via PostgreSQL `clock_timestamp()` on terminal transition  |
+| `heartbeat_at`     | `TIMESTAMPTZ(6)` (nullable)                                              | Updated periodically for long-running jobs                          |
+| `records_read`     | `INTEGER` NOT NULL DEFAULT 0                                             | Non-negative input count                                            |
+| `records_inserted` | `INTEGER` NOT NULL DEFAULT 0                                             | Non-negative inserted count                                         |
+| `records_updated`  | `INTEGER` NOT NULL DEFAULT 0                                             | Non-negative updated count                                          |
+| `records_skipped`  | `INTEGER` NOT NULL DEFAULT 0                                             | Non-negative skipped count                                          |
+| `records_rejected` | `INTEGER` NOT NULL DEFAULT 0                                             | Distinct rejected input records                                     |
+| `error_code`       | `VARCHAR(80)` (nullable)                                                 | Stable machine-readable category                                    |
+| `error_summary`    | `TEXT` (nullable)                                                        | Authored/sanitized summary (<= 1,000 chars)                         |
+| `metadata`         | `JSONB` (nullable)                                                       | Allowlisted operational metadata only (<= 8,192 bytes)              |
+| `updated_at`       | `TIMESTAMPTZ(6)` NOT NULL                                                | Updated via PostgreSQL `clock_timestamp()`                          |
+
+**Constraints & Indexes:**
+
+- `chk_pipeline_runs_counters_non_negative`: all 5 record counters `>= 0`.
+- `chk_pipeline_runs_completed_after_started`: `completed_at IS NULL OR completed_at >= started_at`.
+- `chk_pipeline_runs_lifecycle_consistency`: `(status = 'RUNNING' AND completed_at IS NULL) OR (status <> 'RUNNING' AND completed_at IS NOT NULL)`.
+- `idx_pipeline_runs_name_started`: `(pipeline_name, started_at DESC)`.
+- `idx_pipeline_runs_status_started`: `(status, started_at DESC)`.
+- `idx_pipeline_runs_active_heartbeat`: partial index on `(heartbeat_at, started_at) WHERE status = 'RUNNING'`.
+
+**Privacy & Future Reporting:** Never stores `userId`, private filenames, personal ratings, notes, watch history, or credentials. Future read-only `reporting` schema views (Power BI Import mode via `cinesphere_bi_ro`) remain **Planned** for post-Stage 5.4 and are not implemented yet.
 
 ---
 

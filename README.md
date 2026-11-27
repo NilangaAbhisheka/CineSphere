@@ -351,7 +351,7 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
 
 ## Project Status
 
-**Current phase:** Phase 5 — Recommendation Engine Foundation (Stage 5.0 Benchmark Preparation)
+**Current phase:** Phase 5 — Pre-Stage 5.1 Observability Foundation Complete (Stage 5.0.4 & TD-08 Accepted; Stage 5.1 Not Started)
 
 **What exists & is verified:**
 
@@ -396,14 +396,16 @@ Movie and TV metadata is sourced from [The Movie Database (TMDB)](https://www.th
 - **Continuous Integration (`.github/workflows/ci.yml`):**
   - Three distinct, reliable jobs: TypeScript Monorepo, Python ML Package (with minimal `ci` dependency group), and Playwright E2E (with fail-closed service readiness loops)
 
-**What is pending (Prerequisites for Benchmark Execution):**
+**What is completed in Phase 5 so far:**
 
-- **Catalogue Data Seeding Execution (Stage 5.0.3-B.2):** Ingesting genuine TMDB catalogue records using the hardened seeding pipeline to satisfy the 1,400 movie quota, 600 TV show quota, and 50 mandatory probe identities (currently blocked; seeding pipeline is fully implemented and hardened, but execution is not yet authorized)
-- **Candidate Embedding Model Benchmark Execution:** Evaluating candidate models (MiniLM, MPNet, Nemotron) across the 50 probes to select the production embedding model and resolve TD-08
+- **Stage 5.0.3 & 5.0.4 Complete:** Controlled live catalogue seeding (`50/50` probes, `1,408` candidate movies, `545/555` candidate TV shows), 2,000-record `catalogue_snapshot_v1.jsonl` fixture, two-model evaluation (`all-MiniLM-L6-v2` vs `all-mpnet-base-v2`), GPU profiling, and **TD-08 Accepted** (`sentence-transformers/all-mpnet-base-v2`, 768d).
+- **Pre-Stage 5.1 Observability Foundation (`OBS-1`–`OBS-4`):** Persistent `pipeline_runs` operational table (`public` schema with non-negative, temporal, and lifecycle CHECK constraints + partial active heartbeat index), `ObservabilityModule` / `PipelineTrackingService` (`clock_timestamp()`, sanitization, stale-run reconciliation), and `ImportService` (`import_json`, `import_csv`) instrumentation.
 
 **What does not exist yet (Upcoming Stages / Phases):**
 
-- Stage 5.1 production recommendation engine implementation (scoring model, preference vectors, candidate generation)
+- Stage 5.1 production embedding infrastructure and recommendation engine foundation (not started)
+- Stage 5.2 daily TMDB new-release discovery and `CatalogueSyncService` (deferred from pre-Stage 5.1)
+- Stages 5.3–5.4 similarity precomputation, data-quality checks, and planned Power BI operational dashboards (Import mode over read-only reporting views)
 - Phase 6 recommendation intelligence, diversity modes, feedback collection, and Taste Profile
 - Phase 7 optional local LLM integration via Ollama
 - Phase 8 Movie Universe PixiJS canvas visualization

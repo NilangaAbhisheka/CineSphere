@@ -301,3 +301,55 @@ model SeasonRating {
   @@map("season_ratings")
 }
 
+// ── Observability Foundation (Option C): Pipeline Execution Tracking ─────────
+//
+// Operational telemetry for batch pipelines, imports, and future ML/sync runs.
+// Intentionally decoupled from personal library and catalogue tables (no FKs).
+//
+// DATABASE CONSTRAINTS & PARTIAL INDEX (enforced in migration SQL):
+//   - chk_pipeline_runs_counters_non_negative: all record counters >= 0
+//   - chk_pipeline_runs_completed_after_started: completed_at IS NULL OR completed_at >= started_at
+//   - chk_pipeline_runs_lifecycle_consistency:
+//       (status = 'RUNNING' AND completed_at IS NULL) OR
+//       (status <> 'RUNNING' AND completed_at IS NOT NULL)
+//   - idx_pipeline_runs_active_heartbeat:
+//       partial index on (heartbeat_at, started_at) WHERE status = 'RUNNING'
+//
+enum PipelineRunStatus {
+  RUNNING
+  SUCCEEDED
+  PARTIAL_SUCCESS
+  FAILED
+  TIMED_OUT
+}
+
+enum PipelineTriggerType {
+  MANUAL
+  SCHEDULED
+  SYSTEM
+  CLI
+}
+
+model PipelineRun {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid @map("id")
+  pipelineName    String              @db.VarChar(80) @map("pipeline_name")
+  triggerType     PipelineTriggerType @map("trigger_type")
+  status          PipelineRunStatus   @default(RUNNING) @map("status")
+  startedAt       DateTime            @default(now()) @db.Timestamptz(6) @map("started_at")
+  completedAt     DateTime?           @db.Timestamptz(6) @map("completed_at")
+  heartbeatAt     DateTime?           @db.Timestamptz(6) @map("heartbeat_at")
+  recordsRead     Int                 @default(0) @map("records_read")
+  recordsInserted Int                 @default(0) @map("records_inserted")
+  recordsUpdated  Int                 @default(0) @map("records_updated")
+  recordsSkipped  Int                 @default(0) @map("records_skipped")
+  recordsRejected Int                 @default(0) @map("records_rejected")
+  errorCode       String?             @db.VarChar(80) @map("error_code")
+  errorSummary    String?             @db.Text @map("error_summary")
+  metadata        Json?               @db.JsonB @map("metadata")
+  updatedAt       DateTime            @default(now()) @updatedAt @db.Timestamptz(6) @map("updated_at")
+
+  @@index([pipelineName, startedAt(sort: Desc)], map: "idx_pipeline_runs_name_started")
+  @@index([status, startedAt(sort: Desc)], map: "idx_pipeline_runs_status_started")
+  @@map("pipeline_runs")
+}
+

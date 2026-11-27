@@ -9,6 +9,7 @@ import { DashboardModule } from './dashboard/dashboard.module.js';
 import { StatsModule } from './stats/stats.module.js';
 import { ImportModule } from './import/import.module.js';
 import { ExportModule } from './export/export.module.js';
+import { ObservabilityModule } from './observability/observability.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { ExportModule } from './export/export.module.js';
       envFilePath: ['../../.env', '.env'],
     }),
     DatabaseModule,
+    ObservabilityModule,
     HealthModule,
     TmdbModule,
     CatalogueModule,
