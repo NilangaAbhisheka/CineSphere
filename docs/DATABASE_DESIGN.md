@@ -107,6 +107,8 @@ The catalogue database uses a direct, maintainable relational structure without 
 
 | `tmdbId` | `INTEGER` UNIQUE | TMDB movie ID |
 
+| `catalogueOrigin` | `ENUM('TMDB', 'SYNTHETIC', 'UNKNOWN')` | Planned M1 field; defaults to `UNKNOWN` for legacy/unclassified rows; approved writers must explicitly classify provenance |
+
 | `title` | `VARCHAR(500)` | Display title |
 
 | `originalTitle` | `VARCHAR(500)` | Original title (nullable) |
@@ -155,6 +157,8 @@ The catalogue database uses a direct, maintainable relational structure without 
 | `id` | `UUID` PK | Internal ID (UUID v4) |
 
 | `tmdbId` | `INTEGER` UNIQUE | TMDB TV show ID |
+
+| `catalogueOrigin` | `ENUM('TMDB', 'SYNTHETIC', 'UNKNOWN')` | Planned M1 field; defaults to `UNKNOWN` for legacy/unclassified rows; approved writers must explicitly classify provenance |
 
 | `name` | `VARCHAR(500)` | Show name |
 
