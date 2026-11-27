@@ -84,10 +84,7 @@
         "temp_c": 79
       },
       "stability": {
-        "shape": [
-          2000,
-          768
-        ],
+        "shape": [2000, 768],
         "dtype": "float32",
         "all_finite": true,
         "norm_min": 0.9999999403953552,
@@ -152,10 +149,7 @@
         "temp_c": 82
       },
       "stability": {
-        "shape": [
-          2000,
-          768
-        ],
+        "shape": [2000, 768],
         "dtype": "float32",
         "all_finite": true,
         "norm_min": 0.9999999403953552,
@@ -220,10 +214,7 @@
         "temp_c": 82
       },
       "stability": {
-        "shape": [
-          2000,
-          768
-        ],
+        "shape": [2000, 768],
         "dtype": "float32",
         "all_finite": true,
         "norm_min": 0.9999999403953552,
@@ -288,10 +279,7 @@
         "temp_c": 80
       },
       "stability": {
-        "shape": [
-          2000,
-          768
-        ],
+        "shape": [2000, 768],
         "dtype": "float32",
         "all_finite": true,
         "norm_min": 0.9999998807907104,
@@ -356,10 +344,7 @@
         "temp_c": 79
       },
       "stability": {
-        "shape": [
-          2000,
-          768
-        ],
+        "shape": [2000, 768],
         "dtype": "float32",
         "all_finite": true,
         "norm_min": 0.9999999403953552,
@@ -374,8 +359,8 @@
   "correctness_comparisons": {
     "cpu_vs_gpu_fp32_b32": {
       "shape_match": true,
-      "max_abs_diff": 2.9578804969787598e-06,
-      "mean_abs_diff": 4.851405677186449e-08,
+      "max_abs_diff": 2.9578804969787598e-6,
+      "mean_abs_diff": 4.851405677186449e-8,
       "cosine_sim_min": 0.9999998807907104,
       "cosine_sim_p05": 0.9999999403953552,
       "cosine_sim_mean": 1.0,
@@ -388,7 +373,7 @@
     "gpu_fp32_vs_gpu_fp16_b32": {
       "shape_match": true,
       "max_abs_diff": 0.0013330020010471344,
-      "mean_abs_diff": 2.0800194761250168e-05,
+      "mean_abs_diff": 2.0800194761250168e-5,
       "cosine_sim_min": 0.9999516010284424,
       "cosine_sim_p05": 0.9999996423721313,
       "cosine_sim_mean": 0.9999998807907104,
@@ -401,7 +386,7 @@
     "cpu_vs_gpu_fp16_b32": {
       "shape_match": true,
       "max_abs_diff": 0.001332700252532959,
-      "mean_abs_diff": 2.0800465790671296e-05,
+      "mean_abs_diff": 2.0800465790671296e-5,
       "cosine_sim_min": 0.9999515414237976,
       "cosine_sim_p05": 0.9999996423721313,
       "cosine_sim_mean": 0.9999998807907104,

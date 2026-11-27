@@ -41,18 +41,20 @@ CineSphere addresses these problems for a single user who wants to own their ent
 
 ## Core Features
 
-| Feature              | Description                                                            | Status                      |
-| -------------------- | ---------------------------------------------------------------------- | --------------------------- |
-| **Dashboard**        | Activity overview, continue watching, recent activity, and quick picks | Implemented (Phase 3.6)     |
-| **My Library**       | Track movies and TV shows with status, ratings, progress, and notes    | Implemented (Phase 3.5)     |
-| **Discover**         | Search, browse trending content, apply mood and genre filters          | Implemented (Phase 2)       |
-| **For You**          | Hybrid recommendation engine with diversity controls and explanations  | Planned (Phase 5–6)         |
-| **AI Taste Profile** | Structured model of personal viewing preferences                       | Planned (Phase 6)           |
-| **Taste Evolution**  | Snapshots of preference changes over time                              | Planned (Phase 6)           |
-| **Movie Universe**   | Interactive 2D semantic map of movies powered by embeddings and PixiJS | Planned (Phase 8)           |
-| **Statistics**       | Personal viewing analytics, summary cards, and SVG charts              | Implemented (Phase 4.1–4.3) |
-| **Import / Export**  | JSON and CSV data portability (Full-fidelity JSON & flat RFC 4180 CSV) | Implemented (Phase 4.4–4.5) |
-| **Local LLM**        | Optional conversational discovery via Ollama (local only)              | Planned (Phase 7)           |
+| Feature                | Description                                                            | Status                      |
+| ---------------------- | ---------------------------------------------------------------------- | --------------------------- |
+| **Dashboard**          | Activity overview, continue watching, recent activity, and quick picks | Implemented (Phase 3.6)     |
+| **My Library**         | Track movies and TV shows with status, ratings, progress, and notes    | Implemented (Phase 3.5)     |
+| **Discover**           | Search, browse trending content, apply mood and genre filters          | Implemented (Phase 2)       |
+| **For You**            | Hybrid recommendation engine with diversity controls and explanations  | Planned (Phase 5–6)         |
+| **AI Taste Profile**   | Structured model of personal viewing preferences                       | Planned (Phase 6)           |
+| **Taste Evolution**    | Snapshots of preference changes over time                              | Planned (Phase 6)           |
+| **Movie Universe**     | Interactive 2D semantic map of movies powered by embeddings and PixiJS | Planned (Phase 8)           |
+| **Statistics**         | Personal viewing analytics, summary cards, and SVG charts              | Implemented (Phase 4.1–4.3) |
+| **Import / Export**    | JSON and CSV data portability (Full-fidelity JSON & flat RFC 4180 CSV) | Implemented (Phase 4.4–4.5) |
+| **Observability**      | `pipeline_runs` operational tracking for batch & import workflows      | Implemented (Pre-Stage 5.1) |
+| **Power BI Analytics** | Operational dashboards over read-only PostgreSQL `reporting` views     | Planned (Post-Stage 5.4)    |
+| **Local LLM**          | Optional conversational discovery via Ollama (local only)              | Planned (Phase 7)           |
 
 ---
 
@@ -93,7 +95,7 @@ CineSphere uses a TypeScript monorepo with a separate Python ML package. Respons
 - **`ml/`** — Python package for embedding generation, clustering, similarity computation, and recommendation scoring. Runs as offline/on-demand scripts, not a persistent service.
 - **`infrastructure/`** — Docker Compose configuration, database setup, and deployment resources.
 
-The backend communicates with PostgreSQL via Prisma. Vector operations use pgvector. The Python ML layer reads from and writes to the same PostgreSQL database via its own connection. The frontend communicates exclusively with the NestJS API.
+The NestJS backend owns all runtime PostgreSQL access (via Prisma and `VectorRepository` for pgvector), lease coordination, and operational telemetry (`ObservabilityModule`). For Stage 5.1+ production ML inference, NestJS orchestrates the Python CLI (`ml/`) as a stateless JSONL subprocess (`NestJS → JSONL → Python → JSONL → NestJS → PostgreSQL`) rather than having Python manage runtime database locks or vector persistence directly. The frontend communicates exclusively with the NestJS API. Operational analytics (Power BI Desktop Import mode) will read from dedicated read-only `reporting` SQL views without exposing personal library data.
 
 > See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full architecture specification.
 

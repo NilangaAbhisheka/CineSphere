@@ -48,14 +48,14 @@ Before creating a new file:
 
 ### 3.1 Component Boundaries
 
-| Layer                  | Owns                                                      | Does NOT own                                   |
-| ---------------------- | --------------------------------------------------------- | ---------------------------------------------- |
-| Frontend (`apps/web/`) | UI rendering, client state, API consumption               | Business logic, database access, ML operations |
-| Backend (`apps/api/`)  | REST API, business logic, TMDB integration, Prisma access | Frontend rendering, ML computation             |
-| Python ML (`ml/`)      | Embedding generation, clustering, UMAP, scoring scripts   | Frontend/backend request handling              |
-| Database               | Data persistence, vector storage                          | Business logic, application state              |
+| Layer                  | Owns                                                                 | Does NOT own                                        |
+| ---------------------- | -------------------------------------------------------------------- | --------------------------------------------------- |
+| Frontend (`apps/web/`) | UI rendering, client state, API consumption                          | Business logic, database access, ML operations      |
+| Backend (`apps/api/`)  | REST API, business logic, TMDB, Prisma/pgvector access, telemetry    | Frontend rendering, ML model inference              |
+| Python ML (`ml/`)      | Stateless JSONL embedding inference, offline clustering/UMAP scripts | Runtime PostgreSQL leases/persistence, HTTP serving |
+| Database               | Data persistence, vector storage, read-only `reporting` views        | Business logic, application state                   |
 
-**Do not blur these boundaries.** If the frontend needs data from the ML layer, the ML layer writes results to the database, the backend reads them, and the frontend queries the backend. That is the data flow.
+**Do not blur these boundaries.** For Stage 5.1+ production embedding generation, NestJS owns all runtime PostgreSQL operations, lease fencing, and `PipelineTrackingService` telemetry, invoking Python as a stateless JSONL CLI (`NestJS → JSONL → Python → JSONL → NestJS → PostgreSQL`). Operational telemetry (`pipeline_runs`, proposed `data_quality_results` / `database_metric_snapshots`) and future Power BI `reporting` views must remain strictly isolated from personal library tables, ratings, and watch history.
 
 ### 3.2 Database Access
 

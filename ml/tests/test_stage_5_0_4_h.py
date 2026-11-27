@@ -15,6 +15,7 @@ from ml.benchmark.scripts.compute_metrics import (
 )
 from ml.benchmark.scripts.config import (
     ANNOTATION_DIR,
+    EMBEDDINGS_DIR,
     RANDOM_SEED,
     RELEVANCE_THRESHOLD,
 )
@@ -33,6 +34,17 @@ from ml.benchmark.scripts.evaluate_benchmark_h import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+_HAS_LOCAL_BENCHMARK_ARTIFACTS = (
+    (ANNOTATION_DIR / "annotation_worksheet_v1.json").exists()
+    and (EMBEDDINGS_DIR / "embeddings_model_a.npy").exists()
+    and (EMBEDDINGS_DIR / "embeddings_model_b.npy").exists()
+)
+
+requires_local_benchmark_artifacts = pytest.mark.skipif(
+    not _HAS_LOCAL_BENCHMARK_ARTIFACTS,
+    reason="Requires gitignored local Stage 5.0.4 benchmark artifacts",
+)
 
 
 def _make_ws(probes: list[dict]) -> dict:
@@ -123,16 +135,19 @@ class TestExclusionManifestIntegrity:
 class TestFilteredAnnotations:
     """Verify load_annotations_filtered against real data."""
 
+    @requires_local_benchmark_artifacts
     def test_total_retained_candidates(self) -> None:
         manifest = load_exclusion_manifest(annotation_dir=ANNOTATION_DIR)
         grades, report = load_annotations_filtered(manifest, annotation_dir=ANNOTATION_DIR)
         assert report["total_retained"] == EXPECTED_VALID_CANDIDATES
 
+    @requires_local_benchmark_artifacts
     def test_all_50_probes_present(self) -> None:
         manifest = load_exclusion_manifest(annotation_dir=ANNOTATION_DIR)
         grades, _ = load_annotations_filtered(manifest, annotation_dir=ANNOTATION_DIR)
         assert len(grades) == EXPECTED_PROBE_COUNT
 
+    @requires_local_benchmark_artifacts
     def test_zero_null_grades_retained(self) -> None:
         manifest = load_exclusion_manifest(annotation_dir=ANNOTATION_DIR)
         grades, report = load_annotations_filtered(manifest, annotation_dir=ANNOTATION_DIR)
@@ -141,12 +156,14 @@ class TestFilteredAnnotations:
             for bid, g in probe_grades.items():
                 assert g is not None, f"Null grade for probe {pid} bid {bid}"
 
+    @requires_local_benchmark_artifacts
     def test_pb40_has_27_retained_candidates(self) -> None:
         manifest = load_exclusion_manifest(annotation_dir=ANNOTATION_DIR)
         grades, report = load_annotations_filtered(manifest, annotation_dir=ANNOTATION_DIR)
         pb40 = grades.get("PB-40", {})
         assert len(pb40) == 27, f"PB-40 retained={len(pb40)}, expected=27"
 
+    @requires_local_benchmark_artifacts
     def test_pb40_grade3_id_is_excluded(self) -> None:
         manifest = load_exclusion_manifest(annotation_dir=ANNOTATION_DIR)
         grades, _ = load_annotations_filtered(manifest, annotation_dir=ANNOTATION_DIR)
@@ -154,6 +171,7 @@ class TestFilteredAnnotations:
             f"PB-40 grade-3 ID {PB40_GRADE3_ID} should be excluded but is retained"
         )
 
+    @requires_local_benchmark_artifacts
     def test_no_placeholder_overview_in_pool_files(self) -> None:
         """Verify original pool files are untouched (still contain placeholder records)."""
         for probe_id in EXPECTED_PROBE_DISTRIBUTION:
@@ -167,6 +185,7 @@ class TestFilteredAnnotations:
                 f"found {ph_count} — pool file must not be modified"
             )
 
+    @requires_local_benchmark_artifacts
     def test_worksheet_untouched(self) -> None:
         """Verify annotation worksheet still contains all 1,623 records including 11 nulls."""
         ws = json.loads(
@@ -177,6 +196,7 @@ class TestFilteredAnnotations:
         assert total == 1623, f"Worksheet total candidates changed: {total}"
         assert null_count == 11, f"Worksheet null count changed: {null_count}"
 
+    @requires_local_benchmark_artifacts
     def test_grade_distribution_post_exclusion(self) -> None:
         """Verify post-exclusion grade totals match audit expectations."""
         manifest = load_exclusion_manifest(annotation_dir=ANNOTATION_DIR)
@@ -198,6 +218,7 @@ class TestFilteredAnnotations:
         assert counts[3] == 193, f"Grade 3 count: {counts[3]} (expected 193)"
         assert sum(counts.values()) == EXPECTED_VALID_CANDIDATES
 
+    @requires_local_benchmark_artifacts
     def test_relevant_non_relevant_totals(self) -> None:
         manifest = load_exclusion_manifest(annotation_dir=ANNOTATION_DIR)
         grades, _ = load_annotations_filtered(manifest, annotation_dir=ANNOTATION_DIR)
@@ -256,6 +277,7 @@ class TestFilteredAnnotations:
         with pytest.raises(ValueError, match="null grade"):
             load_annotations_filtered(excl_manifest, annotation_dir=tmp_path)
 
+    @requires_local_benchmark_artifacts
     def test_identical_probe_sets_across_models(self) -> None:
         """Both models must be evaluated on the exact same probe set and human labels."""
         from ml.benchmark.scripts.config import EMBEDDINGS_DIR
@@ -514,6 +536,7 @@ class TestBootstrap:
         ci = result["model_a"]["ci_95"]
         assert ci[0] <= result["model_a"]["estimate"] <= ci[1]
 
+    @requires_local_benchmark_artifacts
     def test_bootstrap_no_excluded_candidate_contributes(self) -> None:
         """Excluded candidates must not appear in metric computations.
 
@@ -586,6 +609,7 @@ class TestBootstrap:
 # ---------------------------------------------------------------------------
 
 
+@requires_local_benchmark_artifacts
 class TestDeterminism:
     def test_full_evaluation_deterministic(self) -> None:
         """Running evaluate_benchmark_h twice with same seed gives identical metrics."""

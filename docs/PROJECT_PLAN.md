@@ -59,9 +59,9 @@ The following are explicitly outside the scope of this project and should not be
 - Real-time streaming or WebSocket infrastructure.
 - Redis, Kafka, Kubernetes, Spark, or other complex infrastructure not justified by an actual requirement.
 - Paid AI API dependencies (OpenAI, Anthropic, etc.).
-- A permanently running ML microservice (Python ML runs as offline/on-demand scripts).
+- A permanently running ML microservice (Python ML runs as a stateless JSONL inference CLI orchestrated by NestJS for Stage 5.1+, or offline benchmark/clustering/UMAP scripts).
 - Processing the entire TMDB catalogue upfront.
-- A separate analytics platform (statistics are derived from application data only).
+- A separate personal analytics platform or enterprise data warehouse (personal statistics derive from application data; operational BI uses Power BI Import mode over PostgreSQL `reporting` views).
 
 ---
 
@@ -307,19 +307,22 @@ Phase 10 (Deployment) ← depends on Phase 9
 
 ## 9. Milestones and Deliverables
 
-| Milestone | Description                                             | Phase | Status       |
-| --------- | ------------------------------------------------------- | ----- | ------------ |
-| M1        | Documentation initialization complete                   | 1     | **Complete** |
-| M2        | Local development environment running end-to-end        | 1     | **Complete** |
-| M3        | TMDB search and catalogue browsing working              | 2     | **Complete** |
-| M4        | Library tracking working for movies and TV              | 3     | **Complete** |
-| M4.5      | Personal viewing statistics and data import/export live | 4     | **Complete** |
-| M5.0      | Candidate embedding model benchmark pipeline & TD-08    | 5     | **Complete** |
-| M5.0.5    | Observability Foundation (Option C, OBS-1–OBS-4)        | 5     | **Complete** |
-| M5.1      | First recommendation results generated (not started)    | 5     | Planned      |
-| M6        | Movie Universe renders with real embedding data         | 8     | Planned      |
-| M7        | Full test suite passing                                 | 9     | In Progress  |
-| M8        | Hosted portfolio deployment live                        | 10    | Planned      |
+| Milestone | Description                                                          | Phase | Status       |
+| --------- | -------------------------------------------------------------------- | ----- | ------------ |
+| M1        | Documentation initialization complete                                | 1     | **Complete** |
+| M2        | Local development environment running end-to-end                     | 1     | **Complete** |
+| M3        | TMDB search and catalogue browsing working                           | 2     | **Complete** |
+| M4        | Library tracking working for movies and TV                           | 3     | **Complete** |
+| M4.5      | Personal viewing statistics and data import/export live              | 4     | **Complete** |
+| M5.0      | Candidate embedding model benchmark pipeline & TD-08                 | 5     | **Complete** |
+| M5.0.5    | Observability Foundation (Option C, OBS-1–OBS-4)                     | 5     | **Complete** |
+| M5.1      | Stage 5.1 embedding pipeline (`all-mpnet-base-v2`, 768d, V0.7.9)     | 5     | Planned      |
+| M5.2      | Daily TMDB new-release discovery (`CatalogueSyncService`)            | 5     | Deferred     |
+| M5.3–5.4  | Similarity precomputation, scoring & Data Quality checks             | 5     | Planned      |
+| M5.5      | Power BI operational dashboards (Import mode over `reporting` views) | Obs   | Planned      |
+| M6        | Movie Universe renders with real embedding data                      | 8     | Planned      |
+| M7        | Full test suite passing                                              | 9     | In Progress  |
+| M8        | Hosted portfolio deployment live                                     | 10    | Planned      |
 
 ---
 
@@ -364,3 +367,15 @@ The following are not in scope but are worth documenting as plausible extensions
 - **Poster image caching** — local caching of TMDB poster images for offline use.
 
 None of these should be built or designed around during the current implementation.
+
+---
+
+## 13. Consolidated Workstream Roadmap (Stage 5.1 & Observability)
+
+| Workstream                                  | Scope & Deliverables                                                                                                                                                                                                                                 | Dependencies               | Acceptance Criteria & Testing                                                              | Key Risks & Complexity                                                                      |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| **1. Baseline Stabilisation**               | Repo audit, CI fixes (`format:check`, CI-safe `pytest`), doc sync, `.env.example` TD-08 alignment                                                                                                                                                    | Phases 1–4, 5.0.4, OBS-1–4 | All CI jobs green; zero doc/schema contradictions                                          | Low complexity; drift risk if docs lag                                                      |
+| **2. Observability & BI Foundation**        | `pipeline_runs` (done), `data_quality_results` (Stages 5.3–5.4), `reporting.vw_*`, `cinesphere_bi_ro` role                                                                                                                                           | Workstream 1               | Zero PII in telemetry; read-only role verified against PG                                  | Low–Medium; avoid high-frequency polling                                                    |
+| **3. Stage 5.1 Embedding Pipeline (M1–M6)** | M1 schema/triggers/cutover SQL, M2 TS/Python canonical serializer, M3 stateless Python JSONL CLI (`all-mpnet-base-v2`, 768d), M4 `VectorRepository` leases/cutover, M5 `EmbeddingBatchService` + `ml_embedding_generation` tracking, M6 verification | Workstream 1, TD-08        | Deterministic hash parity; Option A lease fencing; 10 cutover assertions; CPU resumability | High complexity; CPU ~60m full run (~1.55 rec/s); synthetic-record provenance decision open |
+| **4. Power BI Dashboards (Incremental)**    | Release 1: Dashboards 1–3 (Pipeline Ops, DQ, Catalogue Health). Release 2: Dashboards 4–5 (DB Storage via `database_metric_snapshots`, Static Lineage)                                                                                               | Workstreams 2 & 3          | Power BI Import refresh succeeds via `cinesphere_bi_ro` with zero app impact               | Low–Medium; defer Dashboards 4–5 from Release 1                                             |
+| **5. Recommendation & Movie Map**           | Similarity retrieval, preference signals, hybrid scoring (`0.35S+0.25P+0.20M+0.10Q+0.10N`), diversity/feedback (Phase 6), HDBSCAN + UMAP + PixiJS Movie Map (Phase 8)                                                                                | Workstream 3               | Unit + PG integration + E2E; UMAP strictly visualization-only                              | Medium–High; keep Movie Map separate from scoring                                           |

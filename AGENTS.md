@@ -93,9 +93,10 @@ cinesphere/
 ### 3.1 Strict Layer Separation
 
 - **`apps/web` (Frontend):** Consumes the NestJS REST API. Contains no direct database access, no TMDB API keys, and no ML code.
-- **`apps/api` (Backend):** Implements all business logic, TMDB proxy/caching, user tracking, and database interactions via Prisma. Exposes typed REST endpoints.
-- **`ml/` (Python ML):** Executes on-demand or batch scripts directly against the database (or via CLI). Generates embeddings, computes similarity matrices, runs clustering, and outputs 2D UMAP coordinates.
-- **Data Flow:** ML scripts write results to PostgreSQL $\to$ NestJS API serves data $\to$ Next.js UI displays data. Data never flows in reverse.
+- **`apps/api` (Backend):** Implements all business logic, TMDB proxy/caching, user tracking, operational telemetry (`ObservabilityModule` / `PipelineTrackingService`), lease coordination, and database interactions via Prisma and `VectorRepository`. Exposes typed REST endpoints.
+- **`ml/` (Python ML):** For Stage 5.1+ production embedding generation, executes as a stateless JSONL inference CLI orchestrated by NestJS (`NestJS → JSONL → Python → JSONL → NestJS → PostgreSQL`) with zero runtime PostgreSQL lease or vector-write access. Offline benchmark/clustering/UMAP scripts remain isolated in `ml/`.
+- **Reporting / BI Boundary (Planned):** Future Power BI Desktop dashboards consume read-only `reporting` schema views via a dedicated read-only role (`cinesphere_bi_ro`) and must never access personal library, rating, or watch-history tables.
+- **Data Flow:** NestJS orchestrates Python JSONL inference $\to$ NestJS validates, stages, promotes, and persists vectors in PostgreSQL $\to$ NestJS API serves data $\to$ Next.js UI displays data. Data never flows in reverse.
 
 ### 3.2 Recommendation Engine Rules
 

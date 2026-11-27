@@ -8,3 +8,5 @@ pnpm-lock.yaml
 *.tsbuildinfo
 .venv
 __pycache__
+docs/PHASE_5_TECHNICAL_DESIGN_PROPOSAL_V0.7.4_CORRECTION_ADDENDUM.md
+ml/benchmark/embeddings/tokenizer_audit.json

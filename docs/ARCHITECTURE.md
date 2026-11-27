@@ -31,17 +31,19 @@ flowchart TD
         PrismaClient["Prisma ORM Client"]
     end
 
-    subgraph MLLayer["Python ML Package\n(ml/) — runs on-demand"]
-        EmbedGen["Embedding Generation\n(Sentence Transformers)"]
-        Similarity["Similarity Computation\n(cosine, pgvector)"]
-        Clustering["HDBSCAN Clustering"]
-        UMAP["UMAP 2D Reduction\n(visualization only)"]
-        Scoring["Recommendation Scoring"]
-        TasteProfiling["Taste Profiling"]
+    subgraph MLLayer["Python ML Inference CLI\n(ml/) — stateless JSONL subprocess"]
+        EmbedGen["Embedding Inference\n(all-mpnet-base-v2, 768d)"]
+        Similarity["Similarity Computation\n(planned)"]
+        Clustering["HDBSCAN Clustering\n(planned)"]
+        UMAP["UMAP 2D Reduction\n(viz only, planned)"]
+        Scoring["Recommendation Scoring\n(planned)"]
+        TasteProfiling["Taste Profiling\n(planned)"]
     end
 
-    subgraph DataLayer["Data Layer"]
+    subgraph DataLayer["Data & Reporting Layer"]
         PG[("PostgreSQL 16+\nwith pgvector")]
+        ReportingViews["Reporting Views\n(reporting schema, planned)"]
+        PowerBI["Power BI Desktop\n(Import mode, planned)"]
         TMDB["TMDB API\n(external)"]
         Ollama["Ollama\n(optional, local)"]
     end
@@ -51,14 +53,11 @@ flowchart TD
     Services --> PrismaClient
     Services -->|HTTP| TMDB
     Services -->|HTTP (optional)| Ollama
+    Services -->|spawn + JSONL| MLLayer
+    MLLayer -->|JSONL output| Services
     PrismaClient -->|SQL + pgvector| PG
-    MLLayer -->|Direct SQL / psycopg2| PG
-    MLLayer --> EmbedGen
-    MLLayer --> Similarity
-    MLLayer --> Clustering
-    MLLayer --> UMAP
-    MLLayer --> Scoring
-    MLLayer --> TasteProfiling
+    PG --> ReportingViews
+    ReportingViews -->|Read-only role| PowerBI
 ```
 
 ---
@@ -175,7 +174,7 @@ flowchart TD
 - Run HDBSCAN clustering on high-dimensional embedding space.
 - Run UMAP to generate 2D coordinates for visualization only.
 - Compute recommendation scores and taste profile snapshots.
-- Write results directly back to PostgreSQL.
+- Emit validated JSONL output to NestJS, which performs all runtime PostgreSQL persistence, lease fencing, and cutover via `VectorRepository`.
 
 **Operating model:** Scripts run on-demand — triggered manually, by the backend, or on a schedule. There is no permanently running ML service.
 
@@ -220,27 +219,26 @@ sequenceDiagram
     UI-->>UI: Display recommendations with explanations
 ```
 
-### 3.2 ML Pipeline Execution (On-Demand)
+### 3.2 ML Pipeline Execution (NestJS-Orchestrated Stateless JSONL — Stage 5.1+)
 
 ```mermaid
 sequenceDiagram
-    participant Dev as Developer / Scheduler
-    participant ML as Python ML Script
-    participant DB as PostgreSQL
-    participant ST as Sentence Transformers
+    participant API as NestJS (EmbeddingBatchService)
+    participant Track as PipelineTrackingService
+    participant DB as PostgreSQL (pgvector + job_leases)
+    participant Py as Python CLI (ml/scripts/generate_embeddings.py)
 
-    Dev->>ML: Run embedding generation script
-    ML->>DB: Fetch catalogue items without embeddings
-    ML->>ST: Generate embeddings (batch)
-    ST-->>ML: Return embedding vectors
-    ML->>DB: Store embeddings via pgvector
-    ML->>DB: Compute and store cosine similarity neighbours
-    Dev->>ML: Run clustering script
-    ML->>DB: Fetch all embeddings
-    ML->>ML: Run HDBSCAN clustering
-    ML->>ML: Run UMAP (2D coords only)
-    ML->>DB: Store cluster assignments and 2D coordinates
+    API->>Track: startRun('ml_embedding_generation')
+    API->>DB: acquireLease('embedding_generation')
+    API->>DB: Query eligible/stale catalogue metadata
+    API->>Py: spawn(JSONL input)
+    Py-->>API: JSONL output (768d L2-normalized vectors)
+    API->>DB: Verify lease & locks -> stage/promote vectors (VectorRepository)
+    API->>DB: releaseLease('embedding_generation')
+    API->>Track: completeRun(SUCCEEDED / PARTIAL_SUCCESS)
 ```
+
+> **Note:** Stage 5.0 offline benchmark scripts in `ml/benchmark/` used read-only `psycopg2` connections to extract the 2,000-item `catalogue_snapshot_v1.jsonl` fixture. For Stage 5.1+ production execution, runtime PostgreSQL access is consolidated strictly in NestJS (`V0.7.9` Section 5).
 
 ### 3.3 TMDB Data Fetch and Cache
 
@@ -516,4 +514,62 @@ CineSphere is a single-user personal application. The architectural choices belo
   2. _Extension & Migration Management:_ Handled via Prisma migrations (`CREATE EXTENSION IF NOT EXISTS vector;` executed in migration SQL).
   3. _Vector Operations:_ pgvector cosine similarity operators (`<=>`) are executed via parameterized `prisma.$queryRaw` queries strictly inside `apps/api/src/database/vector.repository.ts`.
   4. _Anti-Scatter Rule:_ Raw SQL is never permitted inside NestJS controllers or general domain services. All vector operations must route through `VectorRepository`.
-  5. _TD-08 Dependency Handling:_ Vector column dimensions (384 vs 768) are not permanently locked in Phase 1. The pgvector extension is verified with dynamic operations; the final `MediaEmbedding.embedding` column definition and HNSW index will be migrated in Phase 5 upon formal evaluation of the embedding model.
+  5. _TD-08 Dependency Handling:_ Vector column dimensions (384 vs 768) were deferred in Phase 1 and resolved in Stage 5.0.4 (`all-mpnet-base-v2`, `N = 768`). The `media_embeddings` column (`vector(768)`), `embedding_coordination`, `job_leases`, and partial HNSW index will be migrated in Stage 5.1.
+
+---
+
+## 14. Operational Observability & Power BI Reporting Architecture
+
+CineSphere separates **operational observability** from **personal viewing statistics** (`StatsModule`, `DashboardModule`).
+
+### 14.1 Three-Domain Data Boundary
+
+1. **Domain A — Application Data (`public` schema):** Catalogue metadata (`movies`, `tv_shows`, `seasons`, `episodes`, `genres`, `keywords`, `persons`, `person_credits`), personal library & tracking (`users`, `user_library_entries`, `viewing_events`, `episode_progress`, `season_ratings`), and future vectors/recommendations.
+2. **Domain B — Operational Telemetry (`public` schema, zero FKs to personal tables):** `pipeline_runs` (Implemented) plus proposed `data_quality_results` and `database_metric_snapshots`. Never stores `userId`, private filenames, personal ratings, notes, watch history, or credentials.
+3. **Domain C — Reporting Layer (`reporting` schema, Planned):** Read-only SQL views (`vw_*`) exposed exclusively to a least-privilege read-only PostgreSQL role (`cinesphere_bi_ro`) for Power BI Desktop (Import mode). Never exposes personal user tables.
+
+### 14.2 Five Observability Layers
+
+| Layer                                 | Purpose                                                                              | Current State                                                                                      | Planned Additions                                                                     |
+| ------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **1. Pipeline Execution Tracking**    | Run status, trigger, `clock_timestamp()` duration, heartbeats, counters, safe errors | **Implemented:** `pipeline_runs`, `PipelineTrackingService`, `HeartbeatThrottler`, `ImportService` | Instrument `ml_embedding_generation` (Stage 5.1) & `CatalogueSyncService` (Stage 5.2) |
+| **2. Data Quality Monitoring**        | Aggregated DQ check results & bounded failure diagnostics                            | **Planned** (Stages 5.3–5.4)                                                                       | `data_quality_results` table + scheduled/on-demand DQ checks                          |
+| **3. Ingestion & Catalogue Health**   | Catalogue completeness, missing overviews, stale metadata, ingestion failure rates   | **Partial:** catalogue `syncedAt` + `pipeline_runs` exist                                          | `vw_catalogue_health` & `vw_embedding_coverage` views                                 |
+| **4. Database & Storage Performance** | Table/index/pgvector sizes, dead tuples, vacuum stats, index usage                   | **Planned** (Post-Stage 5.1)                                                                       | Lightweight periodic `database_metric_snapshots` + `vw_database_storage_summary`      |
+| **5. Data Lineage & Impact**          | Dataset-level source → transformation → downstream dependency map                    | **Planned** (Post-Stage 5.4)                                                                       | Static dataset-level lineage metadata + `vw_dataset_lineage` (no column-level engine) |
+
+### 14.3 Observability & Reporting Flow
+
+```mermaid
+flowchart LR
+    subgraph Implemented["Implemented"]
+        Import["ImportService\n(import_json / import_csv)"]
+        TMDBIngest["TmdbService\n(interactive cache-fill)"]
+        Cat["Catalogue Tables\n(movies, tv_shows, ...)"]
+        PT["PipelineTrackingService\n& HeartbeatThrottler"]
+        PR[("pipeline_runs\n(PostgreSQL)")]
+    end
+
+    subgraph Planned["Planned (Stages 5.1–5.4+)"]
+        Embed["EmbeddingBatchService\n(ml_embedding_generation)"]
+        Vec[("media_embeddings\n(pgvector 768d)")]
+        DQ["DQ Runner\n(Aggregated Checks)"]
+        DQR[("data_quality_results\n& db_metric_snapshots")]
+        Views["reporting.vw_*\n(Read-Only SQL Views)"]
+        Role["cinesphere_bi_ro\n(Read-Only Role)"]
+        PBI["Power BI Desktop\n(Import Mode, 5 Dashboards)"]
+    end
+
+    Import --> PT
+    Embed --> PT
+    Embed --> Vec
+    TMDBIngest --> Cat
+    PT --> PR
+    DQ --> DQR
+    PR --> Views
+    DQR --> Views
+    Cat --> Views
+    Vec --> Views
+    Views --> Role
+    Role --> PBI
+```

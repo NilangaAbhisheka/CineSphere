@@ -763,9 +763,20 @@ Phase 10 — Deployment and Portfolio Prep       ░░░░░░░░░░�
 - [x] **OBS-2:** Implement `ObservabilityModule` and `PipelineTrackingService` (`startRun`, `completeRun`, `failRun`, `heartbeat`, `HeartbeatThrottler`, `reconcileStaleRuns` using PostgreSQL `clock_timestamp()`, metadata allowlist, safe error summaries, `OnModuleInit` non-fatal reconciliation) + unit & PostgreSQL integration tests
 - [x] **OBS-3:** Instrument `ImportService.importJson()` and `ImportService.importCsv()` with single-run tracking, explicit exception/response outcome classification, distinct rejected counts, 60s throttled heartbeats, and privacy-safe metadata + unit & integration tests
 - [x] **OBS-4:** Full regression verification, PostgreSQL catalog checks, documentation sync, and proposed Stage 5.1 compatibility amendment (`V0.7.9`)
-- [ ] **Future Stage 5.1+ / Deferred:** Integrate `ml_embedding_generation` (Stage 5.1), `CatalogueSyncService` daily TMDB discovery (Stage 5.2, TD-07 Option D), `dq_check_results` (Stages 5.3–5.4), and `reporting` views / `cinesphere_bi_ro` / 3 Power BI dashboards (post-Stage 5.4)
+- [x] **Baseline & CI Stabilization:** Reconciled `README.md`, `ARCHITECTURE.md`, `DATABASE_DESIGN.md`, `PROJECT_PLAN.md`, `AI_DEVELOPMENT_GUIDE.md`, `AGENTS.md`, and `.env.example` (TD-08 `all-mpnet-base-v2`); fixed CI `format:check` and gitignored-artifact gating in `test_stage_5_0_4_h.py`; documented 5-layer observability & 5-dashboard Power BI reporting architecture
+- [ ] **Future Observability & Power BI (Planned / Deferred):**
+  - [ ] **Workstream 2 (Stages 5.3–5.4+):** `data_quality_results` table, `reporting.vw_*` SQL views, `cinesphere_bi_ro` read-only role, and TMDB/embedding DQ checks (Planned)
+  - [ ] **Workstream 4 Release 1 (Post-Stage 5.4):** Power BI Dashboards 1–3 (Pipeline Operations, Data Quality & Reliability, Ingestion & Catalogue Health) (Planned)
+  - [ ] **Workstream 4 Release 2 (Deferred):** `database_metric_snapshots`, static dataset lineage metadata, and Power BI Dashboards 4–5 (Deferred)
 
-- [ ] Recommendation Engine Implementation (Stage 5.1 — Ready to plan; TD-08 Accepted; Stage 5.1 not started)
+- [ ] **Stage 5.1 — Production Embedding Infrastructure (V0.7.9 Aligned — Not Started; Blocked on Owner Approval of M1–M6 + Synthetic Provenance Decision):**
+  - [ ] **M1:** Schema & migrations (`movies`/`tv_shows` `metadata_revision` + `tagline` + `movies.status`, `embedding_coordination` 768d TD-08 seed, `job_leases` 3 `AVAILABLE` rows, `media_embeddings` `vector(768)` + HNSW, revision triggers, `execute_model_cutover`)
+  - [ ] **M2:** Deterministic TS/Python canonical text serializer (`CanonicalTextService`) & SHA-256 `contentHash` parity
+  - [ ] **M3:** Stateless Python JSONL inference CLI (`ml/scripts/generate_embeddings.py`, `all-mpnet-base-v2` rev `9a3225965996d404b775526de6dbfe85d3368642`, 768d, max_seq_len 384, L2-normalized)
+  - [ ] **M4:** `VectorRepository` Option A lease fencing, 17-point promotion validation, and `execute_model_cutover` wrapper
+  - [ ] **M5:** `EmbeddingBatchService` orchestration (`child_process.spawn`, bounded resumable batches, `ml_embedding_generation` via `PipelineTrackingService`, `.tmp/` cleanup)
+  - [ ] **M6:** Full Stage 5.1 verification & documentation sync
+- [ ] **Stage 5.2 — Daily TMDB Discovery & `CatalogueSyncService`:** Deferred out of Stage 5.1 (`V0.7.9` Section 3)
 
 ### 5.1 ML Environment Setup
 

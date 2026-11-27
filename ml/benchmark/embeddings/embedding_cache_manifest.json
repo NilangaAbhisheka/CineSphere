@@ -14,10 +14,7 @@
       "max_seq_length": 256,
       "batch_size": 32,
       "dtype": "float32",
-      "shape": [
-        2000,
-        384
-      ],
+      "shape": [2000, 384],
       "normalized": true,
       "file": "embeddings_model_a.npy",
       "cache_hit": false
@@ -29,10 +26,7 @@
       "max_seq_length": 384,
       "batch_size": 32,
       "dtype": "float32",
-      "shape": [
-        2000,
-        768
-      ],
+      "shape": [2000, 768],
       "normalized": true,
       "file": "embeddings_model_b.npy",
       "cache_hit": false

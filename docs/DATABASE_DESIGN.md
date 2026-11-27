@@ -28,32 +28,32 @@
 
 ## 2. Entity Overview
 
-| Entity                     | Purpose                                                                                         | Status                  |
-| -------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------- |
-| `User`                     | Single application user. Anchored by deterministic UUID (`CINESPHERE_SINGLE_USER_ID`).          | Implemented (Phase 1/3) |
-| `Movie`                    | Movie-specific catalogue metadata (runtime, release date, TMDB ID, budget, etc.).               | Implemented (Phase 2)   |
-| `TvShow`                   | TV-show-specific catalogue metadata (first/last air date, status, seasons count, etc.).         | Implemented (Phase 2)   |
-| `Season`                   | A season within a TV show (supporting season 0 specials).                                       | Implemented (Phase 2)   |
-| `Episode`                  | A single episode within a season.                                                               | Implemented (Phase 2)   |
-| `Genre`                    | Reference table for TMDB genres. Implicit M2M with Movie and TvShow.                            | Implemented (Phase 2)   |
-| `Keyword`                  | Reference table for TMDB keywords. Implicit M2M with Movie and TvShow.                          | Implemented (Phase 2)   |
-| `Person`                   | Cast and crew members from TMDB.                                                                | Implemented (Phase 2)   |
-| `PersonCredit`             | Combined junction: person ↔ movie / TV show with role, character, and XOR check.                | Implemented (Phase 2)   |
-| `UserLibraryEntry`         | Core tracking record: status, personal rating (1.0–10.0 half-step), notes, XOR check.           | Implemented (Phase 3)   |
-| `ViewingEvent`             | Append-only watch history: watchedAt timestamp, rating, notes.                                  | Implemented (Phase 3)   |
-| `EpisodeProgress`          | Composite PK (libraryEntryId, episodeId): existence denotes watched status; nullable watchedAt. | Implemented (Phase 3/4) |
-| `SeasonRating`             | Per-season rating: unique (libraryEntryId, seasonId), rating (1.0–10.0 half-step).              | Implemented (Phase 3)   |
-| `PipelineRun`              | Operational execution history for batch pipelines & imports (`pipeline_runs`).                  | Implemented (Pre-5.1)   |
-| `MediaEmbedding`           | Semantic embedding vector for a media item (pgvector).                                          | Planned (Phase 5)       |
-| `MediaSimilarity`          | Precomputed cosine similarity neighbours.                                                       | Planned (Phase 5)       |
-| `ClusterAssignment`        | HDBSCAN cluster assignment and UMAP 2D coordinates.                                             | Planned (Phase 8)       |
-| `Cluster`                  | Cluster metadata (label, description, colour).                                                  | Planned (Phase 8)       |
-| `RecommendationRecord`     | A single recommendation shown to the user.                                                      | Planned (Phase 5)       |
-| `RecommendationImpression` | Record that a recommendation was displayed.                                                     | Planned (Phase 6)       |
-| `RecommendationFeedback`   | User feedback on a recommendation.                                                              | Planned (Phase 6)       |
-| `TasteProfile`             | Current structured taste profile.                                                               | Planned (Phase 6)       |
-| `TasteProfileSnapshot`     | Historical snapshots of the taste profile.                                                      | Planned (Phase 6)       |
-| `UserPreference`           | Application and recommendation settings.                                                        | Planned (Phase 6)       |
+| Entity                     | Purpose                                                                                               | Status                  |
+| -------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------- |
+| `User`                     | Single application user. Anchored by deterministic UUID (`CINESPHERE_SINGLE_USER_ID`).                | Implemented (Phase 1/3) |
+| `Movie`                    | Movie-specific catalogue metadata (runtime, release date, TMDB ID, budget, etc.).                     | Implemented (Phase 2)   |
+| `TvShow`                   | TV-show-specific catalogue metadata (first/last air date, status, seasons count, etc.).               | Implemented (Phase 2)   |
+| `Season`                   | A season within a TV show (supporting season 0 specials).                                             | Implemented (Phase 2)   |
+| `Episode`                  | A single episode within a season.                                                                     | Implemented (Phase 2)   |
+| `Genre`                    | Reference table for TMDB genres. Implicit M2M with Movie and TvShow.                                  | Implemented (Phase 2)   |
+| `Keyword`                  | Reference table for TMDB keywords. Implicit M2M with Movie and TvShow.                                | Implemented (Phase 2)   |
+| `Person`                   | Cast and crew members from TMDB.                                                                      | Implemented (Phase 2)   |
+| `PersonCredit`             | Combined junction: person ↔ movie / TV show with XOR check (`id`, `personId`, `movieId`, `tvShowId`). | Implemented (Phase 2)   |
+| `UserLibraryEntry`         | Core tracking record: status, personal rating (1.0–10.0 half-step), notes, XOR check.                 | Implemented (Phase 3)   |
+| `ViewingEvent`             | Append-only watch history: watchedAt timestamp, rating, notes.                                        | Implemented (Phase 3)   |
+| `EpisodeProgress`          | Composite PK (libraryEntryId, episodeId): existence denotes watched status; nullable watchedAt.       | Implemented (Phase 3/4) |
+| `SeasonRating`             | Per-season rating: unique (libraryEntryId, seasonId), rating (1.0–10.0 half-step).                    | Implemented (Phase 3)   |
+| `PipelineRun`              | Operational execution history for batch pipelines & imports (`pipeline_runs`).                        | Implemented (Pre-5.1)   |
+| `MediaEmbedding`           | Semantic embedding vector for a media item (pgvector).                                                | Planned (Phase 5)       |
+| `MediaSimilarity`          | Precomputed cosine similarity neighbours.                                                             | Planned (Phase 5)       |
+| `ClusterAssignment`        | HDBSCAN cluster assignment and UMAP 2D coordinates.                                                   | Planned (Phase 8)       |
+| `Cluster`                  | Cluster metadata (label, description, colour).                                                        | Planned (Phase 8)       |
+| `RecommendationRecord`     | A single recommendation shown to the user.                                                            | Planned (Phase 5)       |
+| `RecommendationImpression` | Record that a recommendation was displayed.                                                           | Planned (Phase 6)       |
+| `RecommendationFeedback`   | User feedback on a recommendation.                                                                    | Planned (Phase 6)       |
+| `TasteProfile`             | Current structured taste profile.                                                                     | Planned (Phase 6)       |
+| `TasteProfileSnapshot`     | Historical snapshots of the taste profile.                                                            | Planned (Phase 6)       |
+| `UserPreference`           | Application and recommendation settings.                                                              | Planned (Phase 6)       |
 
 ---
 
@@ -543,29 +543,39 @@ To prevent race conditions, orphan child records, and invalid cross-show episode
 
 ---
 
-### 3.16 MediaEmbedding
+### 3.16 MediaEmbedding, EmbeddingCoordination & JobLeases [Planned — Stage 5.1]
 
-**Purpose:** Stores the semantic embedding vector for a media item. Separated from the main `Media` table to isolate pgvector column handling and keep Prisma schema clean.
+**Purpose:** Stores 768-dimensional semantic embedding vectors (`sentence-transformers/all-mpnet-base-v2`, rev `9a3225965996d404b775526de6dbfe85d3368642`) separately from `movies` and `tv_shows` so Prisma manages standard relational tables while `VectorRepository` executes parameterized `pgvector` SQL (`V0.7.8` + `V0.7.9`).
 
-| Field | Type | Notes |
+**`media_embeddings` (Planned Stage 5.1):**
 
-| ------------- | ----------------------------- | -------------------------------------------------------------- |
+| Field               | Type                      | Notes                                                                     |
+| ------------------- | ------------------------- | ------------------------------------------------------------------------- |
+| `id`                | `UUID` PK                 | `gen_random_uuid()`                                                       |
+| `movie_id`          | `UUID` FK → `movies.id`   | Nullable; XOR with `tv_show_id` (`ON DELETE CASCADE`)                     |
+| `tv_show_id`        | `UUID` FK → `tv_shows.id` | Nullable; XOR with `movie_id` (`ON DELETE CASCADE`)                       |
+| `embedding`         | `vector(768)`             | L2-normalized unit vector (`-(embedding <#> embedding) ∈ [0.998, 1.002]`) |
+| `model_name`        | `VARCHAR(100)` NOT NULL   | e.g., `sentence-transformers/all-mpnet-base-v2`                           |
+| `model_version`     | `VARCHAR(100)` NOT NULL   | Pinned Hugging Face commit SHA (`9a322596...`)                            |
+| `dimensions`        | `INTEGER` NOT NULL        | `768` (`vector_dims(embedding) = dimensions`)                             |
+| `content_hash`      | `CHAR(64)` NOT NULL       | SHA-256 of canonical embedding text                                       |
+| `metadata_revision` | `INTEGER` NOT NULL        | Matches parent `movies.metadata_revision` / `tv_shows.metadata_revision`  |
+| `lifecycle_stage`   | `VARCHAR(20)` NOT NULL    | `STAGED`, `ACTIVE`, `HISTORICAL`, `STALE`                                 |
+| `embedding_stale`   | `BOOLEAN` NOT NULL        | Set `true` on metadata revision bump                                      |
+| `status`            | `VARCHAR(20)` NOT NULL    | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`                            |
+| `error_message`     | `TEXT` (nullable)         | Safe per-item inference failure diagnostic                                |
+| `generated_at`      | `TIMESTAMPTZ(6)`          | Immutable inference timestamp                                             |
+| `promoted_at`       | `TIMESTAMPTZ(6)`          | Assigned on `STAGED → ACTIVE` promotion                                   |
+| `archived_at`       | `TIMESTAMPTZ(6)`          | Assigned on `ACTIVE → HISTORICAL` cutover                                 |
+| `updated_at`        | `TIMESTAMPTZ(6)` NOT NULL | Updated via `clock_timestamp()`                                           |
 
-| `id` | `UUID` PK | |
+**Supporting Stage 5.1 Coordination Tables (Planned):**
 
-| `mediaId` | `UUID` FK → `Media.id` UNIQUE | |
+- **`embedding_coordination`:** Singleton (`id = 1`) tracking `active_model_name`, `active_model_version`, `active_dimensions` (seeded with TD-08 `all-mpnet-base-v2` / `9a3225965996d404b775526de6dbfe85d3368642` / `768`), plus `pending_*` and `cutover_in_progress` fields.
+- **`job_leases`:** Persistent lease rows (`model_cutover`, `embedding_generation`, `sync_catalogue`) seeded once as `'AVAILABLE'` with monotonic `fencing_token` and `status IN ('AVAILABLE', 'ACQUIRED', 'MAINTENANCE')` (`V0.7.9` Section 4). `sync_catalogue` remains idle until Stage 5.2.
+- **Prerequisites on `movies` & `tv_shows`:** Stage 5.1 migration adds `metadata_revision INTEGER NOT NULL DEFAULT 0` and `tagline TEXT` to both tables, and `status VARCHAR(50)` to `movies` (already present on `tv_shows`), before creating canonical-metadata revision triggers. Note: `person_credits` currently contains only `(id, personId, movieId, tvShowId)` without role/job/character columns.
 
-| `embedding` | `vector(N)` | pgvector type. Dimension N = model-dependent (see TD-08) |
-
-| `modelId` | `VARCHAR(100)` | Identifier for the embedding model used |
-
-| `contentHash` | `VARCHAR(64)` | Hash of the input content. Detect when re-embedding is needed. |
-
-| `generatedAt` | `TIMESTAMPTZ` | |
-
-**pgvector index:** `CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)` — enable if cosine search latency becomes a concern at scale.
-
-> **Important:** This table is not managed by Prisma migrations in the standard way due to the `vector` type. The pgvector column and index are created via raw SQL in a migration script. Prisma maps to this table with a typed raw SQL accessor. See TD-04.
+**pgvector index:** Partial HNSW index `CREATE INDEX idx_media_embeddings_active_hnsw ON "media_embeddings" USING hnsw ("embedding" vector_cosine_ops) WHERE "lifecycle_stage" = 'ACTIVE'`.
 
 ---
 
@@ -1358,3 +1368,30 @@ For typical catalogue sizes (< 50,000 items), exact nearest neighbour search via
 4. **Import transactions are atomic.** An import that fails partway through must be fully rolled back. No partial state is permitted.
 
 5. **Referential integrity is enforced at the database level.** Foreign key constraints are enabled. Cascade deletes are used only where semantically appropriate (e.g., deleting a library entry cascades to its watch progress and review).
+
+---
+
+## 8. Operational Observability & Power BI Reporting Model (Proposed)
+
+Operational telemetry and BI reporting are strictly isolated from personal library data (`users`, `user_library_entries`, `viewing_events`, `episode_progress`, `season_ratings`).
+
+### 8.1 Supporting Tables Evaluation
+
+| Component                   | Type & Schema                                 | Status                        | Purpose, Retention & Update Cadence                                                                                                                                                                                                             | First Release?              |
+| --------------------------- | --------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `pipeline_runs`             | Physical table (`public`)                     | **Implemented (Pre-5.1)**     | Per-run execution history (`started_at`, `completed_at`, `heartbeat_at`, counters, safe `error_code`/`error_summary`, allowlisted `metadata`). Retain indefinitely (KB-scale). Updated per batch/import run.                                    | **Yes (Dashboards 1 & 3)**  |
+| `data_quality_results`      | Physical table (`public`)                     | **Proposed (Stages 5.3–5.4)** | Aggregated DQ check outcomes (`check_id`, `dataset_name`, `category`, `status`, `severity`, `evaluated_count`, `failed_count`, `failure_pct`, `pipeline_run_id` nullable, bounded `diagnostics` JSONB). No row-level PII. Updated per DQ sweep. | **Yes for Dashboard 2**     |
+| `database_metric_snapshots` | Physical table (`public`)                     | **Proposed (Post-5.1)**       | Periodic lightweight snapshots (`captured_at`, `db_size_bytes`, `table_name`, `table_bytes`, `index_bytes`, `row_estimate`, `dead_tuples`, `last_vacuum`, `idx_scan`). Captured daily/on-demand (never high-frequency).                         | **Deferred (Dashboard 4)**  |
+| Static Lineage Metadata     | Seeded lookup table or SQL view (`reporting`) | **Proposed (Post-5.4)**       | Dataset-level edges (`source_dataset`, `transformation_name`, `pipeline_name`, `target_dataset`, `consumer`). Static/migration-managed; zero runtime overhead.                                                                                  | **Deferred (Dashboard 5)**  |
+| `reporting.vw_*`            | Standard SQL Views (`reporting`)              | **Proposed (Post-5.4)**       | Stable BI contract decoupling Power BI from `public` tables. Standard views first (zero refresh lag); materialized views only if measured query latency requires them.                                                                          | **Yes (Power BI boundary)** |
+| `cinesphere_bi_ro`          | PostgreSQL Role                               | **Proposed (Post-5.4)**       | `LOGIN`, `USAGE ON SCHEMA reporting`, `SELECT` on `reporting.vw_*` only; **zero** grants on `public` personal or application tables.                                                                                                            | **Yes (Security boundary)** |
+
+### 8.2 Proposed `reporting` Views Contract
+
+- **`reporting.vw_pipeline_run_summary`** (grain: 1 row/run): `run_id`, `pipeline_name`, `trigger_type`, `status`, `started_at`, `completed_at`, `duration_seconds`, `records_read`, `records_inserted`, `records_updated`, `records_skipped`, `records_rejected`, `error_code`.
+- **`reporting.vw_pipeline_daily_metrics`** (grain: 1 row/day/pipeline): `run_date`, `pipeline_name`, `total_runs`, `succeeded_runs`, `failed_runs`, `partial_runs`, `timed_out_runs`, `avg_duration_seconds`, `p95_duration_seconds`, `total_records_read`.
+- **`reporting.vw_data_quality_summary`** (grain: 1 row/check execution): `check_id`, `dataset_name`, `category`, `executed_at`, `status`, `severity`, `evaluated_count`, `failed_count`, `failure_pct`, `pipeline_run_id`.
+- **`reporting.vw_catalogue_health`** (grain: 1 row/media_type): `media_type` (`MOVIE` | `TV`), `total_titles`, `titles_with_overview`, `titles_missing_overview`, `titles_with_genres`, `latest_synced_at` (aggregate counts only; no personal library joins).
+- **`reporting.vw_embedding_coverage`** (grain: 1 row/media_type/model): `media_type`, `model_name`, `model_version`, `dimensions`, `eligible_titles`, `active_embeddings`, `stale_embeddings`, `failed_embeddings`, `coverage_pct`.
+- **`reporting.vw_database_storage_summary`** (grain: 1 row/snapshot/table): `captured_at`, `table_name`, `table_bytes`, `index_bytes`, `total_bytes`, `row_estimate`, `dead_tuples`.
+- **`reporting.vw_dataset_lineage`** (grain: 1 row/edge): `source_dataset`, `transformation`, `pipeline_name`, `target_dataset`, `downstream_consumer`.
